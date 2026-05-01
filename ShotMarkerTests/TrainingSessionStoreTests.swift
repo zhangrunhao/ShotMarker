@@ -1,7 +1,7 @@
 import XCTest
 @testable import ShotMarker
 
-final class TimestampFileStoreTests: XCTestCase {
+final class TrainingSessionStoreTests: XCTestCase {
     private var temporaryDirectory: URL!
 
     override func setUpWithError() throws {
@@ -16,17 +16,17 @@ final class TimestampFileStoreTests: XCTestCase {
     }
 
     func testLoadReturnsEmptyArrayWhenFileDoesNotExist() throws {
-        let store = TimestampFileStore(fileURL: temporaryDirectory.appendingPathComponent("missing.json"))
+        let store = TrainingSessionStore(fileURL: temporaryDirectory.appendingPathComponent("missing.json"))
 
-        let files = try store.loadTimestampFiles()
+        let sessions = try store.loadTrainingSessions()
 
-        XCTAssertEqual(files, [])
+        XCTAssertEqual(sessions, [])
     }
 
-    func testSaveAndLoadRoundTripsTimestampFiles() throws {
-        let fileURL = temporaryDirectory.appendingPathComponent("timestamp-files.json")
-        let store = TimestampFileStore(fileURL: fileURL)
-        let timestampFile = TimestampFile(
+    func testSaveAndLoadRoundTripsTrainingSessions() throws {
+        let fileURL = temporaryDirectory.appendingPathComponent("training-sessions.json")
+        let store = TrainingSessionStore(fileURL: fileURL)
+        let session = TrainingSession(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000010")!,
             trainingDate: Date(timeIntervalSince1970: 10_000),
             startedAt: Date(timeIntervalSince1970: 10_000),
@@ -42,8 +42,8 @@ final class TimestampFileStoreTests: XCTestCase {
             highlightStatus: .notClipped
         )
 
-        try store.saveTimestampFiles([timestampFile])
+        try store.saveTrainingSessions([session])
 
-        XCTAssertEqual(try store.loadTimestampFiles(), [timestampFile])
+        XCTAssertEqual(try store.loadTrainingSessions(), [session])
     }
 }

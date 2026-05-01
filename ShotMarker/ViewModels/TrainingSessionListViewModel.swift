@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-struct TimestampFileRowViewData: Identifiable, Equatable {
+struct TrainingSessionRowViewData: Identifiable, Equatable {
     let id: UUID
     let trainingDate: Date
     let startedAt: Date
@@ -25,38 +25,38 @@ struct TimestampFileRowViewData: Identifiable, Equatable {
         self.highlightStatus = highlightStatus
     }
 
-    init(file: TimestampFile) {
+    init(session: TrainingSession) {
         self.init(
-            id: file.id,
-            trainingDate: file.trainingDate,
-            startedAt: file.startedAt,
-            markerCount: file.markerCount,
-            syncStatus: file.syncStatus,
-            highlightStatus: file.highlightStatus
+            id: session.id,
+            trainingDate: session.trainingDate,
+            startedAt: session.startedAt,
+            markerCount: session.markerCount,
+            syncStatus: session.syncStatus,
+            highlightStatus: session.highlightStatus
         )
     }
 }
 
 @MainActor
-final class TimestampListViewModel: ObservableObject {
-    @Published private(set) var rows: [TimestampFileRowViewData] = []
+final class TrainingSessionListViewModel: ObservableObject {
+    @Published private(set) var rows: [TrainingSessionRowViewData] = []
     @Published private(set) var errorMessage: String?
 
-    private let store: TimestampFileStoreProtocol
+    private let store: TrainingSessionStoreProtocol
 
     var isEmpty: Bool {
         rows.isEmpty
     }
 
-    init(store: TimestampFileStoreProtocol) {
+    init(store: TrainingSessionStoreProtocol) {
         self.store = store
     }
 
     func load() {
         do {
-            rows = try store.loadTimestampFiles()
+            rows = try store.loadTrainingSessions()
                 .sorted { $0.startedAt > $1.startedAt }
-                .map(TimestampFileRowViewData.init(file:))
+                .map(TrainingSessionRowViewData.init(session:))
             errorMessage = nil
         } catch {
             rows = []

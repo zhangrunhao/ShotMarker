@@ -1,11 +1,11 @@
 import Foundation
 
-protocol TimestampFileStoreProtocol {
-    func loadTimestampFiles() throws -> [TimestampFile]
-    func saveTimestampFiles(_ files: [TimestampFile]) throws
+protocol TrainingSessionStoreProtocol {
+    func loadTrainingSessions() throws -> [TrainingSession]
+    func saveTrainingSessions(_ sessions: [TrainingSession]) throws
 }
 
-final class TimestampFileStore: TimestampFileStoreProtocol {
+final class TrainingSessionStore: TrainingSessionStoreProtocol {
     private let fileURL: URL
     private let fileManager: FileManager
     private let decoder = JSONDecoder()
@@ -17,19 +17,19 @@ final class TimestampFileStore: TimestampFileStoreProtocol {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     }
 
-    func loadTimestampFiles() throws -> [TimestampFile] {
+    func loadTrainingSessions() throws -> [TrainingSession] {
         guard fileManager.fileExists(atPath: fileURL.path) else {
             return []
         }
 
         let data = try Data(contentsOf: fileURL)
-        return try decoder.decode([TimestampFile].self, from: data)
+        return try decoder.decode([TrainingSession].self, from: data)
     }
 
-    func saveTimestampFiles(_ files: [TimestampFile]) throws {
+    func saveTrainingSessions(_ sessions: [TrainingSession]) throws {
         let directoryURL = fileURL.deletingLastPathComponent()
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        let data = try encoder.encode(files)
+        let data = try encoder.encode(sessions)
         try data.write(to: fileURL, options: [.atomic])
     }
 
@@ -37,22 +37,22 @@ final class TimestampFileStore: TimestampFileStoreProtocol {
         let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return baseURL
             .appendingPathComponent("ShotMarker", isDirectory: true)
-            .appendingPathComponent("timestamp-files.json")
+            .appendingPathComponent("training-sessions.json")
     }
 }
 
-final class InMemoryTimestampFileStore: TimestampFileStoreProtocol {
-    private var files: [TimestampFile]
+final class InMemoryTrainingSessionStore: TrainingSessionStoreProtocol {
+    private var sessions: [TrainingSession]
 
-    init(files: [TimestampFile]) {
-        self.files = files
+    init(sessions: [TrainingSession]) {
+        self.sessions = sessions
     }
 
-    func loadTimestampFiles() throws -> [TimestampFile] {
-        files
+    func loadTrainingSessions() throws -> [TrainingSession] {
+        sessions
     }
 
-    func saveTimestampFiles(_ files: [TimestampFile]) throws {
-        self.files = files
+    func saveTrainingSessions(_ sessions: [TrainingSession]) throws {
+        self.sessions = sessions
     }
 }

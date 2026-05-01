@@ -1,9 +1,9 @@
 import XCTest
 @testable import ShotMarker
 
-final class TimestampListViewModelTests: XCTestCase {
-    func testLoadSortsTimestampFilesNewestFirst() {
-        let older = TimestampFile(
+final class TrainingSessionListViewModelTests: XCTestCase {
+    func testLoadSortsTrainingSessionsNewestFirst() {
+        let older = TrainingSession(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
             trainingDate: Date(timeIntervalSince1970: 1_000),
             startedAt: Date(timeIntervalSince1970: 1_000),
@@ -12,7 +12,7 @@ final class TimestampListViewModelTests: XCTestCase {
             syncStatus: .synced,
             highlightStatus: .notClipped
         )
-        let newer = TimestampFile(
+        let newer = TrainingSession(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
             trainingDate: Date(timeIntervalSince1970: 2_000),
             startedAt: Date(timeIntervalSince1970: 2_000),
@@ -21,20 +21,20 @@ final class TimestampListViewModelTests: XCTestCase {
             syncStatus: .synced,
             highlightStatus: .notClipped
         )
-        let viewModel = TimestampListViewModel(store: InMemoryTimestampFileStore(files: [older, newer]))
+        let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: [older, newer]))
 
         viewModel.load()
 
         XCTAssertEqual(viewModel.rows.map(\.id), [newer.id, older.id])
     }
 
-    func testLoadMapsTimestampFileStateIntoRows() {
+    func testLoadMapsTrainingSessionStateIntoRows() {
         let marker = ShotMarkerEvent(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
             markedAt: Date(timeIntervalSince1970: 2_100),
             source: .watch
         )
-        let file = TimestampFile(
+        let session = TrainingSession(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
             trainingDate: Date(timeIntervalSince1970: 2_000),
             startedAt: Date(timeIntervalSince1970: 2_000),
@@ -43,15 +43,15 @@ final class TimestampListViewModelTests: XCTestCase {
             syncStatus: .pending,
             highlightStatus: .clipped
         )
-        let viewModel = TimestampListViewModel(store: InMemoryTimestampFileStore(files: [file]))
+        let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: [session]))
 
         viewModel.load()
 
         XCTAssertEqual(viewModel.rows, [
-            TimestampFileRowViewData(
-                id: file.id,
-                trainingDate: file.trainingDate,
-                startedAt: file.startedAt,
+            TrainingSessionRowViewData(
+                id: session.id,
+                trainingDate: session.trainingDate,
+                startedAt: session.startedAt,
                 markerCount: 1,
                 syncStatus: .pending,
                 highlightStatus: .clipped
@@ -60,8 +60,8 @@ final class TimestampListViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isEmpty)
     }
 
-    func testLoadShowsEmptyStateWhenNoTimestampFilesExist() {
-        let viewModel = TimestampListViewModel(store: InMemoryTimestampFileStore(files: []))
+    func testLoadShowsEmptyStateWhenNoTrainingSessionsExist() {
+        let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: []))
 
         viewModel.load()
 

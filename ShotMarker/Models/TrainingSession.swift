@@ -1,6 +1,6 @@
 import Foundation
 
-struct TimestampFile: Identifiable, Codable, Equatable {
+struct TrainingSession: Identifiable, Codable, Equatable {
     let id: UUID
     var trainingDate: Date
     var startedAt: Date
@@ -33,9 +33,9 @@ struct TimestampFile: Identifiable, Codable, Equatable {
 }
 
 #if DEBUG
-extension TimestampFile {
-    static let previewFiles: [TimestampFile] = [
-        TimestampFile(
+extension TrainingSession {
+    static let previewSessions: [TrainingSession] = [
+        TrainingSession(
             trainingDate: Date(),
             startedAt: Date().addingTimeInterval(-2_400),
             endedAt: Date().addingTimeInterval(-600),

@@ -1,7 +1,7 @@
 import SwiftUI
 
-struct TimestampFileRow: View {
-    let row: TimestampFileRowViewData
+struct TrainingSessionRow: View {
+    let row: TrainingSessionRowViewData
 
     var body: some View {
         HStack(spacing: 16) {
@@ -37,6 +37,6 @@ struct TimestampFileRow: View {
 
 #Preview {
     List {
-        TimestampFileRow(row: TimestampFileRowViewData(file: TimestampFile.previewFiles[0]))
+        TrainingSessionRow(row: TrainingSessionRowViewData(session: TrainingSession.previewSessions[0]))
     }
 }
