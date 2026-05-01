@@ -8,17 +8,24 @@ protocol TrainingSessionStoreProtocol {
 final class TrainingSessionStore: TrainingSessionStoreProtocol {
     private let fileURL: URL
     private let fileManager: FileManager
+    private let seedSessions: [TrainingSession]
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
 
-    init(fileURL: URL? = nil, fileManager: FileManager = .default) {
+    init(fileURL: URL? = nil, fileManager: FileManager = .default, seedSessions: [TrainingSession] = []) {
         self.fileManager = fileManager
         self.fileURL = fileURL ?? Self.defaultFileURL(fileManager: fileManager)
+        self.seedSessions = seedSessions
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     }
 
     func loadTrainingSessions() throws -> [TrainingSession] {
         guard fileManager.fileExists(atPath: fileURL.path) else {
+            if !seedSessions.isEmpty {
+                try saveTrainingSessions(seedSessions)
+                return seedSessions
+            }
+
             return []
         }
 

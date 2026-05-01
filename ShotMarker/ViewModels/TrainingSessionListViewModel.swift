@@ -1,38 +1,26 @@
-import Foundation
 import Combine
+import Foundation
 
 struct TrainingSessionRowViewData: Identifiable, Equatable {
     let id: UUID
-    let trainingDate: Date
     let startedAt: Date
     let markerCount: Int
-    let syncStatus: SyncStatus
-    let highlightStatus: HighlightStatus
 
     init(
         id: UUID,
-        trainingDate: Date,
         startedAt: Date,
         markerCount: Int,
-        syncStatus: SyncStatus,
-        highlightStatus: HighlightStatus
     ) {
         self.id = id
-        self.trainingDate = trainingDate
         self.startedAt = startedAt
         self.markerCount = markerCount
-        self.syncStatus = syncStatus
-        self.highlightStatus = highlightStatus
     }
 
     init(session: TrainingSession) {
         self.init(
             id: session.id,
-            trainingDate: session.trainingDate,
             startedAt: session.startedAt,
             markerCount: session.markerCount,
-            syncStatus: session.syncStatus,
-            highlightStatus: session.highlightStatus
         )
     }
 }

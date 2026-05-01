@@ -5,7 +5,12 @@ struct TrainingSessionListView: View {
 
     @MainActor
     init() {
-        _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(store: TrainingSessionStore()))
+        #if DEBUG
+            let store = TrainingSessionStore(seedSessions: TrainingSession.previewSessions)
+        #else
+            let store = TrainingSessionStore()
+        #endif
+        _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(store: store))
     }
 
     @MainActor
@@ -37,7 +42,7 @@ struct TrainingSessionListView: View {
 #Preview {
     TrainingSessionListView(
         viewModel: TrainingSessionListViewModel(
-            store: InMemoryTrainingSessionStore(sessions: TrainingSession.previewSessions)
-        )
+            store: InMemoryTrainingSessionStore(sessions: TrainingSession.previewSessions),
+        ),
     )
 }

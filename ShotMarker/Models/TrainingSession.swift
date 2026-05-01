@@ -2,12 +2,9 @@ import Foundation
 
 struct TrainingSession: Identifiable, Codable, Equatable {
     let id: UUID
-    var trainingDate: Date
     var startedAt: Date
-    var endedAt: Date?
+    var endedAt: Date
     var events: [ShotMarkerEvent]
-    var syncStatus: SyncStatus
-    var highlightStatus: HighlightStatus
 
     var markerCount: Int {
         events.count
@@ -15,38 +12,48 @@ struct TrainingSession: Identifiable, Codable, Equatable {
 
     init(
         id: UUID = UUID(),
-        trainingDate: Date,
         startedAt: Date,
-        endedAt: Date? = nil,
+        endedAt: Date,
         events: [ShotMarkerEvent],
-        syncStatus: SyncStatus,
-        highlightStatus: HighlightStatus
     ) {
         self.id = id
-        self.trainingDate = trainingDate
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.events = events
-        self.syncStatus = syncStatus
-        self.highlightStatus = highlightStatus
     }
 }
 
 #if DEBUG
-extension TrainingSession {
-    static let previewSessions: [TrainingSession] = [
-        TrainingSession(
-            trainingDate: Date(),
-            startedAt: Date().addingTimeInterval(-2_400),
-            endedAt: Date().addingTimeInterval(-600),
-            events: [
-                ShotMarkerEvent(markedAt: Date().addingTimeInterval(-2_100), source: .watch),
-                ShotMarkerEvent(markedAt: Date().addingTimeInterval(-1_700), source: .watch),
-                ShotMarkerEvent(markedAt: Date().addingTimeInterval(-1_200), source: .watch)
-            ],
-            syncStatus: .synced,
-            highlightStatus: .notClipped
-        )
-    ]
-}
+    extension TrainingSession {
+        static let previewSessions: [TrainingSession] = {
+            let now = Date()
+
+            return [
+                TrainingSession(
+                    startedAt: now.addingTimeInterval(-2400),
+                    endedAt: now.addingTimeInterval(-600),
+                    events: [
+                        ShotMarkerEvent(markedAt: now.addingTimeInterval(-2100)),
+                        ShotMarkerEvent(markedAt: now.addingTimeInterval(-1700)),
+                        ShotMarkerEvent(markedAt: now.addingTimeInterval(-1200)),
+                    ],
+                ),
+                TrainingSession(
+                    startedAt: now.addingTimeInterval(-90000),
+                    endedAt: now.addingTimeInterval(-87300),
+                    events: [
+                        ShotMarkerEvent(markedAt: now.addingTimeInterval(-89520)),
+                        ShotMarkerEvent(markedAt: now.addingTimeInterval(-88740)),
+                    ],
+                ),
+                TrainingSession(
+                    startedAt: now.addingTimeInterval(-176400),
+                    endedAt: now.addingTimeInterval(-174900),
+                    events: [
+                        ShotMarkerEvent(markedAt: now.addingTimeInterval(-175680)),
+                    ],
+                ),
+            ]
+        }()
+    }
 #endif

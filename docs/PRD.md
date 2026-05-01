@@ -100,21 +100,15 @@ ShotMarker 面向进行投篮训练的篮球爱好者。用户训练时使用 Ap
 ### TrainingSession
 
 - id
-- trainingDate
 - startedAt
 - endedAt
 - markerCount
-- syncStatus
-- highlightStatus
-- createdAt
-- updatedAt
 - events
 
 ### ShotMarkerEvent
 
 - id
 - markedAt
-- source
 
 ### SelectedVideo
 

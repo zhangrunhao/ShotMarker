@@ -35,7 +35,6 @@ Purpose: add test harness and shared domain types before feature UI.
 - Create: `ShotMarker/Models/TrainingSession.swift`
 - Create: `ShotMarker/Models/ShotMarkerEvent.swift`
 - Create: `ShotMarker/Models/ClipSettings.swift`
-- Create: `ShotMarker/Models/HighlightStatus.swift`
 - Create: `ShotMarker/Services/TrainingSessionStore.swift`
 - Create: `ShotMarkerTests/TrainingSessionStoreTests.swift`
 - Modify: `ShotMarker.xcodeproj/project.pbxproj`
@@ -51,17 +50,13 @@ Purpose: add test harness and shared domain types before feature UI.
 struct ShotMarkerEvent: Identifiable, Codable, Equatable {
     let id: UUID
     let markedAt: Date
-    let source: String
 }
 
 struct TrainingSession: Identifiable, Codable, Equatable {
     let id: UUID
-    var trainingDate: Date
     var startedAt: Date
-    var endedAt: Date?
+    var endedAt: Date
     var events: [ShotMarkerEvent]
-    var syncStatus: SyncStatus
-    var highlightStatus: HighlightStatus
 }
 ```
 
@@ -89,8 +84,8 @@ Purpose: build the first visible iPhone experience using local sample or stored 
 
 **Behavior:**
 - Home displays training sessions.
-- Each row shows date, time, marker count, highlight status, and sync status.
-- Empty state is restrained and operational: no synced training sessions yet.
+- Each row shows date, time, and marker count.
+- Empty state is restrained and operational: no training sessions yet.
 - No video list page.
 
 **Testing:**

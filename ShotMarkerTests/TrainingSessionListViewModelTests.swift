@@ -1,25 +1,19 @@
-import XCTest
 @testable import ShotMarker
+import XCTest
 
 final class TrainingSessionListViewModelTests: XCTestCase {
-    func testLoadSortsTrainingSessionsNewestFirst() {
-        let older = TrainingSession(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-            trainingDate: Date(timeIntervalSince1970: 1_000),
-            startedAt: Date(timeIntervalSince1970: 1_000),
-            endedAt: Date(timeIntervalSince1970: 1_300),
+    func testLoadSortsTrainingSessionsNewestFirst() throws {
+        let older = try TrainingSession(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001")),
+            startedAt: Date(timeIntervalSince1970: 1000),
+            endedAt: Date(timeIntervalSince1970: 1300),
             events: [],
-            syncStatus: .synced,
-            highlightStatus: .notClipped
         )
-        let newer = TrainingSession(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
-            trainingDate: Date(timeIntervalSince1970: 2_000),
-            startedAt: Date(timeIntervalSince1970: 2_000),
-            endedAt: Date(timeIntervalSince1970: 2_300),
+        let newer = try TrainingSession(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000002")),
+            startedAt: Date(timeIntervalSince1970: 2000),
+            endedAt: Date(timeIntervalSince1970: 2300),
             events: [],
-            syncStatus: .synced,
-            highlightStatus: .notClipped
         )
         let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: [older, newer]))
 
@@ -28,20 +22,16 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.rows.map(\.id), [newer.id, older.id])
     }
 
-    func testLoadMapsTrainingSessionStateIntoRows() {
-        let marker = ShotMarkerEvent(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
-            markedAt: Date(timeIntervalSince1970: 2_100),
-            source: .watch
+    func testLoadMapsTrainingSessionStateIntoRows() throws {
+        let marker = try ShotMarkerEvent(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000003")),
+            markedAt: Date(timeIntervalSince1970: 2100),
         )
-        let session = TrainingSession(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
-            trainingDate: Date(timeIntervalSince1970: 2_000),
-            startedAt: Date(timeIntervalSince1970: 2_000),
-            endedAt: Date(timeIntervalSince1970: 2_300),
+        let session = try TrainingSession(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000004")),
+            startedAt: Date(timeIntervalSince1970: 2000),
+            endedAt: Date(timeIntervalSince1970: 2300),
             events: [marker],
-            syncStatus: .pending,
-            highlightStatus: .clipped
         )
         let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: [session]))
 
@@ -50,12 +40,9 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.rows, [
             TrainingSessionRowViewData(
                 id: session.id,
-                trainingDate: session.trainingDate,
                 startedAt: session.startedAt,
                 markerCount: 1,
-                syncStatus: .pending,
-                highlightStatus: .clipped
-            )
+            ),
         ])
         XCTAssertFalse(viewModel.isEmpty)
     }
