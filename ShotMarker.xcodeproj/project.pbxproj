@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
+		FF492B9A2FA47A4900BB421B /* PRD.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRD.md; sourceTree = "<group>"; };
 		FF5C7E9F2FA46C7E00B04685 /* ShotMarker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShotMarker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -29,9 +30,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		FF492B9B2FA47A4900BB421B /* docs */ = {
+			isa = PBXGroup;
+			children = (
+				FF492B9A2FA47A4900BB421B /* PRD.md */,
+			);
+			path = docs;
+			sourceTree = "<group>";
+		};
 		FF5C7E962FA46C7E00B04685 = {
 			isa = PBXGroup;
 			children = (
+				FF492B9B2FA47A4900BB421B /* docs */,
 				FF5C7EA12FA46C7E00B04685 /* ShotMarker */,
 				FF5C7EA02FA46C7E00B04685 /* Products */,
 			);
