@@ -10,6 +10,7 @@
 		FF492B9C2FA47A4900BB421B /* 2026-05-01-shotmarker-p0-development-plan.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "2026-05-01-shotmarker-p0-development-plan.md"; sourceTree = "<group>"; };
 		FF492B9A2FA47A4900BB421B /* PRD.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRD.md; sourceTree = "<group>"; };
 		FF5C7E9F2FA46C7E00B04685 /* ShotMarker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShotMarker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FF1000012FA4800000B04685 /* ShotMarkerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShotMarkerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -18,10 +19,32 @@
 			path = ShotMarker;
 			sourceTree = "<group>";
 		};
+		FF1000022FA4800000B04685 /* ShotMarkerTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ShotMarkerTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXContainerItemProxy section */
+		FF10000A2FA4800000B04685 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FF5C7E972FA46C7E00B04685 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FF5C7E9E2FA46C7E00B04685;
+			remoteInfo = ShotMarker;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		FF5C7E9C2FA46C7E00B04685 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF1000042FA4800000B04685 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -53,6 +76,7 @@
 			children = (
 				FF492B9B2FA47A4900BB421B /* docs */,
 				FF5C7EA12FA46C7E00B04685 /* ShotMarker */,
+				FF1000022FA4800000B04685 /* ShotMarkerTests */,
 				FF5C7EA02FA46C7E00B04685 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -61,6 +85,7 @@
 			isa = PBXGroup;
 			children = (
 				FF5C7E9F2FA46C7E00B04685 /* ShotMarker.app */,
+				FF1000012FA4800000B04685 /* ShotMarkerTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -90,6 +115,29 @@
 			productReference = FF5C7E9F2FA46C7E00B04685 /* ShotMarker.app */;
 			productType = "com.apple.product-type.application";
 		};
+		FF1000062FA4800000B04685 /* ShotMarkerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF1000072FA4800000B04685 /* Build configuration list for PBXNativeTarget "ShotMarkerTests" */;
+			buildPhases = (
+				FF1000032FA4800000B04685 /* Sources */,
+				FF1000042FA4800000B04685 /* Frameworks */,
+				FF1000052FA4800000B04685 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FF10000B2FA4800000B04685 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				FF1000022FA4800000B04685 /* ShotMarkerTests */,
+			);
+			name = ShotMarkerTests;
+			packageProductDependencies = (
+			);
+			productName = ShotMarkerTests;
+			productReference = FF1000012FA4800000B04685 /* ShotMarkerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -102,6 +150,10 @@
 				TargetAttributes = {
 					FF5C7E9E2FA46C7E00B04685 = {
 						CreatedOnToolsVersion = 26.4.1;
+					};
+					FF1000062FA4800000B04685 = {
+						CreatedOnToolsVersion = 26.4.1;
+						TestTargetID = FF5C7E9E2FA46C7E00B04685;
 					};
 				};
 			};
@@ -120,12 +172,20 @@
 			projectRoot = "";
 			targets = (
 				FF5C7E9E2FA46C7E00B04685 /* ShotMarker */,
+				FF1000062FA4800000B04685 /* ShotMarkerTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		FF5C7E9D2FA46C7E00B04685 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF1000052FA4800000B04685 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -142,7 +202,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FF1000032FA4800000B04685 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		FF10000B2FA4800000B04685 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FF5C7E9E2FA46C7E00B04685 /* ShotMarker */;
+			targetProxy = FF10000A2FA4800000B04685 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		FF5C7EA82FA46C7F00B04685 /* Debug */ = {
@@ -349,6 +424,64 @@
 			};
 			name = Release;
 		};
+		FF1000082FA4800000B04685 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Z7B3D6C893;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heji.ShotMarkerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ShotMarker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ShotMarker";
+			};
+			name = Debug;
+		};
+		FF1000092FA4800000B04685 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Z7B3D6C893;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heji.ShotMarkerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ShotMarker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ShotMarker";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -366,6 +499,15 @@
 			buildConfigurations = (
 				FF5C7EAB2FA46C7F00B04685 /* Debug */,
 				FF5C7EAC2FA46C7F00B04685 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FF1000072FA4800000B04685 /* Build configuration list for PBXNativeTarget "ShotMarkerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FF1000082FA4800000B04685 /* Debug */,
+				FF1000092FA4800000B04685 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
