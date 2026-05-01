@@ -20,6 +20,7 @@
 		FF1000012FA4800000B04685 /* ShotMarkerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShotMarkerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FF492B9A2FA47A4900BB421B /* PRD.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRD.md; sourceTree = "<group>"; };
 		FF492B9C2FA47A4900BB421B /* 2026-05-01-shotmarker-p0-development-plan.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "2026-05-01-shotmarker-p0-development-plan.md"; sourceTree = "<group>"; };
+		FF2000022FA5000000B04685 /* ShotMarkerWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShotMarkerWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FF5C7E9F2FA46C7E00B04685 /* ShotMarker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShotMarker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -27,6 +28,11 @@
 		FF1000022FA4800000B04685 /* ShotMarkerTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = ShotMarkerTests;
+			sourceTree = "<group>";
+		};
+		FF2000012FA5000000B04685 /* ShotMarkerWatchApp */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ShotMarkerWatchApp;
 			sourceTree = "<group>";
 		};
 		FF5C7EA12FA46C7E00B04685 /* ShotMarker */ = {
@@ -38,6 +44,13 @@
 
 /* Begin PBXFrameworksBuildPhase section */
 		FF1000042FA4800000B04685 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF2000042FA5000000B04685 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -76,6 +89,7 @@
 			children = (
 				FF492B9B2FA47A4900BB421B /* docs */,
 				FF5C7EA12FA46C7E00B04685 /* ShotMarker */,
+				FF2000012FA5000000B04685 /* ShotMarkerWatchApp */,
 				FF1000022FA4800000B04685 /* ShotMarkerTests */,
 				FF5C7EA02FA46C7E00B04685 /* Products */,
 			);
@@ -85,6 +99,7 @@
 			isa = PBXGroup;
 			children = (
 				FF5C7E9F2FA46C7E00B04685 /* ShotMarker.app */,
+				FF2000022FA5000000B04685 /* ShotMarkerWatchApp.app */,
 				FF1000012FA4800000B04685 /* ShotMarkerTests.xctest */,
 			);
 			name = Products;
@@ -115,6 +130,28 @@
 			productName = ShotMarkerTests;
 			productReference = FF1000012FA4800000B04685 /* ShotMarkerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		FF2000062FA5000000B04685 /* ShotMarkerWatchApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF2000072FA5000000B04685 /* Build configuration list for PBXNativeTarget "ShotMarkerWatchApp" */;
+			buildPhases = (
+				FF2000032FA5000000B04685 /* Sources */,
+				FF2000042FA5000000B04685 /* Frameworks */,
+				FF2000052FA5000000B04685 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				FF2000012FA5000000B04685 /* ShotMarkerWatchApp */,
+			);
+			name = ShotMarkerWatchApp;
+			packageProductDependencies = (
+			);
+			productName = ShotMarkerWatchApp;
+			productReference = FF2000022FA5000000B04685 /* ShotMarkerWatchApp.app */;
+			productType = "com.apple.product-type.application";
 		};
 		FF5C7E9E2FA46C7E00B04685 /* ShotMarker */ = {
 			isa = PBXNativeTarget;
@@ -152,6 +189,9 @@
 						CreatedOnToolsVersion = 26.4.1;
 						TestTargetID = FF5C7E9E2FA46C7E00B04685;
 					};
+					FF2000062FA5000000B04685 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
 					FF5C7E9E2FA46C7E00B04685 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
@@ -172,6 +212,7 @@
 			projectRoot = "";
 			targets = (
 				FF5C7E9E2FA46C7E00B04685 /* ShotMarker */,
+				FF2000062FA5000000B04685 /* ShotMarkerWatchApp */,
 				FF1000062FA4800000B04685 /* ShotMarkerTests */,
 			);
 		};
@@ -179,6 +220,13 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		FF1000052FA4800000B04685 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF2000052FA5000000B04685 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -196,6 +244,13 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		FF1000032FA4800000B04685 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF2000032FA5000000B04685 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -275,6 +330,62 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ShotMarker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ShotMarker";
+			};
+			name = Release;
+		};
+		FF2000082FA5000000B04685 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Z7B3D6C893;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ShotMarker;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKWatchOnly = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heji.ShotMarker.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Debug;
+		};
+		FF2000092FA5000000B04685 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Z7B3D6C893;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ShotMarker;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKWatchOnly = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heji.ShotMarker.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.4;
 			};
 			name = Release;
 		};
@@ -490,6 +601,15 @@
 			buildConfigurations = (
 				FF1000082FA4800000B04685 /* Debug */,
 				FF1000092FA4800000B04685 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FF2000072FA5000000B04685 /* Build configuration list for PBXNativeTarget "ShotMarkerWatchApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FF2000082FA5000000B04685 /* Debug */,
+				FF2000092FA5000000B04685 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
