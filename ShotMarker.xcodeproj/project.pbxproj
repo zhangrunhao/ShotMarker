@@ -46,6 +46,11 @@
 			path = ShotMarkerWatchAppTests;
 			sourceTree = "<group>";
 		};
+		FF4000012FA5200000B04685 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		FF5C7EA12FA46C7E00B04685 /* ShotMarker */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = ShotMarker;
@@ -90,6 +95,7 @@
 			children = (
 				FF5C7EA12FA46C7E00B04685 /* ShotMarker */,
 				FF2000012FA5000000B04685 /* ShotMarkerWatchApp */,
+				FF4000012FA5200000B04685 /* Shared */,
 				FF3000022FA5100000B04685 /* ShotMarkerWatchAppTests */,
 				FF1000022FA4800000B04685 /* ShotMarkerTests */,
 				FF5C7EA02FA46C7E00B04685 /* Products */,
@@ -147,6 +153,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				FF2000012FA5000000B04685 /* ShotMarkerWatchApp */,
+				FF4000012FA5200000B04685 /* Shared */,
 			);
 			name = ShotMarkerWatchApp;
 			packageProductDependencies = (
@@ -192,6 +199,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				FF5C7EA12FA46C7E00B04685 /* ShotMarker */,
+				FF4000012FA5200000B04685 /* Shared */,
 			);
 			name = ShotMarker;
 			packageProductDependencies = (
