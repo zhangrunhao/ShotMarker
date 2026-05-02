@@ -31,13 +31,31 @@ final class TrainingSessionListViewModel: ObservableObject {
     @Published private(set) var errorMessage: String?
 
     private let store: TrainingSessionStoreProtocol
+    private let notificationCenter: NotificationCenter
+    private var trainingSessionsDidChangeObserver: NSObjectProtocol?
 
     var isEmpty: Bool {
         rows.isEmpty
     }
 
-    init(store: TrainingSessionStoreProtocol) {
+    init(store: TrainingSessionStoreProtocol, notificationCenter: NotificationCenter = .default) {
         self.store = store
+        self.notificationCenter = notificationCenter
+        trainingSessionsDidChangeObserver = notificationCenter.addObserver(
+            forName: .trainingSessionsDidChange,
+            object: nil,
+            queue: nil,
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.load()
+            }
+        }
+    }
+
+    deinit {
+        if let trainingSessionsDidChangeObserver {
+            notificationCenter.removeObserver(trainingSessionsDidChangeObserver)
+        }
     }
 
     func load() {

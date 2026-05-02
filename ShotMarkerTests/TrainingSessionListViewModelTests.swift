@@ -1,4 +1,5 @@
 @testable import ShotMarker
+import Combine
 import XCTest
 
 final class TrainingSessionListViewModelTests: XCTestCase {
@@ -54,5 +55,51 @@ final class TrainingSessionListViewModelTests: XCTestCase {
 
         XCTAssertTrue(viewModel.rows.isEmpty)
         XCTAssertTrue(viewModel.isEmpty)
+    }
+
+    func testRowsRefreshWhenTrainingSessionsDidChangeNotificationIsPosted() throws {
+        let store = InMemoryTrainingSessionStore(sessions: [])
+        let notificationCenter = NotificationCenter()
+        let viewModel = TrainingSessionListViewModel(
+            store: store,
+            notificationCenter: notificationCenter,
+        )
+        let session = try TrainingSession(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000101")),
+            startedAt: Date(timeIntervalSince1970: 3000),
+            endedAt: Date(timeIntervalSince1970: 3300),
+            events: [
+                ShotMarkerEvent(
+                    id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000102")),
+                    markedAt: Date(timeIntervalSince1970: 3100),
+                ),
+            ],
+        )
+        let rowsRefreshed = expectation(description: "Rows refreshed")
+        var cancellables = Set<AnyCancellable>()
+
+        viewModel.$rows
+            .dropFirst()
+            .sink { rows in
+                if rows.map({ $0.id }) == [session.id] {
+                    rowsRefreshed.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        viewModel.load()
+        XCTAssertTrue(viewModel.rows.isEmpty)
+
+        try store.saveTrainingSessions([session])
+        notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
+
+        wait(for: [rowsRefreshed], timeout: 1)
+        XCTAssertEqual(viewModel.rows, [
+            TrainingSessionRowViewData(
+                id: session.id,
+                startedAt: session.startedAt,
+                markerCount: 1,
+            ),
+        ])
     }
 }
