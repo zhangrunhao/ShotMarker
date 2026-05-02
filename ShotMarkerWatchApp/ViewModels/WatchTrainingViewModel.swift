@@ -76,6 +76,16 @@ final class WatchTrainingViewModel: ObservableObject {
     }
 
     @discardableResult
+    func handleLongPress(syncService: WatchTrainingSyncServiceProtocol) -> TrainingSessionSyncPayload? {
+        guard let payload = handleLongPress() else {
+            return nil
+        }
+
+        try? syncService.enqueueCompletedSession(payload)
+        return payload
+    }
+
+    @discardableResult
     func handleDoubleTap() -> Bool {
         guard state == .training else {
             return false

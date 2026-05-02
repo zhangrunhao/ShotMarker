@@ -8,8 +8,14 @@ struct WatchTrainingView: View {
     @State private var isPressingButton = false
     @State private var isCompletingLongPress = false
 
+    private let syncService: WatchTrainingSyncServiceProtocol
     private let longPressTransitionDuration = 0.5
     private let returnTransitionDuration = 0.18
+
+    @MainActor
+    init(syncService: WatchTrainingSyncServiceProtocol? = nil) {
+        self.syncService = syncService ?? WatchTrainingSyncService()
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -72,7 +78,11 @@ struct WatchTrainingView: View {
         let toggle = DispatchWorkItem {
             pendingLongPressToggle = nil
             isCompletingLongPress = true
-            viewModel.handleLongPress()
+            let completedPayload = viewModel.handleLongPress(syncService: syncService)
+
+            if completedPayload != nil {
+                WKInterfaceDevice.current().play(.click)
+            }
 
             withAnimation(.easeOut(duration: returnTransitionDuration)) {
                 buttonScale = 1.0
