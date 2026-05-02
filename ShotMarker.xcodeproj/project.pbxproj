@@ -25,8 +25,6 @@
 
 /* Begin PBXFileReference section */
 		FF1000012FA4800000B04685 /* ShotMarkerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShotMarkerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		FF492B9A2FA47A4900BB421B /* PRD.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRD.md; sourceTree = "<group>"; };
-		FF492B9C2FA47A4900BB421B /* 2026-05-01-shotmarker-p0-development-plan.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "2026-05-01-shotmarker-p0-development-plan.md"; sourceTree = "<group>"; };
 		FF2000022FA5000000B04685 /* ShotMarkerWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShotMarkerWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FF3000012FA5100000B04685 /* ShotMarkerWatchAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShotMarkerWatchAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FF5C7E9F2FA46C7E00B04685 /* ShotMarker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShotMarker.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -87,27 +85,9 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		FF492B9B2FA47A4900BB421B /* docs */ = {
-			isa = PBXGroup;
-			children = (
-				FF492B9A2FA47A4900BB421B /* PRD.md */,
-				FF492B9D2FA47A4900BB421B /* plans */,
-			);
-			path = docs;
-			sourceTree = "<group>";
-		};
-		FF492B9D2FA47A4900BB421B /* plans */ = {
-			isa = PBXGroup;
-			children = (
-				FF492B9C2FA47A4900BB421B /* 2026-05-01-shotmarker-p0-development-plan.md */,
-			);
-			path = plans;
-			sourceTree = "<group>";
-		};
 		FF5C7E962FA46C7E00B04685 = {
 			isa = PBXGroup;
 			children = (
-				FF492B9B2FA47A4900BB421B /* docs */,
 				FF5C7EA12FA46C7E00B04685 /* ShotMarker */,
 				FF2000012FA5000000B04685 /* ShotMarkerWatchApp */,
 				FF3000022FA5100000B04685 /* ShotMarkerWatchAppTests */,
