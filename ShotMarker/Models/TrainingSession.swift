@@ -47,10 +47,10 @@ struct TrainingSession: Identifiable, Codable, Equatable {
                     ],
                 ),
                 TrainingSession(
-                    startedAt: now.addingTimeInterval(-176400),
-                    endedAt: now.addingTimeInterval(-174900),
+                    startedAt: now.addingTimeInterval(-176_400),
+                    endedAt: now.addingTimeInterval(-174_900),
                     events: [
-                        ShotMarkerEvent(markedAt: now.addingTimeInterval(-175680)),
+                        ShotMarkerEvent(markedAt: now.addingTimeInterval(-175_680)),
                     ],
                 ),
             ]
