@@ -21,7 +21,32 @@
 			remoteGlobalIDString = FF2000062FA5000000B04685;
 			remoteInfo = ShotMarkerWatchApp;
 		};
+		FF6000032FA5E00000B04685 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FF5C7E972FA46C7E00B04685 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FF2000062FA5000000B04685;
+			remoteInfo = ShotMarkerWatchApp;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXBuildFile section */
+		FF6000012FA5E00000B04685 /* ShotMarkerWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = FF2000022FA5000000B04685 /* ShotMarkerWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		FF6000022FA5E00000B04685 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				FF6000012FA5E00000B04685 /* ShotMarkerWatchApp.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		FF1000012FA4800000B04685 /* ShotMarkerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShotMarkerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -192,10 +217,12 @@
 				FF5C7E9B2FA46C7E00B04685 /* Sources */,
 				FF5C7E9C2FA46C7E00B04685 /* Frameworks */,
 				FF5C7E9D2FA46C7E00B04685 /* Resources */,
+				FF6000022FA5E00000B04685 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				FF6000042FA5E00000B04685 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				FF5C7EA12FA46C7E00B04685 /* ShotMarker */,
@@ -329,6 +356,11 @@
 			target = FF2000062FA5000000B04685 /* ShotMarkerWatchApp */;
 			targetProxy = FF30000A2FA5100000B04685 /* PBXContainerItemProxy */;
 		};
+		FF6000042FA5E00000B04685 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FF2000062FA5000000B04685 /* ShotMarkerWatchApp */;
+			targetProxy = FF6000032FA5E00000B04685 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -337,7 +369,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = Z7B3D6C893;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
@@ -366,7 +398,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = Z7B3D6C893;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
@@ -394,7 +426,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = Z7B3D6C893;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -422,7 +454,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = Z7B3D6C893;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -451,7 +483,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = Z7B3D6C893;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -480,7 +512,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = Z7B3D6C893;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -626,7 +658,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = Z7B3D6C893;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -670,7 +702,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = Z7B3D6C893;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
