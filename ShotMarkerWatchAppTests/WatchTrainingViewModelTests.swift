@@ -166,4 +166,25 @@ private final class SpyWatchTrainingSyncService: WatchTrainingSyncServiceProtoco
 
         enqueuedPayloads.append(payload)
     }
+
+    func diagnosticsSnapshot() -> WatchTrainingSyncDiagnosticsSnapshot {
+        WatchTrainingSyncDiagnosticsSnapshot(
+            activationState: "notActivated",
+            outboxCount: 0,
+            pendingTransferCount: 0,
+            awaitingAckCount: 0,
+            lastActivationCompletedAt: nil,
+            lastRetryAt: nil,
+            lastEnqueuedAt: nil,
+            lastEnqueuedTrainingSessionId: nil,
+            lastTransferRequestedAt: nil,
+            lastTransferRequestedTrainingSessionId: nil,
+            lastTransferFinishedAt: nil,
+            lastTransferFinishedTrainingSessionId: nil,
+            lastTransferErrorDescription: nil,
+            lastAckReceivedAt: nil,
+            lastAckTrainingSessionId: nil,
+            lastOutboxErrorDescription: nil,
+        )
+    }
 }

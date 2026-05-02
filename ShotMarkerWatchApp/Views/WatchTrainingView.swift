@@ -7,6 +7,7 @@ struct WatchTrainingView: View {
     @State private var pendingLongPressToggle: DispatchWorkItem?
     @State private var isPressingButton = false
     @State private var isCompletingLongPress = false
+    @State private var isShowingDiagnostics = false
 
     private let syncService: WatchTrainingSyncServiceProtocol
     private let longPressTransitionDuration = 0.5
@@ -40,8 +41,19 @@ struct WatchTrainingView: View {
             Text(viewModel.markerCountText)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            Button {
+                isShowingDiagnostics = true
+            } label: {
+                Label("诊断", systemImage: "wave.3.right.circle")
+                    .font(.caption2)
+            }
+            .buttonStyle(.borderless)
         }
         .padding()
+        .sheet(isPresented: $isShowingDiagnostics) {
+            WatchSyncDiagnosticsView(snapshotProvider: syncService.diagnosticsSnapshot)
+        }
     }
 
     private var longPressTransitionGesture: some Gesture {

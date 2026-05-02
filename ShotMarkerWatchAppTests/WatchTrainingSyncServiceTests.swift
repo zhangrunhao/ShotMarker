@@ -222,6 +222,65 @@ final class WatchTrainingSyncServiceTests: XCTestCase {
         ])
     }
 
+    func testDiagnosticsSnapshotIncludesOutboxAndTransferState() throws {
+        let payload = try makePayload()
+        var currentDate = Date(timeIntervalSince1970: 20_000)
+        let session = FakeWatchConnectivitySession(activationState: .activated)
+        let outbox = makeOutbox()
+        let service = WatchTrainingSyncService(
+            outbox: outbox,
+            session: session,
+            now: { currentDate },
+        )
+
+        try service.enqueueCompletedSession(payload)
+        currentDate = Date(timeIntervalSince1970: 20_010)
+        try service.handleSystemTransferFinished(trainingSessionId: payload.id, error: nil)
+
+        XCTAssertEqual(
+            service.diagnosticsSnapshot(),
+            WatchTrainingSyncDiagnosticsSnapshot(
+                activationState: "activated",
+                outboxCount: 1,
+                pendingTransferCount: 0,
+                awaitingAckCount: 1,
+                lastActivationCompletedAt: nil,
+                lastRetryAt: currentDate.addingTimeInterval(-10),
+                lastEnqueuedAt: currentDate.addingTimeInterval(-10),
+                lastEnqueuedTrainingSessionId: payload.id,
+                lastTransferRequestedAt: currentDate.addingTimeInterval(-10),
+                lastTransferRequestedTrainingSessionId: payload.id,
+                lastTransferFinishedAt: currentDate,
+                lastTransferFinishedTrainingSessionId: payload.id,
+                lastTransferErrorDescription: nil,
+                lastAckReceivedAt: nil,
+                lastAckTrainingSessionId: nil,
+                lastOutboxErrorDescription: nil,
+            ),
+        )
+    }
+
+    func testDiagnosticsSnapshotUpdatesAfterAckRemovesOutboxEntry() throws {
+        let payload = try makePayload()
+        var currentDate = Date(timeIntervalSince1970: 20_000)
+        let session = FakeWatchConnectivitySession(activationState: .activated)
+        let outbox = makeOutbox()
+        let service = WatchTrainingSyncService(
+            outbox: outbox,
+            session: session,
+            now: { currentDate },
+        )
+        try service.enqueueCompletedSession(payload)
+
+        currentDate = Date(timeIntervalSince1970: 20_020)
+        try service.handleReceivedUserInfo(makeAckUserInfo(trainingSessionId: payload.id))
+
+        let snapshot = service.diagnosticsSnapshot()
+        XCTAssertEqual(snapshot.outboxCount, 0)
+        XCTAssertEqual(snapshot.lastAckReceivedAt, currentDate)
+        XCTAssertEqual(snapshot.lastAckTrainingSessionId, payload.id)
+    }
+
     private func makeOutbox() -> WatchTrainingSyncOutbox {
         WatchTrainingSyncOutbox(fileURL: temporaryDirectory.appendingPathComponent("outbox.json"))
     }

@@ -132,6 +132,40 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
         XCTAssertEqual(session.transferredUserInfos.count, 0)
     }
 
+    func testDiagnosticsSnapshotIncludesSessionStateAndLastSuccessfulImport() throws {
+        let payload = try makePayload()
+        let importer = SpyTrainingSessionImporter()
+        let session = FakePhoneWatchConnectivitySession(isSupported: true)
+        session.isPaired = true
+        session.isWatchAppInstalled = true
+        session.activationStateDescription = "activated"
+        let service = PhoneWatchSyncService(
+            importer: importer,
+            session: session,
+            now: { Date(timeIntervalSince1970: 20_000) },
+        )
+
+        service.handleReceivedUserInfo(try makeCompletedTrainingSessionUserInfo(payload: payload))
+
+        XCTAssertEqual(
+            service.diagnosticsSnapshot(),
+            PhoneWatchSyncDiagnosticsSnapshot(
+                isSupported: true,
+                isPaired: true,
+                isWatchAppInstalled: true,
+                activationState: "activated",
+                lastActivationCompletedAt: nil,
+                lastActivationErrorDescription: nil,
+                lastReceivedPayloadAt: Date(timeIntervalSince1970: 20_000),
+                lastReceivedTrainingSessionId: payload.id,
+                lastImportErrorDescription: nil,
+                lastAckSentAt: Date(timeIntervalSince1970: 20_000),
+                lastAckTrainingSessionId: payload.id,
+                lastAckErrorDescription: nil,
+            ),
+        )
+    }
+
     private func makeCompletedTrainingSessionUserInfo(payload: TrainingSessionSyncPayload) throws -> [String: Any] {
         [
             PhoneWatchSyncService.userInfoTypeKey: PhoneWatchSyncService.completedTrainingSessionUserInfoType,
@@ -177,6 +211,9 @@ private final class SpyTrainingSessionImporter: TrainingSessionImporting {
 
 private final class FakePhoneWatchConnectivitySession: PhoneWatchConnectivitySessionProtocol {
     let isSupported: Bool
+    var isPaired = false
+    var isWatchAppInstalled = false
+    var activationStateDescription = "notActivated"
     private(set) var setDelegateCallCount = 0
     private(set) var activateCallCount = 0
     private(set) var transferredUserInfos: [[String: Any]] = []

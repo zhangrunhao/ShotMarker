@@ -3,6 +3,9 @@ import WatchConnectivity
 
 protocol PhoneWatchConnectivitySessionProtocol: AnyObject {
     var isSupported: Bool { get }
+    var isPaired: Bool { get }
+    var isWatchAppInstalled: Bool { get }
+    var activationStateDescription: String { get }
 
     func setDelegate(_ delegate: WCSessionDelegate)
     func activate()
@@ -11,6 +14,21 @@ protocol PhoneWatchConnectivitySessionProtocol: AnyObject {
 
 extension Notification.Name {
     static let trainingSessionsDidChange = Notification.Name("trainingSessionsDidChange")
+}
+
+struct PhoneWatchSyncDiagnosticsSnapshot: Equatable {
+    let isSupported: Bool
+    let isPaired: Bool
+    let isWatchAppInstalled: Bool
+    let activationState: String
+    let lastActivationCompletedAt: Date?
+    let lastActivationErrorDescription: String?
+    let lastReceivedPayloadAt: Date?
+    let lastReceivedTrainingSessionId: UUID?
+    let lastImportErrorDescription: String?
+    let lastAckSentAt: Date?
+    let lastAckTrainingSessionId: UUID?
+    let lastAckErrorDescription: String?
 }
 
 final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
@@ -25,6 +43,14 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
     private let now: () -> Date
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
+    private var lastActivationCompletedAt: Date?
+    private var lastActivationErrorDescription: String?
+    private var lastReceivedPayloadAt: Date?
+    private var lastReceivedTrainingSessionId: UUID?
+    private var lastImportErrorDescription: String?
+    private var lastAckSentAt: Date?
+    private var lastAckTrainingSessionId: UUID?
+    private var lastAckErrorDescription: String?
 
     init(
         importer: TrainingSessionImporting,
@@ -40,11 +66,29 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
 
     func start() {
         guard session.isSupported else {
+            lastActivationErrorDescription = "WCSession is not supported"
             return
         }
 
         session.setDelegate(self)
         session.activate()
+    }
+
+    func diagnosticsSnapshot() -> PhoneWatchSyncDiagnosticsSnapshot {
+        PhoneWatchSyncDiagnosticsSnapshot(
+            isSupported: session.isSupported,
+            isPaired: session.isPaired,
+            isWatchAppInstalled: session.isWatchAppInstalled,
+            activationState: session.activationStateDescription,
+            lastActivationCompletedAt: lastActivationCompletedAt,
+            lastActivationErrorDescription: lastActivationErrorDescription,
+            lastReceivedPayloadAt: lastReceivedPayloadAt,
+            lastReceivedTrainingSessionId: lastReceivedTrainingSessionId,
+            lastImportErrorDescription: lastImportErrorDescription,
+            lastAckSentAt: lastAckSentAt,
+            lastAckTrainingSessionId: lastAckTrainingSessionId,
+            lastAckErrorDescription: lastAckErrorDescription,
+        )
     }
 
     func handleReceivedUserInfo(_ userInfo: [String: Any]) {
@@ -56,14 +100,27 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
             let payloadData = userInfo[Self.userInfoPayloadKey] as? Data,
             let payload = try? decoder.decode(TrainingSessionSyncPayload.self, from: payloadData)
         else {
+            lastImportErrorDescription = "Unable to decode completed training session payload"
             return
         }
 
+        lastReceivedPayloadAt = now()
+        lastReceivedTrainingSessionId = payload.id
+
         do {
             try importer.import(payload)
-            notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
+        } catch {
+            lastImportErrorDescription = String(describing: error)
+            return
+        }
+
+        lastImportErrorDescription = nil
+        notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
+
+        do {
             try transferAck(for: payload)
         } catch {
+            lastAckErrorDescription = String(describing: error)
             return
         }
     }
@@ -76,7 +133,10 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
         _ session: WCSession,
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?,
-    ) {}
+    ) {
+        lastActivationCompletedAt = now()
+        lastActivationErrorDescription = error.map { String(describing: $0) }
+    }
 
     func sessionDidBecomeInactive(_ session: WCSession) {}
 
@@ -94,6 +154,9 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
             Self.userInfoTypeKey: Self.trainingSessionSyncAckUserInfoType,
             Self.userInfoPayloadKey: ackData,
         ])
+        lastAckSentAt = ack.importedAt
+        lastAckTrainingSessionId = payload.id
+        lastAckErrorDescription = nil
     }
 }
 
@@ -108,6 +171,18 @@ private final class PhoneWatchConnectivitySessionAdapter: PhoneWatchConnectivity
         WCSession.isSupported()
     }
 
+    var isPaired: Bool {
+        session.isPaired
+    }
+
+    var isWatchAppInstalled: Bool {
+        session.isWatchAppInstalled
+    }
+
+    var activationStateDescription: String {
+        session.activationState.diagnosticsDescription
+    }
+
     func setDelegate(_ delegate: WCSessionDelegate) {
         session.delegate = delegate
     }
@@ -118,5 +193,20 @@ private final class PhoneWatchConnectivitySessionAdapter: PhoneWatchConnectivity
 
     func transferUserInfo(_ userInfo: [String: Any]) {
         session.transferUserInfo(userInfo)
+    }
+}
+
+private extension WCSessionActivationState {
+    var diagnosticsDescription: String {
+        switch self {
+        case .notActivated:
+            "notActivated"
+        case .inactive:
+            "inactive"
+        case .activated:
+            "activated"
+        @unknown default:
+            "unknown"
+        }
     }
 }

@@ -9,14 +9,19 @@ import SwiftUI
 
 struct ContentView: View {
     private let store: TrainingSessionStoreProtocol
+    private let syncService: PhoneWatchSyncService?
 
     @MainActor
-    init(store: TrainingSessionStoreProtocol) {
+    init(store: TrainingSessionStoreProtocol, syncService: PhoneWatchSyncService? = nil) {
         self.store = store
+        self.syncService = syncService
     }
 
     var body: some View {
-        TrainingSessionListView(store: store)
+        TrainingSessionListView(
+            store: store,
+            diagnosticsSnapshotProvider: syncService?.diagnosticsSnapshot,
+        )
     }
 }
 

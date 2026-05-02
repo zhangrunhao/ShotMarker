@@ -2,14 +2,23 @@ import SwiftUI
 
 struct TrainingSessionListView: View {
     @StateObject private var viewModel: TrainingSessionListViewModel
+    private let diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)?
 
     @MainActor
-    init(store: TrainingSessionStoreProtocol) {
+    init(
+        store: TrainingSessionStoreProtocol,
+        diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)? = nil,
+    ) {
+        self.diagnosticsSnapshotProvider = diagnosticsSnapshotProvider
         _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(store: store))
     }
 
     @MainActor
-    init(viewModel: TrainingSessionListViewModel) {
+    init(
+        viewModel: TrainingSessionListViewModel,
+        diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)? = nil,
+    ) {
+        self.diagnosticsSnapshotProvider = diagnosticsSnapshotProvider
         _viewModel = StateObject(wrappedValue: viewModel)
     }
 
@@ -29,6 +38,16 @@ struct TrainingSessionListView: View {
             .navigationTitle("训练记录")
             .task {
                 viewModel.load()
+            }
+            .toolbar {
+                if let diagnosticsSnapshotProvider {
+                    NavigationLink {
+                        PhoneWatchSyncDiagnosticsView(snapshotProvider: diagnosticsSnapshotProvider)
+                    } label: {
+                        Image(systemName: "wave.3.right.circle")
+                    }
+                    .accessibilityLabel("同步诊断")
+                }
             }
         }
     }

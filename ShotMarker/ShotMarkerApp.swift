@@ -28,7 +28,7 @@ struct ShotMarkerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(store: store)
+            ContentView(store: store, syncService: syncService)
         }
     }
 }
