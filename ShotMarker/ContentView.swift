@@ -8,11 +8,18 @@
 import SwiftUI
 
 struct ContentView: View {
+    private let store: TrainingSessionStoreProtocol
+
+    @MainActor
+    init(store: TrainingSessionStoreProtocol) {
+        self.store = store
+    }
+
     var body: some View {
-        TrainingSessionListView()
+        TrainingSessionListView(store: store)
     }
 }
 
 #Preview {
-    ContentView()
+    ContentView(store: InMemoryTrainingSessionStore(sessions: TrainingSession.previewSessions))
 }

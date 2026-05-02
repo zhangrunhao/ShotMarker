@@ -4,12 +4,7 @@ struct TrainingSessionListView: View {
     @StateObject private var viewModel: TrainingSessionListViewModel
 
     @MainActor
-    init() {
-        #if DEBUG
-            let store = TrainingSessionStore(seedSessions: TrainingSession.previewSessions)
-        #else
-            let store = TrainingSessionStore()
-        #endif
+    init(store: TrainingSessionStoreProtocol) {
         _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(store: store))
     }
 
