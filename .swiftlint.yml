@@ -1,0 +1,8 @@
+line_length:
+  warning: 140
+  error: 180
+  ignores_comments: true
+  ignores_urls: true
+
+trailing_comma:
+  mandatory_comma: true
