@@ -23,6 +23,18 @@ final class WatchTrainingSyncServiceTests: XCTestCase {
         XCTAssertEqual(session.activateCallCount, 1)
     }
 
+    func testInitRetriesPendingEntriesWhenSessionIsAlreadyActivated() throws {
+        let payload = try makePayload()
+        let session = FakeWatchConnectivitySession(activationState: .activated)
+        let outbox = makeOutbox()
+        try outbox.enqueue(payload)
+
+        _ = WatchTrainingSyncService(outbox: outbox, session: session)
+
+        XCTAssertEqual(session.transferredUserInfos.count, 1)
+        XCTAssertEqual(try decodePayload(from: try XCTUnwrap(session.transferredUserInfos.first)), payload)
+    }
+
     func testEnqueueTransfersEncodedPayloadWhenSessionIsActivated() throws {
         let payload = try makePayload()
         let session = FakeWatchConnectivitySession(activationState: .activated)
@@ -41,7 +53,11 @@ final class WatchTrainingSyncServiceTests: XCTestCase {
         let decodedPayload = try JSONDecoder().decode(TrainingSessionSyncPayload.self, from: payloadData)
         XCTAssertEqual(decodedPayload, payload)
         XCTAssertEqual(try outbox.loadEntries(), [
-            WatchTrainingSyncOutboxEntry(payload: payload, status: .pendingTransfer),
+            WatchTrainingSyncOutboxEntry(
+                payload: payload,
+                status: .pendingTransfer,
+                lastTransferFinishedAt: nil,
+            ),
         ])
     }
 
@@ -55,21 +71,154 @@ final class WatchTrainingSyncServiceTests: XCTestCase {
 
         XCTAssertEqual(session.transferredUserInfos.count, 0)
         XCTAssertEqual(try outbox.loadEntries(), [
-            WatchTrainingSyncOutboxEntry(payload: payload, status: .pendingTransfer),
+            WatchTrainingSyncOutboxEntry(
+                payload: payload,
+                status: .pendingTransfer,
+                lastTransferFinishedAt: nil,
+            ),
         ])
     }
 
     func testSuccessfulSystemTransferMarksOutboxEntryAwaitingAckWithoutDeletingIt() throws {
+        let payload = try makePayload()
+        let transferFinishedAt = Date(timeIntervalSince1970: 20_000)
+        let session = FakeWatchConnectivitySession(activationState: .activated)
+        let outbox = makeOutbox()
+        let service = WatchTrainingSyncService(outbox: outbox, session: session, now: { transferFinishedAt })
+        try service.enqueueCompletedSession(payload)
+
+        try service.handleSystemTransferFinished(trainingSessionId: payload.id, error: nil)
+
+        XCTAssertEqual(try outbox.loadEntries(), [
+            WatchTrainingSyncOutboxEntry(
+                payload: payload,
+                status: .awaitingAck,
+                lastTransferFinishedAt: transferFinishedAt,
+            ),
+        ])
+    }
+
+    func testFailedSystemTransferMarksOutboxEntryPendingForRetry() throws {
+        let payload = try makePayload()
+        let transferFinishedAt = Date(timeIntervalSince1970: 20_000)
+        let session = FakeWatchConnectivitySession(activationState: .activated)
+        let outbox = makeOutbox()
+        let service = WatchTrainingSyncService(outbox: outbox, session: session, now: { transferFinishedAt })
+        try service.enqueueCompletedSession(payload)
+        try service.handleSystemTransferFinished(trainingSessionId: payload.id, error: nil)
+
+        try service.handleSystemTransferFinished(trainingSessionId: payload.id, error: TestError.transferFailed)
+
+        XCTAssertEqual(try outbox.loadEntries(), [
+            WatchTrainingSyncOutboxEntry(
+                payload: payload,
+                status: .pendingTransfer,
+                lastTransferFinishedAt: nil,
+            ),
+        ])
+    }
+
+    func testRetryPendingSessionsTransfersPendingEntriesWhenSessionIsActivated() throws {
+        let payload = try makePayload()
+        let session = FakeWatchConnectivitySession(activationState: .notActivated)
+        let outbox = makeOutbox()
+        let service = WatchTrainingSyncService(outbox: outbox, session: session)
+        try service.enqueueCompletedSession(payload)
+
+        session.activationState = .activated
+        try service.retryPendingSessions()
+
+        XCTAssertEqual(session.transferredUserInfos.count, 1)
+        XCTAssertEqual(try decodePayload(from: try XCTUnwrap(session.transferredUserInfos.first)), payload)
+    }
+
+    func testActivationCompletionRetriesPendingEntries() throws {
+        let payload = try makePayload()
+        let session = FakeWatchConnectivitySession(activationState: .notActivated)
+        let outbox = makeOutbox()
+        try outbox.enqueue(payload)
+        let service = WatchTrainingSyncService(outbox: outbox, session: session)
+
+        session.activationState = .activated
+        service.handleSessionActivationCompleted()
+
+        XCTAssertEqual(session.transferredUserInfos.count, 1)
+        XCTAssertEqual(try decodePayload(from: try XCTUnwrap(session.transferredUserInfos.first)), payload)
+    }
+
+    func testAwaitingAckEntryIsRetriedAfterRetryInterval() throws {
+        let payload = try makePayload()
+        var currentDate = Date(timeIntervalSince1970: 20_000)
+        let retryInterval: TimeInterval = 300
+        let session = FakeWatchConnectivitySession(activationState: .activated)
+        let outbox = makeOutbox()
+        let service = WatchTrainingSyncService(
+            outbox: outbox,
+            session: session,
+            retryInterval: retryInterval,
+            now: { currentDate },
+        )
+        try service.enqueueCompletedSession(payload)
+        try service.handleSystemTransferFinished(trainingSessionId: payload.id, error: nil)
+        session.removeAllTransferredUserInfos()
+
+        currentDate = currentDate.addingTimeInterval(retryInterval + 1)
+        try service.retryPendingSessions()
+
+        XCTAssertEqual(session.transferredUserInfos.count, 1)
+        XCTAssertEqual(try decodePayload(from: try XCTUnwrap(session.transferredUserInfos.first)), payload)
+    }
+
+    func testAwaitingAckEntryIsNotRetriedBeforeRetryInterval() throws {
+        let payload = try makePayload()
+        var currentDate = Date(timeIntervalSince1970: 20_000)
+        let retryInterval: TimeInterval = 300
+        let session = FakeWatchConnectivitySession(activationState: .activated)
+        let outbox = makeOutbox()
+        let service = WatchTrainingSyncService(
+            outbox: outbox,
+            session: session,
+            retryInterval: retryInterval,
+            now: { currentDate },
+        )
+        try service.enqueueCompletedSession(payload)
+        try service.handleSystemTransferFinished(trainingSessionId: payload.id, error: nil)
+        session.removeAllTransferredUserInfos()
+
+        currentDate = currentDate.addingTimeInterval(retryInterval - 1)
+        try service.retryPendingSessions()
+
+        XCTAssertTrue(session.transferredUserInfos.isEmpty)
+    }
+
+    func testAckRemovesMatchingOutboxEntry() throws {
         let payload = try makePayload()
         let session = FakeWatchConnectivitySession(activationState: .activated)
         let outbox = makeOutbox()
         let service = WatchTrainingSyncService(outbox: outbox, session: session)
         try service.enqueueCompletedSession(payload)
 
-        try service.handleSystemTransferFinished(trainingSessionId: payload.id, error: nil)
+        try service.handleReceivedUserInfo(makeAckUserInfo(trainingSessionId: payload.id))
+
+        XCTAssertTrue(try outbox.loadEntries().isEmpty)
+    }
+
+    func testUnknownAckIsIgnored() throws {
+        let payload = try makePayload()
+        let unknownTrainingSessionId = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000599"))
+        let session = FakeWatchConnectivitySession(activationState: .activated)
+        let outbox = makeOutbox()
+        let service = WatchTrainingSyncService(outbox: outbox, session: session)
+        try service.enqueueCompletedSession(payload)
+
+        try service.handleReceivedUserInfo(makeAckUserInfo(trainingSessionId: unknownTrainingSessionId))
 
         XCTAssertEqual(try outbox.loadEntries(), [
-            WatchTrainingSyncOutboxEntry(payload: payload, status: .awaitingAck),
+            WatchTrainingSyncOutboxEntry(
+                payload: payload,
+                status: .pendingTransfer,
+                lastTransferFinishedAt: nil,
+            ),
         ])
     }
 
@@ -90,6 +239,31 @@ final class WatchTrainingSyncServiceTests: XCTestCase {
             ],
         )
     }
+
+    private func makeAckUserInfo(trainingSessionId: UUID) throws -> [String: Any] {
+        let ack = TrainingSessionSyncAckPayload(
+            trainingSessionId: trainingSessionId,
+            importedAt: Date(timeIntervalSince1970: 30_000),
+        )
+        let ackData = try JSONEncoder().encode(ack)
+        return [
+            WatchTrainingSyncService.userInfoTypeKey: WatchTrainingSyncService.trainingSessionSyncAckUserInfoType,
+            WatchTrainingSyncService.userInfoPayloadKey: ackData,
+        ]
+    }
+
+    private func decodePayload(from userInfo: [String: Any]) throws -> TrainingSessionSyncPayload {
+        XCTAssertEqual(
+            userInfo[WatchTrainingSyncService.userInfoTypeKey] as? String,
+            WatchTrainingSyncService.completedSessionUserInfoType,
+        )
+        let payloadData = try XCTUnwrap(userInfo[WatchTrainingSyncService.userInfoPayloadKey] as? Data)
+        return try JSONDecoder().decode(TrainingSessionSyncPayload.self, from: payloadData)
+    }
+}
+
+private enum TestError: Error {
+    case transferFailed
 }
 
 private final class FakeWatchConnectivitySession: WatchConnectivitySessionProtocol {
@@ -107,5 +281,9 @@ private final class FakeWatchConnectivitySession: WatchConnectivitySessionProtoc
 
     func transferUserInfo(_ userInfo: [String: Any]) {
         transferredUserInfos.append(userInfo)
+    }
+
+    func removeAllTransferredUserInfos() {
+        transferredUserInfos.removeAll()
     }
 }

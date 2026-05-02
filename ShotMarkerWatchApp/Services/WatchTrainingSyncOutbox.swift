@@ -8,6 +8,17 @@ enum WatchTrainingSyncOutboxEntryStatus: String, Codable, Equatable {
 struct WatchTrainingSyncOutboxEntry: Codable, Equatable {
     let payload: TrainingSessionSyncPayload
     var status: WatchTrainingSyncOutboxEntryStatus
+    var lastTransferFinishedAt: Date?
+
+    init(
+        payload: TrainingSessionSyncPayload,
+        status: WatchTrainingSyncOutboxEntryStatus,
+        lastTransferFinishedAt: Date? = nil,
+    ) {
+        self.payload = payload
+        self.status = status
+        self.lastTransferFinishedAt = lastTransferFinishedAt
+    }
 }
 
 final class WatchTrainingSyncOutbox {
@@ -40,13 +51,31 @@ final class WatchTrainingSyncOutbox {
         try save(entries)
     }
 
-    func markAwaitingAck(trainingSessionId: UUID) throws {
+    func markAwaitingAck(trainingSessionId: UUID, lastTransferFinishedAt: Date) throws {
         var entries = try loadEntries()
         guard let index = entries.firstIndex(where: { $0.payload.id == trainingSessionId }) else {
             return
         }
 
         entries[index].status = .awaitingAck
+        entries[index].lastTransferFinishedAt = lastTransferFinishedAt
+        try save(entries)
+    }
+
+    func markPendingTransfer(trainingSessionId: UUID) throws {
+        var entries = try loadEntries()
+        guard let index = entries.firstIndex(where: { $0.payload.id == trainingSessionId }) else {
+            return
+        }
+
+        entries[index].status = .pendingTransfer
+        entries[index].lastTransferFinishedAt = nil
+        try save(entries)
+    }
+
+    func remove(trainingSessionId: UUID) throws {
+        var entries = try loadEntries()
+        entries.removeAll { $0.payload.id == trainingSessionId }
         try save(entries)
     }
 
