@@ -1,6 +1,10 @@
 import Foundation
 
-final class TrainingSessionImporter {
+protocol TrainingSessionImporting {
+    func `import`(_ payload: TrainingSessionSyncPayload) throws
+}
+
+final class TrainingSessionImporter: TrainingSessionImporting {
     private let store: TrainingSessionStoreProtocol
 
     init(store: TrainingSessionStoreProtocol) {
