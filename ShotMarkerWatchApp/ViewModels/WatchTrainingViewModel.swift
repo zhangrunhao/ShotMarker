@@ -15,6 +15,7 @@ final class WatchTrainingViewModel: ObservableObject {
     @Published private(set) var markers: [Date] = []
 
     private let now: () -> Date
+    private let idFactory: () -> UUID
 
     var buttonTitle: String {
         switch state {
@@ -42,20 +43,35 @@ final class WatchTrainingViewModel: ObservableObject {
         "打点数: \(markerCount)"
     }
 
-    init(now: @escaping () -> Date = Date.init) {
+    init(
+        now: @escaping () -> Date = Date.init,
+        idFactory: @escaping () -> UUID = UUID.init,
+    ) {
         self.now = now
+        self.idFactory = idFactory
     }
 
-    func handleLongPress() {
+    @discardableResult
+    func handleLongPress() -> TrainingSessionSyncPayload? {
         switch state {
         case .notTraining:
             startedAt = now()
             endedAt = nil
             markers = []
             state = .training
+            return nil
         case .training:
-            endedAt = now()
+            let completedAt = now()
+            endedAt = completedAt
             state = .notTraining
+            return TrainingSessionSyncPayload(
+                id: idFactory(),
+                startedAt: startedAt ?? completedAt,
+                endedAt: completedAt,
+                events: markers.map {
+                    ShotMarkerEventSyncPayload(id: idFactory(), markedAt: $0)
+                },
+            )
         }
     }
 
