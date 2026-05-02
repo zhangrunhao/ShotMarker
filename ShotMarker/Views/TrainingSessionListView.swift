@@ -53,10 +53,12 @@ struct TrainingSessionListView: View {
     }
 }
 
-#Preview {
-    TrainingSessionListView(
-        viewModel: TrainingSessionListViewModel(
-            store: InMemoryTrainingSessionStore(sessions: TrainingSession.previewSessions),
-        ),
-    )
-}
+#if DEBUG
+    #Preview {
+        TrainingSessionListView(
+            viewModel: TrainingSessionListViewModel(
+                store: InMemoryTrainingSessionStore(sessions: TrainingSession.previewSessions),
+            ),
+        )
+    }
+#endif

@@ -27,8 +27,10 @@ struct TrainingSessionRow: View {
     }
 }
 
-#Preview {
-    List {
-        TrainingSessionRow(row: TrainingSessionRowViewData(session: TrainingSession.previewSessions[0]))
+#if DEBUG
+    #Preview {
+        List {
+            TrainingSessionRow(row: TrainingSessionRowViewData(session: TrainingSession.previewSessions[0]))
+        }
     }
-}
+#endif

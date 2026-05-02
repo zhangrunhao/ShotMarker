@@ -25,6 +25,8 @@ struct ContentView: View {
     }
 }
 
-#Preview {
-    ContentView(store: InMemoryTrainingSessionStore(sessions: TrainingSession.previewSessions))
-}
+#if DEBUG
+    #Preview {
+        ContentView(store: InMemoryTrainingSessionStore(sessions: TrainingSession.previewSessions))
+    }
+#endif
