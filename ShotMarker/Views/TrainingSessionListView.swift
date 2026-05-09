@@ -24,16 +24,15 @@ struct TrainingSessionListView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let errorMessage = viewModel.errorMessage {
-                    ContentUnavailableView("无法加载训练记录", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
-                } else if viewModel.isEmpty {
-                    ContentUnavailableView("暂无训练记录", systemImage: "applewatch", description: Text("结束一次手表训练后，训练记录会显示在这里。"))
-                } else {
-                    List(viewModel.rows) { row in
-                        TrainingSessionRow(row: row)
-                    }
-                }
+            ZStack(alignment: .bottomTrailing) {
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                #if DEBUG && os(iOS)
+                    VideoClipTestButton()
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 24)
+                #endif
             }
             .navigationTitle("训练记录")
             .task {
@@ -48,6 +47,19 @@ struct TrainingSessionListView: View {
                     }
                     .accessibilityLabel("同步诊断")
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let errorMessage = viewModel.errorMessage {
+            ContentUnavailableView("无法加载训练记录", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+        } else if viewModel.isEmpty {
+            ContentUnavailableView("暂无训练记录", systemImage: "applewatch", description: Text("结束一次手表训练后，训练记录会显示在这里。"))
+        } else {
+            List(viewModel.rows) { row in
+                TrainingSessionRow(row: row)
             }
         }
     }
