@@ -26,6 +26,21 @@ final class WatchTrainingViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.markerCountText, "打点数: 0")
     }
 
+    func testLongPressStartsWorkoutRuntimeFromNotTrainingState() {
+        // 这个测试只关心 ViewModel 是否把“开始训练”事件转发给 runtime manager。
+        // 真正的 HKWorkoutSession 很难在单测中稳定验证，所以用 spy 记录调用时间。
+        let runtimeSessionManager = SpyWatchTrainingRuntimeSessionManager()
+        let viewModel = WatchTrainingViewModel(
+            now: { Date(timeIntervalSince1970: 1000) },
+            runtimeSessionManager: runtimeSessionManager,
+        )
+
+        viewModel.handleLongPress()
+
+        XCTAssertEqual(runtimeSessionManager.startedAt, [Date(timeIntervalSince1970: 1000)])
+        XCTAssertEqual(runtimeSessionManager.endedAt, [])
+    }
+
     func testLongPressEndsTrainingFromTrainingState() throws {
         var dates = [
             Date(timeIntervalSince1970: 1000),
@@ -67,6 +82,26 @@ final class WatchTrainingViewModelTests: XCTestCase {
                 ],
             ),
         )
+    }
+
+    func testLongPressEndsWorkoutRuntimeFromTrainingState() {
+        // 用确定性的时间序列验证开始/结束 runtime 的时间与训练状态机使用的时间一致。
+        // 这能防止以后有人改成重新 Date()，导致同步 payload 和系统 workout session 时间漂移。
+        var dates = [
+            Date(timeIntervalSince1970: 1000),
+            Date(timeIntervalSince1970: 1600),
+        ]
+        let runtimeSessionManager = SpyWatchTrainingRuntimeSessionManager()
+        let viewModel = WatchTrainingViewModel(
+            now: { dates.removeFirst() },
+            runtimeSessionManager: runtimeSessionManager,
+        )
+
+        viewModel.handleLongPress()
+        viewModel.handleLongPress()
+
+        XCTAssertEqual(runtimeSessionManager.startedAt, [Date(timeIntervalSince1970: 1000)])
+        XCTAssertEqual(runtimeSessionManager.endedAt, [Date(timeIntervalSince1970: 1600)])
     }
 
     func testLongPressEndingTrainingEnqueuesCompletedPayloadForSync() throws {
@@ -149,6 +184,21 @@ final class WatchTrainingViewModelTests: XCTestCase {
 
 private enum SyncError: Error {
     case failed
+}
+
+// 只记录调用，不模拟 HealthKit 行为。这样测试验证的是 ViewModel 和 runtime manager
+// 的协作契约，而不是把 HealthKit 框架的细节复制到测试里。
+private final class SpyWatchTrainingRuntimeSessionManager: WatchTrainingRuntimeSessionManaging {
+    private(set) var startedAt: [Date] = []
+    private(set) var endedAt: [Date] = []
+
+    func startTraining(at startDate: Date) {
+        startedAt.append(startDate)
+    }
+
+    func endTraining(at endDate: Date) {
+        endedAt.append(endDate)
+    }
 }
 
 private final class SpyWatchTrainingSyncService: WatchTrainingSyncServiceProtocol {

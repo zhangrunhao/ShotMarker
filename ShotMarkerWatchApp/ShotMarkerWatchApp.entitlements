@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required for requesting permission to write the workout session that keeps watchOS in training mode. -->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+</dict>
+</plist>

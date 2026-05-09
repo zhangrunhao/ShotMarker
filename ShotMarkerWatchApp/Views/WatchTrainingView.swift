@@ -2,7 +2,9 @@ import SwiftUI
 import WatchKit
 
 struct WatchTrainingView: View {
-    @StateObject private var viewModel = WatchTrainingViewModel()
+    // StateObject 必须在 init 里创建，因为生产环境需要把真正的 HealthKit runtime manager
+    // 注入到 ViewModel；测试或预览也可以传入替身，避免弹权限或依赖 watchOS 系统会话。
+    @StateObject private var viewModel: WatchTrainingViewModel
     @State private var buttonScale = 1.0
     @State private var pendingLongPressToggle: DispatchWorkItem?
     @State private var isPressingButton = false
@@ -14,8 +16,18 @@ struct WatchTrainingView: View {
     private let returnTransitionDuration = 0.18
 
     @MainActor
-    init(syncService: WatchTrainingSyncServiceProtocol? = nil) {
+    init(
+        syncService: WatchTrainingSyncServiceProtocol? = nil,
+        runtimeSessionManager: WatchTrainingRuntimeSessionManaging? = nil,
+    ) {
         self.syncService = syncService ?? WatchTrainingSyncService()
+        _viewModel = StateObject(
+            wrappedValue: WatchTrainingViewModel(
+                // ViewModel 默认是 no-op manager，只有真正的 WatchTrainingView 使用 HealthKit 实现。
+                // 这样能同时满足两件事：单测稳定可控，真机训练时启动 HKWorkoutSession。
+                runtimeSessionManager: runtimeSessionManager ?? HealthKitWorkoutRuntimeSessionManager(),
+            ),
+        )
     }
 
     var body: some View {
