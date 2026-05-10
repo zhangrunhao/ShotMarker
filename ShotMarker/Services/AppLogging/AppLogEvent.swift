@@ -1,13 +1,13 @@
 import Foundation
 
-enum AppLogLevel: String, Codable, Equatable {
+nonisolated enum AppLogLevel: String, Codable, Equatable {
     case debug
     case info
     case warning
     case error
 }
 
-enum AppLogCategory: String, Codable, Equatable {
+nonisolated enum AppLogCategory: String, Codable, Equatable {
     case app
     case training
     case sync
@@ -16,7 +16,7 @@ enum AppLogCategory: String, Codable, Equatable {
     case diagnostics
 }
 
-struct AppLogEvent: Identifiable, Codable, Equatable {
+nonisolated struct AppLogEvent: Identifiable, Codable, Equatable {
     let id: UUID
     let timestamp: Date
     let level: AppLogLevel
