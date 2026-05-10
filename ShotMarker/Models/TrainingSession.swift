@@ -10,6 +10,16 @@ struct TrainingSession: Identifiable, Codable, Equatable {
         events.count
     }
 
+    var markerTimeRange: (startedAt: Date, endedAt: Date) {
+        let markerDates = events.map(\.markedAt)
+
+        guard let firstMarkerDate = markerDates.min(), let lastMarkerDate = markerDates.max() else {
+            return (startedAt, endedAt)
+        }
+
+        return (firstMarkerDate, lastMarkerDate)
+    }
+
     init(
         id: UUID = UUID(),
         startedAt: Date,
@@ -20,6 +30,37 @@ struct TrainingSession: Identifiable, Codable, Equatable {
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.events = events
+    }
+
+    static func merged(_ sessions: [TrainingSession]) -> TrainingSession? {
+        let orderedSessions = sessions.sorted { lhs, rhs in
+            let lhsRange = lhs.markerTimeRange
+            let rhsRange = rhs.markerTimeRange
+
+            if lhsRange.startedAt == rhsRange.startedAt {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+
+            return lhsRange.startedAt < rhsRange.startedAt
+        }
+
+        guard let firstSession = orderedSessions.first else {
+            return nil
+        }
+
+        let ranges = orderedSessions.map(\.markerTimeRange)
+        let startedAt = ranges.map(\.startedAt).min() ?? firstSession.startedAt
+        let endedAt = ranges.map(\.endedAt).max() ?? firstSession.endedAt
+        let events = orderedSessions
+            .flatMap(\.events)
+            .sorted { $0.markedAt < $1.markedAt }
+
+        return TrainingSession(
+            id: firstSession.id,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            events: events,
+        )
     }
 }
 

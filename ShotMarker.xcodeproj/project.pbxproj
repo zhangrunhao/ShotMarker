@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		FF6000012FA5E00000B04685 /* ShotMarkerWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = FF2000022FA5000000B04685 /* ShotMarkerWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		FF10000A2FA4800000B04685 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -29,10 +33,6 @@
 			remoteInfo = ShotMarkerWatchApp;
 		};
 /* End PBXContainerItemProxy section */
-
-/* Begin PBXBuildFile section */
-		FF6000012FA5E00000B04685 /* ShotMarkerWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = FF2000022FA5000000B04685 /* ShotMarkerWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-/* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
 		FF6000022FA5E00000B04685 /* Embed Watch Content */ = {
@@ -225,8 +225,8 @@
 				FF6000042FA5E00000B04685 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				FF5C7EA12FA46C7E00B04685 /* ShotMarker */,
 				FF4000012FA5200000B04685 /* Shared */,
+				FF5C7EA12FA46C7E00B04685 /* ShotMarker */,
 			);
 			name = ShotMarker;
 			packageProductDependencies = (
@@ -673,13 +673,14 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将生成的训练集锦保存到相册。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ShotMarker 会读取所选训练视频的拍摄时间和片段内容，用于生成训练集锦。";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将测试剪辑后的视频保存到相册。";
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -718,13 +719,14 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将生成的训练集锦保存到相册。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ShotMarker 会读取所选训练视频的拍摄时间和片段内容，用于生成训练集锦。";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将测试剪辑后的视频保存到相册。";
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

@@ -92,6 +92,13 @@
                 let copyURL = FileManager.default.temporaryDirectory
                     .appendingPathComponent("ShotMarker-PickedVideo-\(UUID().uuidString).\(fileExtension)")
 
+                let isAccessingSecurityScopedResource = received.file.startAccessingSecurityScopedResource()
+                defer {
+                    if isAccessingSecurityScopedResource {
+                        received.file.stopAccessingSecurityScopedResource()
+                    }
+                }
+
                 try FileManager.default.copyItem(at: received.file, to: copyURL)
                 return PickedVideo(url: copyURL)
             }

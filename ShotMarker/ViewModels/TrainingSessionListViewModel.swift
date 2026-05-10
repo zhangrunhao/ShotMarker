@@ -4,22 +4,36 @@ import Foundation
 struct TrainingSessionRowViewData: Identifiable, Equatable {
     let id: UUID
     let startedAt: Date
+    let titleDate: Date
+    let descriptionStartedAt: Date
+    let descriptionEndedAt: Date
     let markerCount: Int
 
     init(
         id: UUID,
         startedAt: Date,
+        titleDate: Date,
+        descriptionStartedAt: Date,
+        descriptionEndedAt: Date,
         markerCount: Int,
     ) {
         self.id = id
         self.startedAt = startedAt
+        self.titleDate = titleDate
+        self.descriptionStartedAt = descriptionStartedAt
+        self.descriptionEndedAt = descriptionEndedAt
         self.markerCount = markerCount
     }
 
     init(session: TrainingSession) {
+        let markerTimeRange = session.markerTimeRange
+
         self.init(
             id: session.id,
             startedAt: session.startedAt,
+            titleDate: markerTimeRange.startedAt,
+            descriptionStartedAt: markerTimeRange.startedAt,
+            descriptionEndedAt: markerTimeRange.endedAt,
             markerCount: session.markerCount,
         )
     }
@@ -29,13 +43,23 @@ struct TrainingSessionRowViewData: Identifiable, Equatable {
 final class TrainingSessionListViewModel: ObservableObject {
     @Published private(set) var rows: [TrainingSessionRowViewData] = []
     @Published private(set) var errorMessage: String?
+    @Published private(set) var selectedSessionIDs: Set<UUID> = []
 
     private let store: TrainingSessionStoreProtocol
     private let notificationCenter: NotificationCenter
+    private var sessions: [TrainingSession] = []
     private var trainingSessionsDidChangeObserver: NSObjectProtocol?
 
     var isEmpty: Bool {
         rows.isEmpty
+    }
+
+    var isSelectionMode: Bool {
+        !selectedSessionIDs.isEmpty
+    }
+
+    var canMergeSelectedSessions: Bool {
+        selectedSessionIDs.count >= 2
     }
 
     init(store: TrainingSessionStoreProtocol, notificationCenter: NotificationCenter = .default) {
@@ -60,13 +84,81 @@ final class TrainingSessionListViewModel: ObservableObject {
 
     func load() {
         do {
-            rows = try store.loadTrainingSessions()
-                .sorted { $0.startedAt > $1.startedAt }
-                .map(TrainingSessionRowViewData.init(session:))
+            let sessions = try store.loadTrainingSessions()
+            self.sessions = sessions
+            rows = Self.makeRows(from: sessions)
+            selectedSessionIDs.formIntersection(Set(rows.map(\.id)))
             errorMessage = nil
         } catch {
+            sessions = []
             rows = []
+            selectedSessionIDs = []
             errorMessage = "无法读取训练记录"
         }
+    }
+
+    func session(for sessionID: UUID) -> TrainingSession? {
+        sessions.first { $0.id == sessionID }
+    }
+
+    func beginSelection(with sessionID: UUID) {
+        guard rows.contains(where: { $0.id == sessionID }) else {
+            return
+        }
+
+        selectedSessionIDs = [sessionID]
+    }
+
+    func toggleSelection(for sessionID: UUID) {
+        guard rows.contains(where: { $0.id == sessionID }) else {
+            return
+        }
+
+        if selectedSessionIDs.contains(sessionID) {
+            selectedSessionIDs.remove(sessionID)
+        } else {
+            selectedSessionIDs.insert(sessionID)
+        }
+    }
+
+    func clearSelection() {
+        selectedSessionIDs = []
+    }
+
+    func isSelected(_ sessionID: UUID) -> Bool {
+        selectedSessionIDs.contains(sessionID)
+    }
+
+    func mergeSelectedSessions() {
+        guard canMergeSelectedSessions else {
+            return
+        }
+
+        do {
+            var sessions = try store.loadTrainingSessions()
+            let selectedSessions = sessions.filter { selectedSessionIDs.contains($0.id) }
+
+            guard selectedSessions.count >= 2, let mergedSession = TrainingSession.merged(selectedSessions) else {
+                return
+            }
+
+            sessions.removeAll { selectedSessionIDs.contains($0.id) }
+            sessions.append(mergedSession)
+
+            try store.saveTrainingSessions(sessions)
+            self.sessions = sessions
+            selectedSessionIDs = []
+            rows = Self.makeRows(from: sessions)
+            errorMessage = nil
+            notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
+        } catch {
+            errorMessage = "无法合并训练记录"
+        }
+    }
+
+    private static func makeRows(from sessions: [TrainingSession]) -> [TrainingSessionRowViewData] {
+        sessions
+            .sorted { $0.startedAt > $1.startedAt }
+            .map(TrainingSessionRowViewData.init(session:))
     }
 }

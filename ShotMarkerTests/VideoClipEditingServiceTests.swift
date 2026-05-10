@@ -30,6 +30,112 @@ final class VideoClipEditingServiceTests: XCTestCase {
         XCTAssertEqual(outputDuration.seconds, 4, accuracy: 0.2)
     }
 
+    func testMakeHighlightClipExportsPlannedSegmentsIntoOneMovie() async throws {
+        let sourceURL = temporaryDirectory.appendingPathComponent("highlight-source.mov")
+        try await makeSilentVideo(at: sourceURL, duration: 8)
+        let markerAt = Date(timeIntervalSince1970: 1_000)
+        let firstMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002001"))
+        let secondMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002002"))
+        let segments = [
+            HighlightClipSegment(
+                markerID: firstMarkerID,
+                videoID: "video",
+                markerAt: markerAt,
+                start: 1,
+                duration: 2,
+            ),
+            HighlightClipSegment(
+                markerID: secondMarkerID,
+                videoID: "video",
+                markerAt: markerAt.addingTimeInterval(10),
+                start: 5,
+                duration: 1,
+            ),
+        ]
+
+        var requestedVideoIDs: [String] = []
+        let outputURL = try await VideoClipEditingService().makeHighlightClip(from: segments) { videoID in
+            requestedVideoIDs.append(videoID)
+            return AVURLAsset(url: sourceURL)
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertEqual(requestedVideoIDs, ["video"])
+        let outputAsset = AVURLAsset(url: outputURL)
+        let outputDuration: CMTime = try await outputAsset.load(.duration)
+        XCTAssertEqual(outputDuration.seconds, 3, accuracy: 0.2)
+    }
+
+    @MainActor
+    func testMakeHighlightClipReportsMatchedMarkerProgress() async throws {
+        let sourceURL = temporaryDirectory.appendingPathComponent("highlight-progress-source.mov")
+        try await makeSilentVideo(at: sourceURL, duration: 8)
+        let markerAt = Date(timeIntervalSince1970: 1_000)
+        let firstMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002101"))
+        let secondMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002102"))
+        let segments = [
+            HighlightClipSegment(
+                markerID: firstMarkerID,
+                videoID: "video",
+                markerAt: markerAt,
+                start: 1,
+                duration: 2,
+                markerNumber: 1,
+                markerTotalCount: 2,
+            ),
+            HighlightClipSegment(
+                markerID: secondMarkerID,
+                videoID: "video",
+                markerAt: markerAt.addingTimeInterval(10),
+                start: 5,
+                duration: 1,
+                markerNumber: 2,
+                markerTotalCount: 2,
+            ),
+        ]
+
+        var progressUpdates: [HighlightClipGenerationProgress] = []
+        let outputURL = try await VideoClipEditingService().makeHighlightClip(
+            from: segments,
+            progressHandler: { progressUpdates.append($0) },
+        ) { _ in
+            AVURLAsset(url: sourceURL)
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertEqual(progressUpdates.first, HighlightClipGenerationProgress(completedMarkerCount: 0, totalMarkerCount: 2))
+        XCTAssertEqual(progressUpdates.last, HighlightClipGenerationProgress(completedMarkerCount: 2, totalMarkerCount: 2))
+        XCTAssertFalse(progressUpdates.dropLast().contains(
+            HighlightClipGenerationProgress(completedMarkerCount: 2, totalMarkerCount: 2),
+        ))
+    }
+
+    func testHighlightClipExportProgressDoesNotReachTotalBeforeExportFinishes() {
+        XCTAssertEqual(
+            VideoClipEditingService.completedMarkerCount(
+                forExportProgress: 1,
+                totalMarkerCount: 9,
+                isFinished: false,
+            ),
+            8,
+        )
+        XCTAssertEqual(
+            VideoClipEditingService.completedMarkerCount(
+                forExportProgress: 1,
+                totalMarkerCount: 9,
+                isFinished: true,
+            ),
+            9,
+        )
+    }
+
+    func testMarkerLabelOverlayStyleUsesLargeOpaqueLabel() {
+        let style = HighlightClipMarkerLabelOverlayStyle.default
+
+        XCTAssertGreaterThanOrEqual(style.fontSizeRatio, 0.1)
+        XCTAssertEqual(style.backgroundAlpha, 1)
+    }
+
     private func makeSilentVideo(at url: URL, duration: TimeInterval) async throws {
         let writer = try makeAssetWriter(at: url)
         let input = makeWriterInput()
