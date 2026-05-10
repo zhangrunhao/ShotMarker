@@ -13,7 +13,7 @@
         @State private var selectedVideos: [SelectedTrainingVideo] = []
         @State private var isLoadingVideos = false
         @State private var isGenerating = false
-        @State private var clipSettings = ClipSettings.default
+        @State private var clipSettings = ClipSettingsStore.shared.load()
         @State private var generationProgress: HighlightClipGenerationProgress?
         @State private var alert: HighlightFlowAlert?
 
@@ -114,6 +114,9 @@
                 Task {
                     await loadSelectedVideos(from: newItems)
                 }
+            }
+            .onChange(of: clipSettings) { _, newSettings in
+                ClipSettingsStore.shared.save(newSettings)
             }
             .alert(alert?.title ?? "", isPresented: isShowingAlert) {
                 Button("好", role: .cancel) {}

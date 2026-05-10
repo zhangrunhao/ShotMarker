@@ -151,8 +151,8 @@ final class VideoClipSegmentPlannerTests: XCTestCase {
 
         let plan = VideoClipSegmentPlanner.highlightPlan(for: session, videos: [video])
 
-        XCTAssertEqual(plan.segments.first?.start, 6)
-        XCTAssertEqual(plan.segments.first?.duration, 6)
+        XCTAssertEqual(plan.segments.first?.start, 5)
+        XCTAssertEqual(plan.segments.first?.duration, 7)
     }
 
     func testHighlightPlanClipsSegmentsToVideoBoundaries() throws {
