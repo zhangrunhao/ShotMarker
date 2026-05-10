@@ -190,9 +190,13 @@
                 completedMarkerCount: 0,
                 totalMarkerCount: totalMarkerCount,
             )
+            var fallbackTemporaryVideoURLs: [URL] = []
             defer {
                 isGenerating = false
                 generationProgress = nil
+                fallbackTemporaryVideoURLs.forEach { url in
+                    try? FileManager.default.removeItem(at: url)
+                }
             }
 
             do {
@@ -200,18 +204,36 @@
                     try await Self.ensurePhotoLibraryReadAccess()
                 }
 
+                let pickerItemsByAssetIdentifier = Self.pickerItemsByAssetIdentifier(from: selectedItems)
                 let outputURL = try await editingService.makeHighlightClip(
                     from: segments,
                     progressHandler: { progress in
                         generationProgress = progress
                     },
-                ) { videoID in
-                    if let fileURL = Self.temporaryVideoURL(from: videoID) {
+                ) { request in
+                    if let fileURL = Self.temporaryVideoURL(from: request.videoID) {
                         return AVURLAsset(url: fileURL)
                     }
 
-                    let asset = try Self.photoAsset(with: videoID)
-                    return try await Self.requestAVAsset(for: asset)
+                    let asset = try Self.photoAsset(with: request.videoID)
+                    do {
+                        return try await Self.requestAVAsset(
+                            for: asset,
+                            deliveryQuality: request.photoLibraryDeliveryQuality(
+                                forSourceDuration: asset.duration,
+                            ),
+                        )
+                    } catch {
+                        guard PhotoLibraryVideoAccess.shouldFallbackToPickerFile(for: error),
+                              let pickerItem = pickerItemsByAssetIdentifier[request.videoID]
+                        else {
+                            throw PhotoLibraryVideoAccess.userFacingError(for: error)
+                        }
+
+                        let pickedVideoURL = try await Self.loadTemporaryVideoURL(from: pickerItem)
+                        fallbackTemporaryVideoURLs.append(pickedVideoURL)
+                        return AVURLAsset(url: pickedVideoURL)
+                    }
                 }
                 try await photoLibrarySaver.saveVideo(at: outputURL)
                 try? FileManager.default.removeItem(at: outputURL)
@@ -328,9 +350,12 @@
             return TrainingVideoMetadata(recordedStartAt: recordedStartAt, duration: duration)
         }
 
-        nonisolated private static func requestAVAsset(for asset: PHAsset) async throws -> AVAsset {
+        nonisolated private static func requestAVAsset(
+            for asset: PHAsset,
+            deliveryQuality: HighlightClipPhotoLibraryDeliveryQuality,
+        ) async throws -> AVAsset {
             let options = PHVideoRequestOptions()
-            options.deliveryMode = .highQualityFormat
+            options.deliveryMode = deliveryQuality.photoVideoRequestDeliveryMode
             options.isNetworkAccessAllowed = true
 
             return try await withCheckedThrowingContinuation { continuation in
@@ -355,6 +380,16 @@
             }
         }
 
+        nonisolated private static func loadTemporaryVideoURL(
+            from item: PhotosPickerItem,
+        ) async throws -> URL {
+            guard let pickedVideo = try await item.loadTransferable(type: PickedTrainingVideo.self) else {
+                throw HighlightVideoSelectionError.videoLoadFailed
+            }
+
+            return pickedVideo.url
+        }
+
         nonisolated private static func temporaryVideoURL(from videoID: String) -> URL? {
             guard let url = URL(string: videoID), url.isFileURL else {
                 return nil
@@ -365,6 +400,27 @@
 
         nonisolated private static func requiresPhotoLibraryReadAccess(for segments: [HighlightClipSegment]) -> Bool {
             segments.contains { temporaryVideoURL(from: $0.videoID) == nil }
+        }
+
+        nonisolated private static func pickerItemsByAssetIdentifier(
+            from items: [PhotosPickerItem],
+        ) -> [String: PhotosPickerItem] {
+            items.reduce(into: [:]) { result, item in
+                if let assetIdentifier = item.itemIdentifier {
+                    result[assetIdentifier] = item
+                }
+            }
+        }
+    }
+
+    private extension HighlightClipPhotoLibraryDeliveryQuality {
+        nonisolated var photoVideoRequestDeliveryMode: PHVideoRequestOptionsDeliveryMode {
+            switch self {
+            case .high:
+                .highQualityFormat
+            case .medium:
+                .mediumQualityFormat
+            }
         }
     }
 

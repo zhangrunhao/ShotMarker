@@ -31,4 +31,20 @@ final class VideoClipPhotoLibrarySaverTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    func testPhotoLibraryVideoAccessTreatsNetworkErrorAsPickerFallbackCandidate() {
+        let error = NSError(domain: PHPhotosErrorDomain, code: 3169)
+
+        XCTAssertTrue(PhotoLibraryVideoAccess.shouldFallbackToPickerFile(for: error))
+    }
+
+    func testPhotoLibraryVideoAccessMapsNetworkErrorToActionableMessage() {
+        let error = NSError(domain: PHPhotosErrorDomain, code: 3169)
+        let userFacingError = PhotoLibraryVideoAccess.userFacingError(for: error)
+
+        XCTAssertEqual(
+            (userFacingError as? LocalizedError)?.errorDescription,
+            "无法从 iCloud 读取所选视频。请确认网络可用，或先在照片 App 打开这个视频让它下载完成后再试。",
+        )
+    }
 }

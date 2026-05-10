@@ -10,6 +10,38 @@ struct HighlightClipGenerationProgress: Equatable {
     let totalMarkerCount: Int
 }
 
+enum HighlightClipPhotoLibraryDeliveryQuality: Equatable {
+    case high
+    case medium
+}
+
+struct HighlightClipAssetRequest: Equatable {
+    let videoID: String
+    let segments: [HighlightClipSegment]
+
+    var requestedDuration: TimeInterval {
+        segments.reduce(0) { total, segment in
+            total + max(segment.duration, 0)
+        }
+    }
+
+    func photoLibraryDeliveryQuality(
+        forSourceDuration sourceDuration: TimeInterval,
+    ) -> HighlightClipPhotoLibraryDeliveryQuality {
+        guard sourceDuration.isFinite, sourceDuration > 0 else {
+            return .high
+        }
+
+        let longSourceThreshold: TimeInterval = 10 * 60
+        let smallRequestedFraction = 0.15
+        guard sourceDuration >= longSourceThreshold else {
+            return .high
+        }
+
+        return requestedDuration / sourceDuration <= smallRequestedFraction ? .medium : .high
+    }
+}
+
 struct HighlightClipMarkerLabelOverlayStyle {
     let fontSizeRatio: CGFloat
     let minimumFontSize: CGFloat
@@ -44,7 +76,7 @@ struct VideoClipEditingService {
     func makeHighlightClip(
         from segments: [HighlightClipSegment],
         progressHandler: (@MainActor (HighlightClipGenerationProgress) -> Void)? = nil,
-        _ assetProvider: (String) async throws -> AVAsset,
+        _ assetProvider: (HighlightClipAssetRequest) async throws -> AVAsset,
     ) async throws -> URL {
         try await exportClip(
             from: segments,
@@ -120,7 +152,7 @@ struct VideoClipEditingService {
     private func exportClip(
         from segments: [HighlightClipSegment],
         progressHandler: (@MainActor (HighlightClipGenerationProgress) -> Void)?,
-        assetProvider: (String) async throws -> AVAsset,
+        assetProvider: (HighlightClipAssetRequest) async throws -> AVAsset,
     ) async throws -> URL {
         let validSegments = segments.filter { $0.duration > 0 }
         guard !validSegments.isEmpty else {
@@ -141,6 +173,7 @@ struct VideoClipEditingService {
         var didSetPreferredTransform = false
         var assetsByVideoID: [String: AVAsset] = [:]
         var overlayRanges: [HighlightClipOverlayRange] = []
+        let assetRequestsByVideoID = Self.assetRequestsByVideoID(for: validSegments)
         let totalMarkerCount = validSegments.reduce(0) { $0 + $1.coveredMarkerCount }
         progressHandler?(
             HighlightClipGenerationProgress(
@@ -154,7 +187,7 @@ struct VideoClipEditingService {
             if let cachedAsset = assetsByVideoID[segment.videoID] {
                 asset = cachedAsset
             } else {
-                asset = try await assetProvider(segment.videoID)
+                asset = try await assetProvider(assetRequestsByVideoID[segment.videoID]!)
                 assetsByVideoID[segment.videoID] = asset
             }
 
@@ -207,6 +240,20 @@ struct VideoClipEditingService {
             progressTotalMarkerCount: totalMarkerCount,
             progressHandler: progressHandler,
         )
+    }
+
+    private static func assetRequestsByVideoID(
+        for segments: [HighlightClipSegment],
+    ) -> [String: HighlightClipAssetRequest] {
+        var segmentsByVideoID: [String: [HighlightClipSegment]] = [:]
+        for segment in segments {
+            segmentsByVideoID[segment.videoID, default: []].append(segment)
+        }
+
+        return segmentsByVideoID.reduce(into: [:]) { requests, element in
+            let (videoID, segments) = element
+            requests[videoID] = HighlightClipAssetRequest(videoID: videoID, segments: segments)
+        }
     }
 
     private func export(

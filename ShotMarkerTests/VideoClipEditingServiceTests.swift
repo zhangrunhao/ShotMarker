@@ -54,8 +54,8 @@ final class VideoClipEditingServiceTests: XCTestCase {
         ]
 
         var requestedVideoIDs: [String] = []
-        let outputURL = try await VideoClipEditingService().makeHighlightClip(from: segments) { videoID in
-            requestedVideoIDs.append(videoID)
+        let outputURL = try await VideoClipEditingService().makeHighlightClip(from: segments) { request in
+            requestedVideoIDs.append(request.videoID)
             return AVURLAsset(url: sourceURL)
         }
 
@@ -64,6 +64,76 @@ final class VideoClipEditingServiceTests: XCTestCase {
         let outputAsset = AVURLAsset(url: outputURL)
         let outputDuration: CMTime = try await outputAsset.load(.duration)
         XCTAssertEqual(outputDuration.seconds, 3, accuracy: 0.2)
+    }
+
+    func testMakeHighlightClipRequestsOnlyNeededSegmentsForEachSourceVideo() async throws {
+        let sourceURL = temporaryDirectory.appendingPathComponent("highlight-request-source.mov")
+        try await makeSilentVideo(at: sourceURL, duration: 40)
+        let markerAt = Date(timeIntervalSince1970: 1_000)
+        let firstMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002301"))
+        let secondMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002302"))
+        let thirdMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002303"))
+        let segments = [
+            HighlightClipSegment(
+                markerID: firstMarkerID,
+                videoID: "long-video",
+                markerAt: markerAt,
+                start: 6,
+                duration: 6,
+            ),
+            HighlightClipSegment(
+                markerID: secondMarkerID,
+                videoID: "short-video",
+                markerAt: markerAt.addingTimeInterval(60),
+                start: 10,
+                duration: 5,
+            ),
+            HighlightClipSegment(
+                markerID: thirdMarkerID,
+                videoID: "long-video",
+                markerAt: markerAt.addingTimeInterval(120),
+                start: 18,
+                duration: 6,
+            ),
+        ]
+
+        var assetRequests: [HighlightClipAssetRequest] = []
+        _ = try await VideoClipEditingService().makeHighlightClip(from: segments) { request in
+            assetRequests.append(request)
+            return AVURLAsset(url: sourceURL)
+        }
+
+        XCTAssertEqual(assetRequests.map(\.videoID), ["long-video", "short-video"])
+        XCTAssertEqual(assetRequests[0].segments.map(\.start), [6, 18])
+        XCTAssertEqual(assetRequests[0].requestedDuration, 12)
+        XCTAssertEqual(assetRequests[1].segments.map(\.start), [10])
+        XCTAssertEqual(assetRequests[1].requestedDuration, 5)
+    }
+
+    func testAssetRequestPrefersMediumDeliveryForSmallClipSetFromLongSourceVideo() throws {
+        let markerAt = Date(timeIntervalSince1970: 1_000)
+        let markerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002401"))
+        let request = HighlightClipAssetRequest(
+            videoID: "long-video",
+            segments: [
+                HighlightClipSegment(
+                    markerID: markerID,
+                    videoID: "long-video",
+                    markerAt: markerAt,
+                    start: 1_200,
+                    duration: 120,
+                ),
+            ],
+        )
+
+        XCTAssertEqual(
+            request.photoLibraryDeliveryQuality(forSourceDuration: 3_600),
+            .medium,
+        )
+        XCTAssertEqual(
+            request.photoLibraryDeliveryQuality(forSourceDuration: 240),
+            .high,
+        )
     }
 
     @MainActor
