@@ -2,14 +2,23 @@ import SwiftUI
 
 struct TrainingSessionListView: View {
     @StateObject private var viewModel: TrainingSessionListViewModel
+    @State private var isExportingLogs = false
+    @State private var exportedLogURL: URL?
+    @State private var logExportErrorMessage: String?
     private let diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)?
+    private let logger: AppLogging
+    private let logExportService: AppLogExportService?
 
     @MainActor
     init(
         store: TrainingSessionStoreProtocol,
         diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)? = nil,
+        logger: AppLogging = AppLogger.shared,
+        logExportService: AppLogExportService? = nil,
     ) {
         self.diagnosticsSnapshotProvider = diagnosticsSnapshotProvider
+        self.logger = logger
+        self.logExportService = logExportService
         _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(store: store))
     }
 
@@ -17,8 +26,12 @@ struct TrainingSessionListView: View {
     init(
         viewModel: TrainingSessionListViewModel,
         diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)? = nil,
+        logger: AppLogging = AppLogger.shared,
+        logExportService: AppLogExportService? = nil,
     ) {
         self.diagnosticsSnapshotProvider = diagnosticsSnapshotProvider
+        self.logger = logger
+        self.logExportService = logExportService
         _viewModel = StateObject(wrappedValue: viewModel)
     }
 
@@ -50,14 +63,29 @@ struct TrainingSessionListView: View {
                     Button("取消") {
                         viewModel.clearSelection()
                     }
-                } else if let diagnosticsSnapshotProvider {
-                    NavigationLink {
-                        PhoneWatchSyncDiagnosticsView(snapshotProvider: diagnosticsSnapshotProvider)
+                } else if logExportService != nil {
+                    Button {
+                        Task { await exportLogs() }
                     } label: {
-                        Image(systemName: "wave.3.right.circle")
+                        Image(systemName: "square.and.arrow.up")
                     }
-                    .accessibilityLabel("同步诊断")
+                    .accessibilityLabel("导出日志")
+                    .disabled(isExportingLogs)
                 }
+            }
+            #if os(iOS)
+                .sheet(isPresented: exportedLogSheetBinding) {
+                    if let exportedLogURL {
+                        AppLogShareSheet(fileURL: exportedLogURL)
+                    }
+                }
+            #endif
+            .alert("导出日志失败", isPresented: logExportErrorBinding) {
+                Button("好", role: .cancel) {
+                    logExportErrorMessage = nil
+                }
+            } message: {
+                Text(logExportErrorMessage ?? "未知错误")
             }
         }
     }
@@ -123,6 +151,56 @@ struct TrainingSessionListView: View {
         .padding(.top, 10)
         .padding(.bottom, 8)
         .background(.bar)
+    }
+
+    private var exportedLogSheetBinding: Binding<Bool> {
+        Binding(
+            get: { exportedLogURL != nil },
+            set: { isPresented in
+                if !isPresented {
+                    exportedLogURL = nil
+                }
+            },
+        )
+    }
+
+    private var logExportErrorBinding: Binding<Bool> {
+        Binding(
+            get: { logExportErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    logExportErrorMessage = nil
+                }
+            },
+        )
+    }
+
+    @MainActor
+    private func exportLogs() async {
+        guard let logExportService else {
+            return
+        }
+
+        isExportingLogs = true
+        logger.info(
+            "diagnostics.export.started",
+            category: .diagnostics,
+            message: "开始导出诊断日志",
+        )
+
+        do {
+            exportedLogURL = try await logExportService.export()
+        } catch {
+            logExportErrorMessage = (error as NSError).localizedDescription
+            logger.error(
+                "diagnostics.export.failed",
+                category: .diagnostics,
+                message: "诊断日志导出失败",
+                error: error,
+            )
+        }
+
+        isExportingLogs = false
     }
 }
 

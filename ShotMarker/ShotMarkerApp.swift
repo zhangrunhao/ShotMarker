@@ -11,6 +11,8 @@ import SwiftUI
 struct ShotMarkerApp: App {
     private let store: TrainingSessionStore
     private let syncService: PhoneWatchSyncService
+    private let logger: AppLogging
+    private let logExportService: AppLogExportService
 
     @MainActor
     init() {
@@ -19,16 +21,29 @@ struct ShotMarkerApp: App {
         #else
             let store = TrainingSessionStore()
         #endif
+        let logStore = AppLogStore.shared
+        let logger = AppLogger.shared
         let syncService = PhoneWatchSyncService(importer: TrainingSessionImporter(store: store))
+        let logExportService = AppLogExportService(
+            store: logStore,
+            diagnosticsSnapshotProvider: syncService.diagnosticsSnapshot,
+        )
 
         self.store = store
         self.syncService = syncService
+        self.logger = logger
+        self.logExportService = logExportService
         syncService.start()
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView(store: store, syncService: syncService)
+            ContentView(
+                store: store,
+                syncService: syncService,
+                logger: logger,
+                logExportService: logExportService,
+            )
         }
     }
 }

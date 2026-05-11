@@ -14,7 +14,7 @@ nonisolated protocol AppLogging {
 }
 
 nonisolated final class AppLogger: AppLogging, @unchecked Sendable {
-    static let shared = AppLogger(store: AppLogStore())
+    static let shared = AppLogger(store: AppLogStore.shared)
 
     private let store: AppLogStore
     private let makeID: @Sendable () -> UUID

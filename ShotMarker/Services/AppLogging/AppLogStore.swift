@@ -1,6 +1,8 @@
 import Foundation
 
 actor AppLogStore {
+    static let shared = AppLogStore()
+
     struct Configuration: Equatable, Sendable {
         var retentionDays: Int = 14
         var maxTotalBytes: Int = 30 * 1024 * 1024
