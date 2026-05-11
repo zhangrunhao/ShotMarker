@@ -9,7 +9,7 @@ protocol PhoneWatchConnectivitySessionProtocol: AnyObject {
 
     func setDelegate(_ delegate: WCSessionDelegate)
     func activate()
-    func transferUserInfo(_ userInfo: [String: Any])
+    func transferUserInfo(_ userInfo: [String: Any]) throws
 }
 
 extension Notification.Name {
@@ -40,6 +40,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
     private let importer: TrainingSessionImporting
     private let session: PhoneWatchConnectivitySessionProtocol
     private let notificationCenter: NotificationCenter
+    private let logger: AppLogging
     private let now: () -> Date
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
@@ -56,20 +57,34 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
         importer: TrainingSessionImporting,
         session: PhoneWatchConnectivitySessionProtocol? = nil,
         notificationCenter: NotificationCenter = .default,
+        logger: AppLogging = AppLogger.shared,
         now: @escaping () -> Date = Date.init,
     ) {
         self.importer = importer
         self.session = session ?? PhoneWatchConnectivitySessionAdapter()
         self.notificationCenter = notificationCenter
+        self.logger = logger
         self.now = now
     }
 
     func start() {
         guard session.isSupported else {
             lastActivationErrorDescription = "WCSession is not supported"
+            logger.warning(
+                "sync.session.unsupported",
+                category: .sync,
+                message: "当前设备不支持 WatchConnectivity",
+                context: sessionContext(),
+            )
             return
         }
 
+        logger.info(
+            "sync.session.activate.requested",
+            category: .sync,
+            message: "请求激活 WatchConnectivity",
+            context: sessionContext(),
+        )
         session.setDelegate(self)
         session.activate()
     }
@@ -92,37 +107,99 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
     }
 
     func handleReceivedUserInfo(_ userInfo: [String: Any]) {
-        guard userInfo[Self.userInfoTypeKey] as? String == Self.completedTrainingSessionUserInfoType else {
+        guard let userInfoType = userInfo[Self.userInfoTypeKey] as? String,
+              userInfoType == Self.completedTrainingSessionUserInfoType
+        else {
+            logger.warning(
+                "sync.training.userinfo.ignored",
+                category: .sync,
+                message: "忽略未知手表同步消息",
+                context: [
+                    "receivedType": (userInfo[Self.userInfoTypeKey] as? String) ?? "missing",
+                ],
+            )
             return
         }
 
-        guard
-            let payloadData = userInfo[Self.userInfoPayloadKey] as? Data,
-            let payload = try? decoder.decode(TrainingSessionSyncPayload.self, from: payloadData)
-        else {
+        guard let payloadData = userInfo[Self.userInfoPayloadKey] as? Data else {
             lastImportErrorDescription = "Unable to decode completed training session payload"
+            logger.error(
+                "sync.training.payload.decode.failed",
+                category: .sync,
+                message: "训练记录同步数据解码失败",
+                error: nil,
+                context: ["reason": "missingPayload"],
+            )
+            return
+        }
+
+        let payload: TrainingSessionSyncPayload
+        do {
+            payload = try decoder.decode(TrainingSessionSyncPayload.self, from: payloadData)
+        } catch {
+            lastImportErrorDescription = String(describing: error)
+            logger.error(
+                "sync.training.payload.decode.failed",
+                category: .sync,
+                message: "训练记录同步数据解码失败",
+                error: error,
+                context: ["payloadByteCount": "\(payloadData.count)"],
+            )
             return
         }
 
         lastReceivedPayloadAt = now()
         lastReceivedTrainingSessionId = payload.id
+        logger.info(
+            "sync.training.payload.received",
+            category: .sync,
+            message: "收到手表训练记录",
+            context: trainingContext(for: payload.id),
+        )
 
         do {
             try importer.import(payload)
         } catch {
             lastImportErrorDescription = String(describing: error)
+            logger.error(
+                "sync.training.import.failed",
+                category: .sync,
+                message: "导入手表训练记录失败",
+                error: error,
+                context: trainingContext(for: payload.id),
+            )
             return
         }
 
         lastImportErrorDescription = nil
+        logger.info(
+            "sync.training.import.succeeded",
+            category: .sync,
+            message: "导入手表训练记录成功",
+            context: trainingContext(for: payload.id),
+        )
         notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
 
         do {
             try transferAck(for: payload)
         } catch {
             lastAckErrorDescription = String(describing: error)
+            logger.error(
+                "sync.training.ack.failed",
+                category: .sync,
+                message: "发送训练记录 ACK 失败",
+                error: error,
+                context: trainingContext(for: payload.id),
+            )
             return
         }
+
+        logger.info(
+            "sync.training.ack.sent",
+            category: .sync,
+            message: "已发送训练记录 ACK",
+            context: trainingContext(for: payload.id),
+        )
     }
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
@@ -136,6 +213,23 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
     ) {
         lastActivationCompletedAt = now()
         lastActivationErrorDescription = error.map { String(describing: $0) }
+
+        if let error {
+            logger.error(
+                "sync.session.activate.failed",
+                category: .sync,
+                message: "WatchConnectivity 激活失败",
+                error: error,
+                context: sessionContext(activationState: activationState.diagnosticsDescription),
+            )
+        } else {
+            logger.info(
+                "sync.session.activate.completed",
+                category: .sync,
+                message: "WatchConnectivity 激活完成",
+                context: sessionContext(activationState: activationState.diagnosticsDescription),
+            )
+        }
     }
 
     func sessionDidBecomeInactive(_ session: WCSession) {}
@@ -150,13 +244,26 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
             importedAt: now(),
         )
         let ackData = try encoder.encode(ack)
-        session.transferUserInfo([
+        try session.transferUserInfo([
             Self.userInfoTypeKey: Self.trainingSessionSyncAckUserInfoType,
             Self.userInfoPayloadKey: ackData,
         ])
         lastAckSentAt = ack.importedAt
         lastAckTrainingSessionId = payload.id
         lastAckErrorDescription = nil
+    }
+
+    private func sessionContext(activationState: String? = nil) -> [String: String] {
+        [
+            "isSupported": "\(session.isSupported)",
+            "isPaired": "\(session.isPaired)",
+            "isWatchAppInstalled": "\(session.isWatchAppInstalled)",
+            "activationState": activationState ?? session.activationStateDescription,
+        ]
+    }
+
+    private func trainingContext(for trainingSessionId: UUID) -> [String: String] {
+        ["trainingSessionId": trainingSessionId.uuidString]
     }
 }
 
@@ -191,7 +298,7 @@ private final class PhoneWatchConnectivitySessionAdapter: PhoneWatchConnectivity
         session.activate()
     }
 
-    func transferUserInfo(_ userInfo: [String: Any]) {
+    func transferUserInfo(_ userInfo: [String: Any]) throws {
         session.transferUserInfo(userInfo)
     }
 }

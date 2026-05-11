@@ -23,7 +23,10 @@ struct ShotMarkerApp: App {
         #endif
         let logStore = AppLogStore.shared
         let logger = AppLogger.shared
-        let syncService = PhoneWatchSyncService(importer: TrainingSessionImporter(store: store))
+        let syncService = PhoneWatchSyncService(
+            importer: TrainingSessionImporter(store: store),
+            logger: logger,
+        )
         let logExportService = AppLogExportService(
             store: logStore,
             diagnosticsSnapshotProvider: syncService.diagnosticsSnapshot,
@@ -33,6 +36,11 @@ struct ShotMarkerApp: App {
         self.syncService = syncService
         self.logger = logger
         self.logExportService = logExportService
+        logger.info(
+            "app.launch",
+            category: .app,
+            message: "应用启动",
+        )
         syncService.start()
     }
 

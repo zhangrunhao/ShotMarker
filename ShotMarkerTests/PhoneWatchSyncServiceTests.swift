@@ -17,6 +17,29 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
         XCTAssertEqual(session.activateCallCount, 1)
     }
 
+    func testStartLogsActivationRequested() {
+        let logger = SpyAppLogger()
+        let session = FakePhoneWatchConnectivitySession(isSupported: true)
+        session.isPaired = true
+        session.isWatchAppInstalled = true
+        session.activationStateDescription = "notActivated"
+        let service = PhoneWatchSyncService(
+            importer: SpyTrainingSessionImporter(),
+            session: session,
+            logger: logger,
+        )
+
+        service.start()
+
+        let entry = logger.entry(named: "sync.session.activate.requested")
+        XCTAssertEqual(entry?.level, .info)
+        XCTAssertEqual(entry?.category, .sync)
+        XCTAssertEqual(entry?.context["isSupported"], "true")
+        XCTAssertEqual(entry?.context["isPaired"], "true")
+        XCTAssertEqual(entry?.context["isWatchAppInstalled"], "true")
+        XCTAssertEqual(entry?.context["activationState"], "notActivated")
+    }
+
     func testStartDoesNotActivateUnsupportedSession() {
         let session = FakePhoneWatchConnectivitySession(isSupported: false)
         let service = PhoneWatchSyncService(
@@ -28,6 +51,23 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
         XCTAssertEqual(session.setDelegateCallCount, 0)
         XCTAssertEqual(session.activateCallCount, 0)
+    }
+
+    func testStartLogsUnsupportedSession() {
+        let logger = SpyAppLogger()
+        let session = FakePhoneWatchConnectivitySession(isSupported: false)
+        let service = PhoneWatchSyncService(
+            importer: SpyTrainingSessionImporter(),
+            session: session,
+            logger: logger,
+        )
+
+        service.start()
+
+        let entry = logger.entry(named: "sync.session.unsupported")
+        XCTAssertEqual(entry?.level, .warning)
+        XCTAssertEqual(entry?.category, .sync)
+        XCTAssertEqual(entry?.context["isSupported"], "false")
     }
 
     func testCompletedTrainingSessionUserInfoImportsPostsNotificationAndTransfersAck() throws {
@@ -87,6 +127,34 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
         XCTAssertEqual(session.transferredUserInfos.count, 2)
     }
 
+    func testCompletedTrainingSessionUserInfoLogsPayloadImportAndAck() throws {
+        let payload = try makePayload()
+        let logger = SpyAppLogger()
+        let service = PhoneWatchSyncService(
+            importer: SpyTrainingSessionImporter(),
+            session: FakePhoneWatchConnectivitySession(isSupported: true),
+            logger: logger,
+        )
+
+        service.handleReceivedUserInfo(try makeCompletedTrainingSessionUserInfo(payload: payload))
+
+        XCTAssertEqual(logger.entry(named: "sync.training.payload.received")?.level, .info)
+        XCTAssertEqual(
+            logger.entry(named: "sync.training.payload.received")?.context["trainingSessionId"],
+            payload.id.uuidString,
+        )
+        XCTAssertEqual(logger.entry(named: "sync.training.import.succeeded")?.level, .info)
+        XCTAssertEqual(
+            logger.entry(named: "sync.training.import.succeeded")?.context["trainingSessionId"],
+            payload.id.uuidString,
+        )
+        XCTAssertEqual(logger.entry(named: "sync.training.ack.sent")?.level, .info)
+        XCTAssertEqual(
+            logger.entry(named: "sync.training.ack.sent")?.context["trainingSessionId"],
+            payload.id.uuidString,
+        )
+    }
+
     func testUnknownUserInfoTypeDoesNothing() throws {
         let importer = SpyTrainingSessionImporter()
         let session = FakePhoneWatchConnectivitySession(isSupported: true)
@@ -101,6 +169,25 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
         XCTAssertEqual(session.transferredUserInfos.count, 0)
     }
 
+    func testUnknownUserInfoTypeLogsWarning() throws {
+        let logger = SpyAppLogger()
+        let service = PhoneWatchSyncService(
+            importer: SpyTrainingSessionImporter(),
+            session: FakePhoneWatchConnectivitySession(isSupported: true),
+            logger: logger,
+        )
+
+        service.handleReceivedUserInfo([
+            PhoneWatchSyncService.userInfoTypeKey: "unknown",
+            PhoneWatchSyncService.userInfoPayloadKey: Data(),
+        ])
+
+        let entry = logger.entry(named: "sync.training.userinfo.ignored")
+        XCTAssertEqual(entry?.level, .warning)
+        XCTAssertEqual(entry?.category, .sync)
+        XCTAssertEqual(entry?.context["receivedType"], "unknown")
+    }
+
     func testInvalidPayloadDoesNotImportOrAck() {
         let importer = SpyTrainingSessionImporter()
         let session = FakePhoneWatchConnectivitySession(isSupported: true)
@@ -113,6 +200,26 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
         XCTAssertEqual(importer.importedPayloads, [])
         XCTAssertEqual(session.transferredUserInfos.count, 0)
+    }
+
+    func testInvalidPayloadLogsDecodeFailure() {
+        let logger = SpyAppLogger()
+        let service = PhoneWatchSyncService(
+            importer: SpyTrainingSessionImporter(),
+            session: FakePhoneWatchConnectivitySession(isSupported: true),
+            logger: logger,
+        )
+
+        service.handleReceivedUserInfo([
+            PhoneWatchSyncService.userInfoTypeKey: PhoneWatchSyncService.completedTrainingSessionUserInfoType,
+            PhoneWatchSyncService.userInfoPayloadKey: Data("invalid".utf8),
+        ])
+
+        let entry = logger.entry(named: "sync.training.payload.decode.failed")
+        XCTAssertEqual(entry?.level, .error)
+        XCTAssertEqual(entry?.category, .sync)
+        XCTAssertEqual(entry?.context["payloadByteCount"], "7")
+        XCTAssertNotNil(entry?.errorDescription)
     }
 
     func testImportFailureDoesNotPostNotificationOrAck() throws {
@@ -130,6 +237,45 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
         XCTAssertEqual(importer.importedPayloads, [payload])
         XCTAssertEqual(session.transferredUserInfos.count, 0)
+    }
+
+    func testImportFailureLogsError() throws {
+        let payload = try makePayload()
+        let logger = SpyAppLogger()
+        let service = PhoneWatchSyncService(
+            importer: SpyTrainingSessionImporter(error: SyncImportError.failed),
+            session: FakePhoneWatchConnectivitySession(isSupported: true),
+            logger: logger,
+        )
+
+        service.handleReceivedUserInfo(try makeCompletedTrainingSessionUserInfo(payload: payload))
+
+        let entry = logger.entry(named: "sync.training.import.failed")
+        XCTAssertEqual(entry?.level, .error)
+        XCTAssertEqual(entry?.category, .sync)
+        XCTAssertEqual(entry?.context["trainingSessionId"], payload.id.uuidString)
+        XCTAssertNotNil(entry?.errorDescription)
+    }
+
+    func testAckTransferFailureLogsError() throws {
+        let payload = try makePayload()
+        let logger = SpyAppLogger()
+        let session = FakePhoneWatchConnectivitySession(isSupported: true)
+        session.transferUserInfoError = SyncAckError.failed
+        let service = PhoneWatchSyncService(
+            importer: SpyTrainingSessionImporter(),
+            session: session,
+            logger: logger,
+        )
+
+        service.handleReceivedUserInfo(try makeCompletedTrainingSessionUserInfo(payload: payload))
+
+        XCTAssertEqual(session.transferredUserInfos.count, 0)
+        let entry = logger.entry(named: "sync.training.ack.failed")
+        XCTAssertEqual(entry?.level, .error)
+        XCTAssertEqual(entry?.category, .sync)
+        XCTAssertEqual(entry?.context["trainingSessionId"], payload.id.uuidString)
+        XCTAssertNotNil(entry?.errorDescription)
     }
 
     func testDiagnosticsSnapshotIncludesSessionStateAndLastSuccessfulImport() throws {
@@ -192,6 +338,76 @@ private enum SyncImportError: Error {
     case failed
 }
 
+private enum SyncAckError: Error {
+    case failed
+}
+
+private struct SpyLogEntry {
+    let level: AppLogLevel
+    let category: AppLogCategory
+    let name: String
+    let message: String
+    let context: [String: String]
+    let errorDescription: String?
+}
+
+private final class SpyAppLogger: AppLogging {
+    private(set) var entries: [SpyLogEntry] = []
+
+    func debug(_ name: String, category: AppLogCategory, message: String, context: [String: String]) {
+        append(level: .debug, category: category, name: name, message: message, context: context)
+    }
+
+    func info(_ name: String, category: AppLogCategory, message: String, context: [String: String]) {
+        append(level: .info, category: category, name: name, message: message, context: context)
+    }
+
+    func warning(_ name: String, category: AppLogCategory, message: String, context: [String: String]) {
+        append(level: .warning, category: category, name: name, message: message, context: context)
+    }
+
+    func error(
+        _ name: String,
+        category: AppLogCategory,
+        message: String,
+        error: Error?,
+        context: [String: String],
+    ) {
+        append(
+            level: .error,
+            category: category,
+            name: name,
+            message: message,
+            context: context,
+            errorDescription: error.map { String(describing: $0) },
+        )
+    }
+
+    func entry(named name: String) -> SpyLogEntry? {
+        entries.first { $0.name == name }
+    }
+
+    private func append(
+        level: AppLogLevel,
+        category: AppLogCategory,
+        name: String,
+        message: String,
+        context: [String: String],
+        errorDescription: String? = nil,
+    ) {
+        entries.append(
+            SpyLogEntry(
+                level: level,
+                category: category,
+                name: name,
+                message: message,
+                context: context,
+                errorDescription: errorDescription,
+            ),
+        )
+    }
+}
+
 private final class SpyTrainingSessionImporter: TrainingSessionImporting {
     private let error: Error?
     private(set) var importedPayloads: [TrainingSessionSyncPayload] = []
@@ -217,6 +433,7 @@ private final class FakePhoneWatchConnectivitySession: PhoneWatchConnectivitySes
     private(set) var setDelegateCallCount = 0
     private(set) var activateCallCount = 0
     private(set) var transferredUserInfos: [[String: Any]] = []
+    var transferUserInfoError: Error?
     weak var delegate: WCSessionDelegate?
 
     init(isSupported: Bool) {
@@ -232,7 +449,11 @@ private final class FakePhoneWatchConnectivitySession: PhoneWatchConnectivitySes
         activateCallCount += 1
     }
 
-    func transferUserInfo(_ userInfo: [String: Any]) {
+    func transferUserInfo(_ userInfo: [String: Any]) throws {
+        if let transferUserInfoError {
+            throw transferUserInfoError
+        }
+
         transferredUserInfos.append(userInfo)
     }
 }
