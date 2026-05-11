@@ -47,6 +47,7 @@ final class TrainingSessionListViewModel: ObservableObject {
 
     private let store: TrainingSessionStoreProtocol
     private let notificationCenter: NotificationCenter
+    private let logger: AppLogging
     private var sessions: [TrainingSession] = []
     private var trainingSessionsDidChangeObserver: NSObjectProtocol?
 
@@ -62,9 +63,14 @@ final class TrainingSessionListViewModel: ObservableObject {
         selectedSessionIDs.count >= 2
     }
 
-    init(store: TrainingSessionStoreProtocol, notificationCenter: NotificationCenter = .default) {
+    init(
+        store: TrainingSessionStoreProtocol,
+        notificationCenter: NotificationCenter = .default,
+        logger: AppLogging = AppLogger.shared,
+    ) {
         self.store = store
         self.notificationCenter = notificationCenter
+        self.logger = logger
         trainingSessionsDidChangeObserver = notificationCenter.addObserver(
             forName: .trainingSessionsDidChange,
             object: nil,
@@ -89,11 +95,23 @@ final class TrainingSessionListViewModel: ObservableObject {
             rows = Self.makeRows(from: sessions)
             selectedSessionIDs.formIntersection(Set(rows.map(\.id)))
             errorMessage = nil
+            logger.info(
+                "training.sessions.load.succeeded",
+                category: .training,
+                message: "训练记录读取成功",
+                context: ["trainingSessionCount": "\(sessions.count)"],
+            )
         } catch {
             sessions = []
             rows = []
             selectedSessionIDs = []
             errorMessage = "无法读取训练记录"
+            logger.error(
+                "training.sessions.load.failed",
+                category: .training,
+                message: "训练记录读取失败",
+                error: error,
+            )
         }
     }
 
@@ -150,9 +168,25 @@ final class TrainingSessionListViewModel: ObservableObject {
             selectedSessionIDs = []
             rows = Self.makeRows(from: sessions)
             errorMessage = nil
+            logger.info(
+                "training.sessions.merge.succeeded",
+                category: .training,
+                message: "训练记录合并成功",
+                context: [
+                    "mergedSessionCount": "\(selectedSessions.count)",
+                    "trainingSessionId": mergedSession.id.uuidString,
+                ],
+            )
             notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
         } catch {
             errorMessage = "无法合并训练记录"
+            logger.error(
+                "training.sessions.merge.failed",
+                category: .training,
+                message: "训练记录合并失败",
+                error: error,
+                context: ["selectedSessionCount": "\(selectedSessionIDs.count)"],
+            )
         }
     }
 

@@ -19,7 +19,7 @@ struct TrainingSessionListView: View {
         self.diagnosticsSnapshotProvider = diagnosticsSnapshotProvider
         self.logger = logger
         self.logExportService = logExportService
-        _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(store: store))
+        _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(store: store, logger: logger))
     }
 
     @MainActor

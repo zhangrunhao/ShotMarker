@@ -23,6 +23,38 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.rows.map(\.id), [newer.id, older.id])
     }
 
+    func testLoadLogsSuccessfulTrainingSessionCount() throws {
+        let first = try makeSession(id: "00000000-0000-0000-0000-000000000501")
+        let second = try makeSession(id: "00000000-0000-0000-0000-000000000502")
+        let logger = SpyAppLogger()
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: [first, second]),
+            logger: logger,
+        )
+
+        viewModel.load()
+
+        let entry = logger.entry(named: "training.sessions.load.succeeded")
+        XCTAssertEqual(entry?.level, .info)
+        XCTAssertEqual(entry?.category, .training)
+        XCTAssertEqual(entry?.context["trainingSessionCount"], "2")
+    }
+
+    func testLoadLogsFailure() {
+        let logger = SpyAppLogger()
+        let viewModel = TrainingSessionListViewModel(
+            store: ThrowingTrainingSessionStore(loadError: TrainingSessionListStoreError.failed),
+            logger: logger,
+        )
+
+        viewModel.load()
+
+        let entry = logger.entry(named: "training.sessions.load.failed")
+        XCTAssertEqual(entry?.level, .error)
+        XCTAssertEqual(entry?.category, .training)
+        XCTAssertNotNil(entry?.errorDescription)
+    }
+
     func testLoadMapsTrainingSessionStateIntoRows() throws {
         let marker = try ShotMarkerEvent(
             id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000003")),
@@ -185,6 +217,50 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.canMergeSelectedSessions)
     }
 
+    func testMergeSelectedSessionsLogsSuccess() throws {
+        let firstSession = try makeSession(id: "00000000-0000-0000-0000-000000000601")
+        let secondSession = try makeSession(id: "00000000-0000-0000-0000-000000000602")
+        let logger = SpyAppLogger()
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: [firstSession, secondSession]),
+            logger: logger,
+        )
+
+        viewModel.load()
+        viewModel.beginSelection(with: firstSession.id)
+        viewModel.toggleSelection(for: secondSession.id)
+        viewModel.mergeSelectedSessions()
+
+        let entry = logger.entry(named: "training.sessions.merge.succeeded")
+        XCTAssertEqual(entry?.level, .info)
+        XCTAssertEqual(entry?.category, .training)
+        XCTAssertEqual(entry?.context["mergedSessionCount"], "2")
+        XCTAssertEqual(entry?.context["trainingSessionId"], firstSession.id.uuidString)
+    }
+
+    func testMergeSelectedSessionsLogsFailure() throws {
+        let firstSession = try makeSession(id: "00000000-0000-0000-0000-000000000701")
+        let secondSession = try makeSession(id: "00000000-0000-0000-0000-000000000702")
+        let logger = SpyAppLogger()
+        let viewModel = TrainingSessionListViewModel(
+            store: ThrowingTrainingSessionStore(
+                sessions: [firstSession, secondSession],
+                saveError: TrainingSessionListStoreError.failed,
+            ),
+            logger: logger,
+        )
+
+        viewModel.load()
+        viewModel.beginSelection(with: firstSession.id)
+        viewModel.toggleSelection(for: secondSession.id)
+        viewModel.mergeSelectedSessions()
+
+        let entry = logger.entry(named: "training.sessions.merge.failed")
+        XCTAssertEqual(entry?.level, .error)
+        XCTAssertEqual(entry?.category, .training)
+        XCTAssertNotNil(entry?.errorDescription)
+    }
+
     func testLoadShowsEmptyStateWhenNoTrainingSessionsExist() {
         let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: []))
 
@@ -241,5 +317,121 @@ final class TrainingSessionListViewModelTests: XCTestCase {
                 markerCount: 1,
             ),
         ])
+    }
+
+    private func makeSession(id: String) throws -> TrainingSession {
+        TrainingSession(
+            id: try XCTUnwrap(UUID(uuidString: id)),
+            startedAt: Date(timeIntervalSince1970: 2000),
+            endedAt: Date(timeIntervalSince1970: 2600),
+            events: [
+                ShotMarkerEvent(
+                    id: UUID(),
+                    markedAt: Date(timeIntervalSince1970: 2300),
+                ),
+            ],
+        )
+    }
+}
+
+private enum TrainingSessionListStoreError: Error {
+    case failed
+}
+
+private struct SpyLogEntry {
+    let level: AppLogLevel
+    let category: AppLogCategory
+    let name: String
+    let message: String
+    let context: [String: String]
+    let errorDescription: String?
+}
+
+private final class SpyAppLogger: AppLogging {
+    private(set) var entries: [SpyLogEntry] = []
+
+    func debug(_ name: String, category: AppLogCategory, message: String, context: [String: String]) {
+        append(level: .debug, category: category, name: name, message: message, context: context)
+    }
+
+    func info(_ name: String, category: AppLogCategory, message: String, context: [String: String]) {
+        append(level: .info, category: category, name: name, message: message, context: context)
+    }
+
+    func warning(_ name: String, category: AppLogCategory, message: String, context: [String: String]) {
+        append(level: .warning, category: category, name: name, message: message, context: context)
+    }
+
+    func error(
+        _ name: String,
+        category: AppLogCategory,
+        message: String,
+        error: Error?,
+        context: [String: String],
+    ) {
+        append(
+            level: .error,
+            category: category,
+            name: name,
+            message: message,
+            context: context,
+            errorDescription: error.map { String(describing: $0) },
+        )
+    }
+
+    func entry(named name: String) -> SpyLogEntry? {
+        entries.first { $0.name == name }
+    }
+
+    private func append(
+        level: AppLogLevel,
+        category: AppLogCategory,
+        name: String,
+        message: String,
+        context: [String: String],
+        errorDescription: String? = nil,
+    ) {
+        entries.append(
+            SpyLogEntry(
+                level: level,
+                category: category,
+                name: name,
+                message: message,
+                context: context,
+                errorDescription: errorDescription,
+            ),
+        )
+    }
+}
+
+private final class ThrowingTrainingSessionStore: TrainingSessionStoreProtocol {
+    private var sessions: [TrainingSession]
+    private let loadError: Error?
+    private let saveError: Error?
+
+    init(
+        sessions: [TrainingSession] = [],
+        loadError: Error? = nil,
+        saveError: Error? = nil,
+    ) {
+        self.sessions = sessions
+        self.loadError = loadError
+        self.saveError = saveError
+    }
+
+    func loadTrainingSessions() throws -> [TrainingSession] {
+        if let loadError {
+            throw loadError
+        }
+
+        return sessions
+    }
+
+    func saveTrainingSessions(_ sessions: [TrainingSession]) throws {
+        if let saveError {
+            throw saveError
+        }
+
+        self.sessions = sessions
     }
 }
