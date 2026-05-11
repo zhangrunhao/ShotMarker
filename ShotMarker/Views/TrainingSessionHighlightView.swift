@@ -1,6 +1,7 @@
 #if os(iOS)
     import AVFoundation
     import CoreTransferable
+    import Foundation
     import Photos
     import PhotosUI
     import SwiftUI
@@ -8,6 +9,9 @@
 
     struct TrainingSessionHighlightView: View {
         let session: TrainingSession
+        private let logger: AppLogging
+        private let editingService: VideoClipEditingService
+        private let photoLibrarySaver: VideoClipPhotoLibrarySaver
 
         @State private var selectedItems: [PhotosPickerItem] = []
         @State private var selectedVideos: [SelectedTrainingVideo] = []
@@ -17,8 +21,12 @@
         @State private var generationProgress: HighlightClipGenerationProgress?
         @State private var alert: HighlightFlowAlert?
 
-        private let editingService = VideoClipEditingService()
-        private let photoLibrarySaver = VideoClipPhotoLibrarySaver()
+        init(session: TrainingSession, logger: AppLogging = AppLogger.shared) {
+            self.session = session
+            self.logger = logger
+            editingService = VideoClipEditingService(logger: logger)
+            photoLibrarySaver = VideoClipPhotoLibrarySaver(logger: logger)
+        }
 
         private var plan: HighlightClipPlan {
             VideoClipSegmentPlanner.highlightPlan(
@@ -115,8 +123,15 @@
                     await loadSelectedVideos(from: newItems)
                 }
             }
+            .onAppear {
+                logHighlightViewOpened()
+            }
+            .onChange(of: selectedVideos) { _, _ in
+                logPlanUpdated()
+            }
             .onChange(of: clipSettings) { _, newSettings in
                 ClipSettingsStore.shared.save(newSettings)
+                logPlanUpdated()
             }
             .alert(alert?.title ?? "", isPresented: isShowingAlert) {
                 Button("好", role: .cancel) {}
@@ -147,6 +162,24 @@
             )
         }
 
+        private func logHighlightViewOpened() {
+            logger.info(
+                "highlight.view.opened",
+                category: .video,
+                message: "打开集锦生成页面",
+                context: highlightContext(),
+            )
+        }
+
+        private func logPlanUpdated() {
+            logger.info(
+                "highlight.plan.updated",
+                category: .video,
+                message: "集锦剪辑计划更新",
+                context: highlightPlanContext(plan),
+            )
+        }
+
         @MainActor
         private func loadSelectedVideos(from items: [PhotosPickerItem]) async {
             cleanupTemporaryVideos()
@@ -156,6 +189,12 @@
                 return
             }
 
+            logger.info(
+                "video.selection.started",
+                category: .video,
+                message: "开始读取所选视频",
+                context: highlightContext(extra: ["requestedItemCount": "\(items.count)"]),
+            )
             isLoadingVideos = true
             defer {
                 isLoadingVideos = false
@@ -164,15 +203,33 @@
             var videos: [SelectedTrainingVideo] = []
 
             do {
-                for item in items {
+                for (index, item) in items.enumerated() {
                     let video = try await Self.loadSelectedVideo(from: item)
                     videos.append(video)
+                    logger.info(
+                        "video.selection.item.loaded",
+                        category: .video,
+                        message: "已读取所选视频",
+                        context: highlightContext(extra: [
+                            "itemIndex": "\(index + 1)",
+                            "loadedVideoCount": "\(videos.count)",
+                            "source": item.itemIdentifier == nil ? "pickerFile" : "photoLibrary",
+                            "durationSeconds": Self.secondsString(video.duration),
+                        ]),
+                    )
                 }
 
                 selectedVideos = videos
             } catch {
                 cleanupTemporaryVideos(videos)
                 selectedItems = []
+                logger.error(
+                    "video.selection.failed",
+                    category: .video,
+                    message: "读取所选视频失败",
+                    error: error,
+                    context: highlightContext(extra: ["requestedItemCount": "\(items.count)"]),
+                )
                 alert = HighlightFlowAlert(
                     title: "无法读取视频",
                     message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
@@ -182,12 +239,23 @@
 
         @MainActor
         private func generateHighlight() async {
-            let segments = plan.segments
-            let totalMarkerCount = plan.matchedMarkerCount
+            let currentPlan = plan
+            let segments = currentPlan.segments
+            let totalMarkerCount = currentPlan.matchedMarkerCount
             guard !segments.isEmpty else {
                 return
             }
 
+            logger.info(
+                "highlight.generate.started",
+                category: .video,
+                message: "开始生成集锦",
+                context: highlightPlanContext(currentPlan, extra: [
+                    "segmentCount": "\(segments.count)",
+                    "secondsBeforeMarker": Self.secondsString(clipSettings.secondsBeforeMarker),
+                    "secondsAfterMarker": Self.secondsString(clipSettings.secondsAfterMarker),
+                ]),
+            )
             isGenerating = true
             generationProgress = HighlightClipGenerationProgress(
                 completedMarkerCount: 0,
@@ -212,6 +280,15 @@
                     from: segments,
                     progressHandler: { progress in
                         generationProgress = progress
+                        logger.info(
+                            "highlight.generate.progress",
+                            category: .video,
+                            message: "集锦生成进度更新",
+                            context: highlightContext(extra: [
+                                "completedMarkerCount": "\(progress.completedMarkerCount)",
+                                "totalMarkerCount": "\(progress.totalMarkerCount)",
+                            ]),
+                        )
                     },
                 ) { request in
                     if let fileURL = Self.temporaryVideoURL(from: request.videoID) {
@@ -233,6 +310,14 @@
                             throw PhotoLibraryVideoAccess.userFacingError(for: error)
                         }
 
+                        logger.warning(
+                            "video.asset.fallback_to_picker_file",
+                            category: .video,
+                            message: "改用选择器临时文件读取视频",
+                            context: highlightContext(extra: [
+                                "requestedDurationSeconds": Self.secondsString(request.requestedDuration),
+                            ]),
+                        )
                         let pickedVideoURL = try await Self.loadTemporaryVideoURL(from: pickerItem)
                         fallbackTemporaryVideoURLs.append(pickedVideoURL)
                         return AVURLAsset(url: pickedVideoURL)
@@ -243,13 +328,47 @@
                 cleanupTemporaryVideos()
                 selectedItems = []
                 selectedVideos = []
+                logger.info(
+                    "highlight.generate.succeeded",
+                    category: .video,
+                    message: "集锦生成成功",
+                    context: highlightPlanContext(currentPlan, extra: ["segmentCount": "\(segments.count)"]),
+                )
                 alert = HighlightFlowAlert(title: "集锦已保存", message: "新视频已保存到相册。")
             } catch {
+                logger.error(
+                    "highlight.generate.failed",
+                    category: .video,
+                    message: "集锦生成失败",
+                    error: error,
+                    context: highlightPlanContext(currentPlan, extra: ["segmentCount": "\(segments.count)"]),
+                )
                 alert = HighlightFlowAlert(
                     title: "集锦生成失败",
                     message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
                 )
             }
+        }
+
+        private func highlightContext(extra: [String: String] = [:]) -> [String: String] {
+            var context = [
+                "trainingSessionId": session.id.uuidString,
+                "totalMarkerCount": "\(session.markerCount)",
+            ]
+            context.merge(extra) { _, newValue in newValue }
+            return context
+        }
+
+        private func highlightPlanContext(
+            _ plan: HighlightClipPlan,
+            extra: [String: String] = [:],
+        ) -> [String: String] {
+            highlightContext(extra: [
+                "selectedVideoCount": "\(plan.selectedVideoCount)",
+                "matchedMarkerCount": "\(plan.matchedMarkerCount)",
+                "unmatchedMarkerCount": "\(plan.unmatchedMarkerCount)",
+                "segmentCount": "\(plan.segments.count)",
+            ].merging(extra) { _, newValue in newValue })
         }
 
         private func cleanupTemporaryVideos() {
@@ -403,6 +522,10 @@
 
         nonisolated private static func requiresPhotoLibraryReadAccess(for segments: [HighlightClipSegment]) -> Bool {
             segments.contains { temporaryVideoURL(from: $0.videoID) == nil }
+        }
+
+        nonisolated private static func secondsString(_ value: TimeInterval) -> String {
+            String(format: "%.3f", value)
         }
 
         nonisolated private static func pickerItemsByAssetIdentifier(

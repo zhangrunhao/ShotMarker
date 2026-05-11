@@ -66,11 +66,22 @@ struct HighlightClipMarkerLabelOverlayStyle {
 }
 
 struct VideoClipEditingService {
+    private let logger: AppLogging
+
+    init(logger: AppLogging = AppLogger.shared) {
+        self.logger = logger
+    }
+
     func makeTestClip(from sourceURL: URL) async throws -> URL {
-        let asset = AVURLAsset(url: sourceURL)
-        let duration: CMTime = try await asset.load(.duration)
-        let segments = VideoClipSegmentPlanner.testSegments(forDuration: duration.seconds)
-        return try await exportClip(from: asset, segments: segments)
+        do {
+            let asset = AVURLAsset(url: sourceURL)
+            let duration: CMTime = try await asset.load(.duration)
+            let segments = VideoClipSegmentPlanner.testSegments(forDuration: duration.seconds)
+            return try await exportClip(from: asset, segments: segments)
+        } catch {
+            logExportFailure(operation: "testClip", error: error)
+            throw error
+        }
     }
 
     func makeHighlightClip(
@@ -78,11 +89,16 @@ struct VideoClipEditingService {
         progressHandler: (@MainActor (HighlightClipGenerationProgress) -> Void)? = nil,
         _ assetProvider: (HighlightClipAssetRequest) async throws -> AVAsset,
     ) async throws -> URL {
-        try await exportClip(
-            from: segments,
-            progressHandler: progressHandler,
-            assetProvider: assetProvider,
-        )
+        do {
+            return try await exportClip(
+                from: segments,
+                progressHandler: progressHandler,
+                assetProvider: assetProvider,
+            )
+        } catch {
+            logExportFailure(operation: "highlightClip", error: error)
+            throw error
+        }
     }
 
     private func exportClip(from asset: AVAsset, segments: [VideoClipSegment]) async throws -> URL {
@@ -94,6 +110,16 @@ struct VideoClipEditingService {
         guard let sourceVideoTrack = sourceVideoTracks.first else {
             throw VideoClipEditingError.missingVideoTrack
         }
+
+        logger.info(
+            "video.export.composition.started",
+            category: .video,
+            message: "开始组装视频导出时间线",
+            context: [
+                "operation": "testClip",
+                "segmentCount": "\(segments.count)",
+            ],
+        )
 
         let sourceAudioTrack = try await asset.loadTracks(withMediaType: .audio).first
 
@@ -126,7 +152,7 @@ struct VideoClipEditingService {
         // insertionTime 表示“下一个片段应该放在新视频的哪个时间点”。
         // 第一个片段从 0 秒开始；每插完一段，就往后移动这段的时长。
         var insertionTime = CMTime.zero
-        for segment in segments {
+        for (index, segment) in segments.enumerated() {
             // timeRange 表示从原视频里截哪一段，例如 0-2 秒，或 5-7 秒。
             let segmentDuration = CMTime(seconds: segment.duration, preferredTimescale: 600)
             let timeRange = CMTimeRange(
@@ -144,6 +170,17 @@ struct VideoClipEditingService {
 
             // 下一段紧跟在当前片段后面，于是两个片段会拼成一个连续的新视频。
             insertionTime = CMTimeAdd(insertionTime, segmentDuration)
+            logger.info(
+                "video.export.composition.segment_inserted",
+                category: .video,
+                message: "已插入视频片段",
+                context: [
+                    "operation": "testClip",
+                    "segmentIndex": "\(index + 1)",
+                    "segmentStartSeconds": Self.secondsString(segment.start),
+                    "segmentDurationSeconds": Self.secondsString(segment.duration),
+                ],
+            )
         }
 
         return try await export(composition)
@@ -175,6 +212,17 @@ struct VideoClipEditingService {
         var overlayRanges: [HighlightClipOverlayRange] = []
         let assetRequestsByVideoID = Self.assetRequestsByVideoID(for: validSegments)
         let totalMarkerCount = validSegments.reduce(0) { $0 + $1.coveredMarkerCount }
+        logger.info(
+            "video.export.composition.started",
+            category: .video,
+            message: "开始组装视频导出时间线",
+            context: [
+                "operation": "highlightClip",
+                "segmentCount": "\(validSegments.count)",
+                "sourceVideoCount": "\(assetRequestsByVideoID.count)",
+                "totalMarkerCount": "\(totalMarkerCount)",
+            ],
+        )
         progressHandler?(
             HighlightClipGenerationProgress(
                 completedMarkerCount: 0,
@@ -182,7 +230,7 @@ struct VideoClipEditingService {
             ),
         )
 
-        for segment in validSegments {
+        for (index, segment) in validSegments.enumerated() {
             let asset: AVAsset
             if let cachedAsset = assetsByVideoID[segment.videoID] {
                 asset = cachedAsset
@@ -228,6 +276,18 @@ struct VideoClipEditingService {
             overlayRanges.append(HighlightClipOverlayRange(timeRange: outputTimeRange, label: segment.markerLabel))
 
             insertionTime = CMTimeAdd(insertionTime, segmentDuration)
+            logger.info(
+                "video.export.composition.segment_inserted",
+                category: .video,
+                message: "已插入视频片段",
+                context: [
+                    "operation": "highlightClip",
+                    "segmentIndex": "\(index + 1)",
+                    "markerCount": "\(segment.coveredMarkerCount)",
+                    "segmentStartSeconds": Self.secondsString(segment.start),
+                    "segmentDurationSeconds": Self.secondsString(segment.duration),
+                ],
+            )
         }
 
         return try await export(
@@ -319,6 +379,16 @@ struct VideoClipEditingService {
             )
         }
 
+        logger.info(
+            "video.export.completed",
+            category: .video,
+            message: "视频导出完成",
+            context: [
+                "outputFileExtension": outputURL.pathExtension,
+                "outputNamePrefix": outputNamePrefix,
+            ],
+        )
+
         return outputURL
     }
 
@@ -338,6 +408,20 @@ struct VideoClipEditingService {
         let clampedProgress = min(max(Double(progress), 0), 1)
         let completedMarkerCount = Int(floor(clampedProgress * Double(totalMarkerCount)))
         return min(max(completedMarkerCount, 0), totalMarkerCount - 1)
+    }
+
+    private func logExportFailure(operation: String, error: Error) {
+        logger.error(
+            "video.export.failed",
+            category: .video,
+            message: "视频导出失败",
+            error: error,
+            context: ["operation": operation],
+        )
+    }
+
+    private static func secondsString(_ value: TimeInterval) -> String {
+        String(format: "%.3f", value)
     }
 
     private static func markerLabelVideoComposition(

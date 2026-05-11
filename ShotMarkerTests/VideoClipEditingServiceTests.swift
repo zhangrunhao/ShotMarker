@@ -19,8 +19,9 @@ final class VideoClipEditingServiceTests: XCTestCase {
     func testMakeTestClipExportsTwoSegmentsIntoOneMovie() async throws {
         let sourceURL = temporaryDirectory.appendingPathComponent("source.mov")
         try await makeSilentVideo(at: sourceURL, duration: 6)
+        let logger = SpyAppLogger()
 
-        let outputURL = try await VideoClipEditingService().makeTestClip(from: sourceURL)
+        let outputURL = try await VideoClipEditingService(logger: logger).makeTestClip(from: sourceURL)
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
         XCTAssertNotEqual(outputURL, sourceURL)
@@ -28,6 +29,12 @@ final class VideoClipEditingServiceTests: XCTestCase {
         let outputAsset = AVURLAsset(url: outputURL)
         let outputDuration: CMTime = try await outputAsset.load(.duration)
         XCTAssertEqual(outputDuration.seconds, 4, accuracy: 0.2)
+
+        XCTAssertEqual(logger.entry(named: "video.export.composition.started")?.level, .info)
+        XCTAssertEqual(logger.entry(named: "video.export.composition.started")?.context["segmentCount"], "2")
+        XCTAssertEqual(logger.entries(named: "video.export.composition.segment_inserted").count, 2)
+        XCTAssertEqual(logger.entry(named: "video.export.completed")?.level, .info)
+        XCTAssertEqual(logger.entry(named: "video.export.completed")?.context["outputFileExtension"], "mov")
     }
 
     func testMakeHighlightClipExportsPlannedSegmentsIntoOneMovie() async throws {
@@ -199,6 +206,27 @@ final class VideoClipEditingServiceTests: XCTestCase {
         )
     }
 
+    func testMakeHighlightClipLogsFailedExport() async {
+        let logger = SpyAppLogger()
+        let service = VideoClipEditingService(logger: logger)
+
+        do {
+            _ = try await service.makeHighlightClip(from: []) { _ in
+                XCTFail("Should not request assets for empty segments")
+                return AVURLAsset(url: URL(fileURLWithPath: "/tmp/unused.mov"))
+            }
+            XCTFail("Expected empty segment failure")
+        } catch VideoClipEditingError.emptySegments {
+            let entry = logger.entry(named: "video.export.failed")
+            XCTAssertEqual(entry?.level, .error)
+            XCTAssertEqual(entry?.category, .video)
+            XCTAssertEqual(entry?.context["operation"], "highlightClip")
+            XCTAssertNotNil(entry?.errorDescription)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testMarkerLabelOverlayStyleUsesLargeOpaqueLabel() {
         let style = HighlightClipMarkerLabelOverlayStyle.default
 
@@ -340,5 +368,75 @@ final class VideoClipEditingServiceTests: XCTestCase {
         case cannotAddWriterInput
         case pixelBufferCreationFailed(CVReturn)
         case writerStartFailed
+    }
+}
+
+private struct SpyLogEntry {
+    let level: AppLogLevel
+    let category: AppLogCategory
+    let name: String
+    let message: String
+    let context: [String: String]
+    let errorDescription: String?
+}
+
+private final class SpyAppLogger: AppLogging {
+    private(set) var entries: [SpyLogEntry] = []
+
+    func debug(_ name: String, category: AppLogCategory, message: String, context: [String: String]) {
+        append(level: .debug, category: category, name: name, message: message, context: context)
+    }
+
+    func info(_ name: String, category: AppLogCategory, message: String, context: [String: String]) {
+        append(level: .info, category: category, name: name, message: message, context: context)
+    }
+
+    func warning(_ name: String, category: AppLogCategory, message: String, context: [String: String]) {
+        append(level: .warning, category: category, name: name, message: message, context: context)
+    }
+
+    func error(
+        _ name: String,
+        category: AppLogCategory,
+        message: String,
+        error: Error?,
+        context: [String: String],
+    ) {
+        append(
+            level: .error,
+            category: category,
+            name: name,
+            message: message,
+            context: context,
+            errorDescription: error.map { String(describing: $0) },
+        )
+    }
+
+    func entry(named name: String) -> SpyLogEntry? {
+        entries.first { $0.name == name }
+    }
+
+    func entries(named name: String) -> [SpyLogEntry] {
+        entries.filter { $0.name == name }
+    }
+
+    private func append(
+        level: AppLogLevel,
+        category: AppLogCategory,
+        name: String,
+        message: String,
+        context: [String: String],
+        errorDescription: String? = nil,
+    ) {
+        entries.append(
+            SpyLogEntry(
+                level: level,
+                category: category,
+                name: name,
+                message: message,
+                context: context,
+                errorDescription: errorDescription,
+            ),
+        )
     }
 }
