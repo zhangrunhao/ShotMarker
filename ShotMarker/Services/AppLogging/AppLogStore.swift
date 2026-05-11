@@ -1,13 +1,13 @@
 import Foundation
 
 actor AppLogStore {
-    struct Configuration: Equatable {
+    struct Configuration: Equatable, Sendable {
         var retentionDays: Int = 14
         var maxTotalBytes: Int = 30 * 1024 * 1024
     }
 
     private let directoryURL: URL
-    private let configuration: Configuration
+    nonisolated let configuration: Configuration
     private let calendar: Calendar
     private let now: @Sendable () -> Date
     private let fileManager = FileManager.default
