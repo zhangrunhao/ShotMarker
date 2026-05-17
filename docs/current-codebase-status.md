@@ -215,6 +215,15 @@ Watch entitlements：
 
 没有看到脚本把 SwiftLint 接入 Xcode build phase，也没有看到 SwiftLint 运行记录。
 
+### 4.6 App Store 公开页面地址
+
+当前用于 App Store Connect 的公开页面已经部署到 `zhangrh.shop`：
+
+- Support URL：`https://zhangrh.shop/shotmaker/support`
+- Privacy Policy URL：`https://zhangrh.shop/shotmaker/privacy`
+
+注意：线上路径当前使用 `shotmaker`，不是仓库名 `ShotMarker` 的 `shotmarker` 拼写。本仓库不再保留这两个页面的本地 HTML 副本。
+
 ## 5. 产品需求与当前实现对齐
 
 PRD 位于 `docs/PRD.md`，日期为 2026-05-01，状态为草案。P0 核心包括 Watch 打点、手机训练记录列表、视频选择、自动剪辑、保存到相册。
