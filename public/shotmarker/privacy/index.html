@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShotMarker Privacy Policy</title>
+  <meta name="description" content="Privacy Policy for ShotMarker.">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fa;
+      --fg: #16181d;
+      --muted: #5c6573;
+      --card: #ffffff;
+      --border: #d9dde5;
+      --link: #0b57d0;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #101114;
+        --fg: #f2f4f8;
+        --muted: #b3bac6;
+        --card: #191b20;
+        --border: #30343c;
+        --link: #8ab4f8;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    main {
+      width: min(920px, 100%);
+      margin: 0 auto;
+      padding: 32px 18px 48px;
+    }
+
+    header,
+    section,
+    footer {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px;
+      margin-bottom: 16px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.25;
+      margin: 0 0 12px;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 7vw, 3rem);
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      margin-top: 6px;
+    }
+
+    h3 {
+      font-size: 1.05rem;
+      margin-top: 20px;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    ul {
+      margin: 8px 0 0;
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    a {
+      color: var(--link);
+      overflow-wrap: anywhere;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .summary {
+      font-size: 1.08rem;
+      font-weight: 600;
+    }
+
+    .language-block {
+      border-top: 1px solid var(--border);
+      margin-top: 16px;
+      padding-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>ShotMarker Privacy Policy</h1>
+      <p class="muted">Effective date: May 17, 2026</p>
+      <p class="summary">ShotMarker is designed as a local-first training tool. The current version does not require an account, does not show ads, does not use third-party analytics SDKs, and does not upload your videos or training records to the developer's server.</p>
+      <p class="language-block">ShotMarker 是一个本地优先的训练工具。当前版本不需要账号，不展示广告，不使用第三方分析 SDK，也不会把你的视频或训练记录上传到开发者服务器。</p>
+    </header>
+
+    <section aria-labelledby="scope">
+      <h2 id="scope">What This Policy Covers</h2>
+      <p>This policy explains how the current version of ShotMarker processes training markers, selected videos, HealthKit workout permission, WatchConnectivity sync data, and diagnostic logs.</p>
+      <p class="language-block">本政策说明当前版本的 ShotMarker 如何处理训练打点、用户选择的视频、HealthKit 训练权限、WatchConnectivity 同步数据和诊断日志。</p>
+    </section>
+
+    <section aria-labelledby="data">
+      <h2 id="data">Data Processed by ShotMarker</h2>
+
+      <h3>Training Session Data</h3>
+      <p>ShotMarker may process training start time, training end time, Apple Watch marker timestamps, marker count, and local training session IDs. This data is used to show training sessions on iPhone, match marker times with training videos, and generate highlight clips.</p>
+      <p>ShotMarker stores training sessions and marker timestamps locally on your iPhone. When you use the Apple Watch app, completed training sessions are transferred from your Apple Watch to your paired iPhone using Apple's WatchConnectivity framework.</p>
+      <p class="language-block">ShotMarker 可能会处理训练开始时间、结束时间、Apple Watch 打点时间、打点数量和本地训练记录 ID。这些数据用于在 iPhone 首页展示训练记录、匹配训练视频时间并生成集锦。使用 Apple Watch App 时，已完成的训练记录会通过 Apple 的 WatchConnectivity 框架在你的 Apple Watch 和配对 iPhone 之间同步。</p>
+
+      <h3>Photos and Videos</h3>
+      <p>ShotMarker only accesses videos that you explicitly select. The app reads video metadata such as creation time and duration, and uses the selected video content, video track, and audio track to generate highlight clips locally on your device. Your videos are not uploaded to the developer's server.</p>
+      <p>ShotMarker may request Photos access to read selected training videos and may request add-only Photos permission to save generated highlight clips to your photo library.</p>
+      <p class="language-block">ShotMarker 只访问你主动选择的视频。App 会读取视频拍摄时间、视频时长、视频轨道和音频轨道等信息，并在你的设备本地生成集锦。你的视频不会上传到开发者服务器。ShotMarker 可能会请求照片读取权限以读取所选训练视频，也可能会请求仅添加照片权限以保存生成的集锦。</p>
+
+      <h3>HealthKit and Workout Data</h3>
+      <p>On Apple Watch, ShotMarker may request HealthKit workout permission to manage a workout session during training. This is used to improve the reliability of training-time marker recording on Apple Watch. ShotMarker does not upload HealthKit data to the developer's server.</p>
+      <p>Workout data may be stored in Apple Health according to your Health permissions and Apple system settings.</p>
+      <p class="language-block">在 Apple Watch 上，ShotMarker 可能会请求 HealthKit 训练相关权限，用于在训练期间维持 workout session，提高打点记录的可靠性。ShotMarker 不会把 HealthKit 数据上传到开发者服务器。Workout 数据可能会根据你的健康权限和 Apple 系统设置存储在 Apple Health 中。</p>
+
+      <h3>WatchConnectivity</h3>
+      <p>ShotMarker uses Apple's WatchConnectivity framework to transfer completed training session data between your own Apple Watch and paired iPhone. This sync is used to show Watch-recorded training markers in the iPhone app.</p>
+      <p class="language-block">ShotMarker 使用 Apple 的 WatchConnectivity 框架在你的 Apple Watch 和配对 iPhone 之间同步已完成的训练记录，用于在 iPhone App 中展示 Watch 记录的训练打点。</p>
+
+      <h3>Diagnostic Logs</h3>
+      <p>ShotMarker stores diagnostic logs locally on your iPhone to help troubleshoot issues such as Watch sync, video loading, highlight generation, and saving to Photos. Logs may include app launch events, sync status, video loading and export status, Photos save errors, app version, build number, device model, system version, error information, and local training session IDs.</p>
+      <p>Diagnostic logs are kept locally with a limited rolling retention policy. In the current version, local diagnostic logs are rotated by time and total size. The developer can only access these logs if you choose to export and share them.</p>
+      <p class="language-block">ShotMarker 会在 iPhone 本地保存诊断日志，用于排查 Watch 同步、视频读取、集锦生成和相册保存等问题。日志可能包含 App 启动事件、同步状态、视频读取和导出状态、相册保存错误、App 版本、build 号、设备型号、系统版本、错误信息和本地训练记录 ID。诊断日志使用本地滚动保留策略；只有你主动导出并分享时，开发者才会看到这些日志。</p>
+    </section>
+
+    <section aria-labelledby="not-used">
+      <h2 id="not-used">What ShotMarker Does Not Do in the Current Version</h2>
+      <ul>
+        <li>ShotMarker does not require user accounts.</li>
+        <li>ShotMarker does not upload your videos to the developer's server.</li>
+        <li>ShotMarker does not upload your training records to the developer's server.</li>
+        <li>ShotMarker does not sell personal data.</li>
+        <li>ShotMarker does not use advertising tracking.</li>
+        <li>ShotMarker does not use third-party analytics SDKs in the current version.</li>
+      </ul>
+      <p class="language-block">当前版本的 ShotMarker 不需要用户账号，不会把你的视频或训练记录上传到开发者服务器，不出售个人数据，不使用广告跟踪，也不使用第三方分析 SDK。</p>
+    </section>
+
+    <section aria-labelledby="retention">
+      <h2 id="retention">Data Retention and Deletion</h2>
+      <p>Training sessions, clip settings, Watch sync outbox data, and diagnostic logs are stored mainly on your devices. You can delete this local data by deleting ShotMarker from your iPhone and Apple Watch. Diagnostic logs are automatically rotated and removed according to the app's local retention policy.</p>
+      <p class="language-block">训练记录、剪辑设置、Watch 同步 outbox 和诊断日志主要保存在你的设备本地。你可以通过删除 iPhone 和 Apple Watch 上的 ShotMarker 来删除这些本地数据。诊断日志会根据 App 的本地保留策略自动滚动和删除。</p>
+    </section>
+
+    <section aria-labelledby="permissions">
+      <h2 id="permissions">Permissions</h2>
+      <p>You can manage Photos permissions in the iOS Settings app. You can manage Health permissions in iOS Settings or in the Apple Health app.</p>
+      <p class="language-block">你可以在 iOS 设置中管理照片权限，也可以在 iOS 设置或 Apple Health App 中管理健康权限。</p>
+    </section>
+
+    <section aria-labelledby="sharing">
+      <h2 id="sharing">Third-Party Sharing</h2>
+      <p>ShotMarker does not share your personal data with third-party advertisers or analytics providers. If you choose to export diagnostic logs and send them to the developer, the logs will be used only to troubleshoot your support request.</p>
+      <p class="language-block">ShotMarker 不会向广告商或第三方分析服务共享你的个人数据。如果你主动导出诊断日志并发送给开发者，这些日志只会用于处理你的支持请求。</p>
+    </section>
+
+    <section aria-labelledby="children">
+      <h2 id="children">Children's Privacy</h2>
+      <p>ShotMarker is not specifically directed to children.</p>
+      <p class="language-block">ShotMarker 并非专门面向儿童设计。</p>
+    </section>
+
+    <section aria-labelledby="updates">
+      <h2 id="updates">Policy Updates</h2>
+      <p>This Privacy Policy may be updated when ShotMarker's features or data practices change. The updated version will be posted on this page with a new effective date.</p>
+      <p class="language-block">如果 ShotMarker 的功能或数据实践发生变化，本隐私政策可能会更新。更新后的版本会发布在本页面，并标明新的生效日期。</p>
+    </section>
+
+    <section aria-labelledby="contact">
+      <h2 id="contact">Contact</h2>
+      <p>If you have questions about this Privacy Policy or need support, contact <a href="mailto:zhangrhweb@gmail.com">zhangrhweb@gmail.com</a>.</p>
+      <p>Support page: <a href="/shotmarker/support/">/shotmarker/support</a></p>
+      <p class="language-block">如果你对本隐私政策有疑问或需要支持，请联系 <a href="mailto:zhangrhweb@gmail.com">zhangrhweb@gmail.com</a>。支持页面：<a href="/shotmarker/support/">/shotmarker/support</a></p>
+    </section>
+
+    <footer>
+      <p>Last updated: 2026-05-17</p>
+      <p>Developer: Rain / ShotMarker</p>
+    </footer>
+  </main>
+</body>
+</html>
