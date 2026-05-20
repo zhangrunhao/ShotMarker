@@ -37,17 +37,9 @@ struct TrainingSessionListView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottomTrailing) {
+            ZStack {
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                #if DEBUG && os(iOS)
-                    if !viewModel.canMergeSelectedSessions {
-                        VideoClipTestButton()
-                            .padding(.trailing, 20)
-                            .padding(.bottom, 24)
-                    }
-                #endif
             }
             .safeAreaInset(edge: .bottom) {
                 if viewModel.canMergeSelectedSessions {
