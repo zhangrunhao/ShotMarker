@@ -229,6 +229,8 @@ struct VideoClipEditingService {
                 totalMarkerCount: totalMarkerCount,
             ),
         )
+        var composedMarkerCount = 0
+        var lastReportedCompositionMarkerCount = 0
 
         for (index, segment) in validSegments.enumerated() {
             let asset: AVAsset
@@ -288,6 +290,21 @@ struct VideoClipEditingService {
                     "segmentDurationSeconds": Self.secondsString(segment.duration),
                 ],
             )
+
+            composedMarkerCount += segment.coveredMarkerCount
+            let completedMarkerCount = Self.inProgressCompletedMarkerCount(
+                completedMarkerCount: composedMarkerCount,
+                totalMarkerCount: totalMarkerCount,
+            )
+            if completedMarkerCount > lastReportedCompositionMarkerCount {
+                lastReportedCompositionMarkerCount = completedMarkerCount
+                progressHandler?(
+                    HighlightClipGenerationProgress(
+                        completedMarkerCount: completedMarkerCount,
+                        totalMarkerCount: totalMarkerCount,
+                    ),
+                )
+            }
         }
 
         return try await export(
@@ -298,6 +315,7 @@ struct VideoClipEditingService {
                 overlayRanges: overlayRanges,
             ),
             progressTotalMarkerCount: totalMarkerCount,
+            initialProgressMarkerCount: lastReportedCompositionMarkerCount,
             progressHandler: progressHandler,
         )
     }
@@ -321,22 +339,35 @@ struct VideoClipEditingService {
         outputNamePrefix: String = "ShotMarker-TestClip",
         videoComposition: AVVideoComposition? = nil,
         progressTotalMarkerCount: Int? = nil,
+        initialProgressMarkerCount: Int = 0,
         progressHandler: (@MainActor (HighlightClipGenerationProgress) -> Void)? = nil,
     ) async throws -> URL {
-        guard let exportSession = AVAssetExportSession(
-            asset: composition,
-            presetName: AVAssetExportPresetHighestQuality,
-        ) else {
+        let exportSessionConfiguration = Self.makeExportSession(
+            for: composition,
+            videoComposition: videoComposition,
+        )
+        guard let exportSession = exportSessionConfiguration.exportSession else {
             throw VideoClipEditingError.exportSessionUnavailable
         }
 
         let outputURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(outputNamePrefix)-\(UUID().uuidString).mov")
         exportSession.videoComposition = videoComposition
+        logger.info(
+            "video.export.started",
+            category: .video,
+            message: "开始导出视频",
+            context: [
+                "outputFileExtension": outputURL.pathExtension,
+                "outputNamePrefix": outputNamePrefix,
+                "presetName": exportSessionConfiguration.presetName,
+                "usesVideoComposition": "\(videoComposition != nil)",
+            ],
+        )
 
         let progressTask: Task<Void, Never>? = if let progressTotalMarkerCount, let progressHandler {
             Task { @MainActor in
-                var lastReportedMarkerCount = 0
+                var lastReportedMarkerCount = initialProgressMarkerCount
                 while !Task.isCancelled {
                     let completedMarkerCount = Self.completedMarkerCount(
                         forExportProgress: exportSession.progress,
@@ -407,6 +438,36 @@ struct VideoClipEditingService {
 
         let clampedProgress = min(max(Double(progress), 0), 1)
         let completedMarkerCount = Int(floor(clampedProgress * Double(totalMarkerCount)))
+        return min(max(completedMarkerCount, 0), totalMarkerCount - 1)
+    }
+
+    private static func makeExportSession(
+        for asset: AVAsset,
+        videoComposition: AVVideoComposition?,
+    ) -> (exportSession: AVAssetExportSession?, presetName: String) {
+        let presetNames = if videoComposition == nil {
+            [AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality]
+        } else {
+            [AVAssetExportPresetHighestQuality]
+        }
+
+        for presetName in presetNames {
+            if let exportSession = AVAssetExportSession(asset: asset, presetName: presetName) {
+                return (exportSession, presetName)
+            }
+        }
+
+        return (nil, presetNames.last ?? AVAssetExportPresetHighestQuality)
+    }
+
+    private static func inProgressCompletedMarkerCount(
+        completedMarkerCount: Int,
+        totalMarkerCount: Int,
+    ) -> Int {
+        guard totalMarkerCount > 0 else {
+            return 0
+        }
+
         return min(max(completedMarkerCount, 0), totalMarkerCount - 1)
     }
 

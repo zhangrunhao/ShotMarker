@@ -73,6 +73,34 @@ final class VideoClipEditingServiceTests: XCTestCase {
         XCTAssertEqual(outputDuration.seconds, 3, accuracy: 0.2)
     }
 
+    func testMakeHighlightClipUsesMarkerLabelOverlayVideoComposition() async throws {
+        let sourceURL = temporaryDirectory.appendingPathComponent("highlight-fast-export-source.mov")
+        try await makeSilentVideo(at: sourceURL, duration: 8)
+        let logger = SpyAppLogger()
+        let markerAt = Date(timeIntervalSince1970: 1_000)
+        let markerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002501"))
+        let segments = [
+            HighlightClipSegment(
+                markerID: markerID,
+                videoID: "video",
+                markerAt: markerAt,
+                start: 1,
+                duration: 2,
+            ),
+        ]
+
+        let outputURL = try await VideoClipEditingService(logger: logger)
+            .makeHighlightClip(from: segments) { _ in
+                AVURLAsset(url: sourceURL)
+            }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        let exportStartedEntry = try XCTUnwrap(logger.entry(named: "video.export.started"))
+        XCTAssertEqual(exportStartedEntry.context["outputNamePrefix"], "ShotMarker-Highlight")
+        XCTAssertEqual(exportStartedEntry.context["presetName"], AVAssetExportPresetHighestQuality)
+        XCTAssertEqual(exportStartedEntry.context["usesVideoComposition"], "true")
+    }
+
     func testMakeHighlightClipRequestsOnlyNeededSegmentsForEachSourceVideo() async throws {
         let sourceURL = temporaryDirectory.appendingPathComponent("highlight-request-source.mov")
         try await makeSilentVideo(at: sourceURL, duration: 40)
@@ -184,6 +212,58 @@ final class VideoClipEditingServiceTests: XCTestCase {
         XCTAssertEqual(progressUpdates.last, HighlightClipGenerationProgress(completedMarkerCount: 2, totalMarkerCount: 2))
         XCTAssertFalse(progressUpdates.dropLast().contains(
             HighlightClipGenerationProgress(completedMarkerCount: 2, totalMarkerCount: 2),
+        ))
+    }
+
+    @MainActor
+    func testMakeHighlightClipReportsProgressAfterEachComposedSegment() async throws {
+        let sourceURL = temporaryDirectory.appendingPathComponent("highlight-composition-progress-source.mov")
+        try await makeSilentVideo(at: sourceURL, duration: 8)
+        let markerAt = Date(timeIntervalSince1970: 1_000)
+        let firstMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002201"))
+        let secondMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002202"))
+        let segments = [
+            HighlightClipSegment(
+                markerID: firstMarkerID,
+                videoID: "first-video",
+                markerAt: markerAt,
+                start: 1,
+                duration: 2,
+                markerNumber: 1,
+                markerTotalCount: 2,
+            ),
+            HighlightClipSegment(
+                markerID: secondMarkerID,
+                videoID: "second-video",
+                markerAt: markerAt.addingTimeInterval(10),
+                start: 5,
+                duration: 1,
+                markerNumber: 2,
+                markerTotalCount: 2,
+            ),
+        ]
+
+        var progressUpdates: [HighlightClipGenerationProgress] = []
+        var requestedVideoIDs: [String] = []
+        let outputURL = try await VideoClipEditingService().makeHighlightClip(
+            from: segments,
+            progressHandler: { progressUpdates.append($0) },
+        ) { request in
+            requestedVideoIDs.append(request.videoID)
+            if request.videoID == "second-video" {
+                XCTAssertEqual(
+                    progressUpdates.last,
+                    HighlightClipGenerationProgress(completedMarkerCount: 1, totalMarkerCount: 2),
+                )
+            }
+
+            return AVURLAsset(url: sourceURL)
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertEqual(requestedVideoIDs, ["first-video", "second-video"])
+        XCTAssertTrue(progressUpdates.contains(
+            HighlightClipGenerationProgress(completedMarkerCount: 1, totalMarkerCount: 2),
         ))
     }
 
