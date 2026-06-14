@@ -45,7 +45,7 @@ final class AppLogExportServiceTests: XCTestCase {
         let fileURL = try await service.export()
         let bundle = try decodeBundle(at: fileURL)
 
-        XCTAssertEqual(fileURL.lastPathComponent, "山药蛋-Diagnostics-20260510-113500.json")
+        XCTAssertEqual(fileURL.lastPathComponent, "ShotMarker-Diagnostics-20260510-113500.json")
         XCTAssertEqual(bundle.manifest.schemaVersion, 1)
         XCTAssertEqual(bundle.manifest.exportedAt, exportDate)
         XCTAssertEqual(bundle.manifest.appVersion, "1.2.3")

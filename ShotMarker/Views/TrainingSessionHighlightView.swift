@@ -595,7 +595,7 @@
             case .videoLoadFailed:
                 "无法读取选择的视频。"
             case .photoLibraryAccessDenied:
-                "没有相册读取权限。请允许山药蛋读取所选视频后再试。"
+                "没有相册读取权限。请允许 ShotMarker 读取所选视频后再试。"
             case .missingRecordedStartAt:
                 "所选视频缺少拍摄时间，暂时无法用于自动剪辑。"
             case .invalidDuration:

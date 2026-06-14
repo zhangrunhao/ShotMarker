@@ -309,7 +309,7 @@ struct VideoClipEditingService {
 
         return try await export(
             composition,
-            outputNamePrefix: "山药蛋-Highlight",
+            outputNamePrefix: "ShotMarker-Highlight",
             videoComposition: try await Self.markerLabelVideoComposition(
                 for: composition,
                 overlayRanges: overlayRanges,
@@ -336,7 +336,7 @@ struct VideoClipEditingService {
 
     private func export(
         _ composition: AVAsset,
-        outputNamePrefix: String = "山药蛋-TestClip",
+        outputNamePrefix: String = "ShotMarker-TestClip",
         videoComposition: AVVideoComposition? = nil,
         progressTotalMarkerCount: Int? = nil,
         initialProgressMarkerCount: Int = 0,

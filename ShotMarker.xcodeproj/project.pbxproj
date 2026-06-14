@@ -673,9 +673,9 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "山药蛋";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "山药蛋会将生成的训练集锦保存到相册。";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "山药蛋会读取所选训练视频的拍摄时间和片段内容，用于生成训练集锦。";
+				INFOPLIST_KEY_CFBundleDisplayName = ShotMarker;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将生成的训练集锦保存到相册。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ShotMarker 会读取所选训练视频的拍摄时间和片段内容，用于生成训练集锦。";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -720,9 +720,9 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "山药蛋";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "山药蛋会将生成的训练集锦保存到相册。";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "山药蛋会读取所选训练视频的拍摄时间和片段内容，用于生成训练集锦。";
+				INFOPLIST_KEY_CFBundleDisplayName = ShotMarker;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将生成的训练集锦保存到相册。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ShotMarker 会读取所选训练视频的拍摄时间和片段内容，用于生成训练集锦。";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

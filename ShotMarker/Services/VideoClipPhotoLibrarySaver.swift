@@ -65,7 +65,7 @@
         case accessDenied
 
         var errorDescription: String? {
-            "没有相册保存权限。请允许山药蛋添加照片后再试。"
+            "没有相册保存权限。请允许 ShotMarker 添加照片后再试。"
         }
     }
 

@@ -103,7 +103,7 @@ struct TrainingSessionListView: View {
                 isPresented: $isExportingTrainingSessions,
                 document: trainingSessionExportDocument,
                 contentType: .json,
-                defaultFilename: "山药蛋-TrainingSessions.json",
+                defaultFilename: "ShotMarker-TrainingSessions.json",
             ) { result in
                 handleTrainingSessionExport(result)
             }

@@ -96,7 +96,7 @@ final class VideoClipEditingServiceTests: XCTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
         let exportStartedEntry = try XCTUnwrap(logger.entry(named: "video.export.started"))
-        XCTAssertEqual(exportStartedEntry.context["outputNamePrefix"], "山药蛋-Highlight")
+        XCTAssertEqual(exportStartedEntry.context["outputNamePrefix"], "ShotMarker-Highlight")
         XCTAssertEqual(exportStartedEntry.context["presetName"], AVAssetExportPresetHighestQuality)
         XCTAssertEqual(exportStartedEntry.context["usesVideoComposition"], "true")
     }
