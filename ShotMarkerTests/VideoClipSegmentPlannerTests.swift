@@ -213,4 +213,97 @@ final class VideoClipSegmentPlannerTests: XCTestCase {
 
         XCTAssertEqual(plan.segments.first?.videoID, firstSelectedVideo.id)
     }
+
+    func testCanUseVideoReturnsTrueWhenVideoCoversMarker() throws {
+        let marker = try ShotMarkerEvent(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000001501")),
+            markedAt: Date(timeIntervalSince1970: 120),
+        )
+        let session = TrainingSession(
+            startedAt: Date(timeIntervalSince1970: 100),
+            endedAt: Date(timeIntervalSince1970: 160),
+            events: [marker],
+        )
+        let video = SelectedTrainingVideo(
+            id: "video",
+            recordedStartAt: Date(timeIntervalSince1970: 100),
+            duration: 60,
+        )
+
+        XCTAssertTrue(VideoClipSegmentPlanner.canUseVideo(video, for: session))
+    }
+
+    func testCanUseVideoReturnsFalseWhenVideoCoversNoMarkers() throws {
+        let marker = try ShotMarkerEvent(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000001502")),
+            markedAt: Date(timeIntervalSince1970: 200),
+        )
+        let session = TrainingSession(
+            startedAt: Date(timeIntervalSince1970: 180),
+            endedAt: Date(timeIntervalSince1970: 220),
+            events: [marker],
+        )
+        let video = SelectedTrainingVideo(
+            id: "video",
+            recordedStartAt: Date(timeIntervalSince1970: 100),
+            duration: 60,
+        )
+
+        XCTAssertFalse(VideoClipSegmentPlanner.canUseVideo(video, for: session))
+    }
+
+    func testCanUseVideoTreatsBoundaryMarkersAsCovered() throws {
+        let startMarker = try ShotMarkerEvent(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000001503")),
+            markedAt: Date(timeIntervalSince1970: 100),
+        )
+        let endMarker = try ShotMarkerEvent(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000001504")),
+            markedAt: Date(timeIntervalSince1970: 160),
+        )
+        let video = SelectedTrainingVideo(
+            id: "video",
+            recordedStartAt: Date(timeIntervalSince1970: 100),
+            duration: 60,
+        )
+
+        let startSession = TrainingSession(
+            startedAt: Date(timeIntervalSince1970: 90),
+            endedAt: Date(timeIntervalSince1970: 110),
+            events: [startMarker],
+        )
+        let endSession = TrainingSession(
+            startedAt: Date(timeIntervalSince1970: 150),
+            endedAt: Date(timeIntervalSince1970: 170),
+            events: [endMarker],
+        )
+
+        XCTAssertTrue(VideoClipSegmentPlanner.canUseVideo(video, for: startSession))
+        XCTAssertTrue(VideoClipSegmentPlanner.canUseVideo(video, for: endSession))
+    }
+
+    func testCanUseVideoReturnsFalseForInvalidDuration() throws {
+        let marker = try ShotMarkerEvent(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000001505")),
+            markedAt: Date(timeIntervalSince1970: 100),
+        )
+        let session = TrainingSession(
+            startedAt: Date(timeIntervalSince1970: 90),
+            endedAt: Date(timeIntervalSince1970: 110),
+            events: [marker],
+        )
+        let zeroDurationVideo = SelectedTrainingVideo(
+            id: "zero",
+            recordedStartAt: Date(timeIntervalSince1970: 100),
+            duration: 0,
+        )
+        let infiniteDurationVideo = SelectedTrainingVideo(
+            id: "infinite",
+            recordedStartAt: Date(timeIntervalSince1970: 100),
+            duration: .infinity,
+        )
+
+        XCTAssertFalse(VideoClipSegmentPlanner.canUseVideo(zeroDurationVideo, for: session))
+        XCTAssertFalse(VideoClipSegmentPlanner.canUseVideo(infiniteDurationVideo, for: session))
+    }
 }

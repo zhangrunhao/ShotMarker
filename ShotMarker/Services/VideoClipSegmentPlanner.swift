@@ -119,6 +119,19 @@ enum VideoClipSegmentPlanner {
         ]
     }
 
+    static func canUseVideo(
+        _ video: SelectedTrainingVideo,
+        for session: TrainingSession,
+    ) -> Bool {
+        guard video.duration.isFinite, video.duration > 0 else {
+            return false
+        }
+
+        return session.events.contains { event in
+            video.recordedStartAt <= event.markedAt && event.markedAt <= video.recordedEndAt
+        }
+    }
+
     static func highlightPlan(
         for session: TrainingSession,
         videos: [SelectedTrainingVideo],
