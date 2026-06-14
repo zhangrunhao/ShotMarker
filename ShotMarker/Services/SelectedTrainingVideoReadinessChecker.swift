@@ -1,6 +1,6 @@
 import Foundation
 
-struct SelectedTrainingVideoReadinessChecker {
+nonisolated struct SelectedTrainingVideoReadinessChecker {
     typealias VerifyPhotoLibraryAssetIsLocal = (String) async throws -> Void
 
     private let verifyPhotoLibraryAssetIsLocal: VerifyPhotoLibraryAssetIsLocal

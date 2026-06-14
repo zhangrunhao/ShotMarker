@@ -201,10 +201,20 @@
             }
 
             var videos: [SelectedTrainingVideo] = []
+            var failedToLoadCount = 0
+            var noMarkerCoverageCount = 0
 
-            do {
-                for (index, item) in items.enumerated() {
+            for (index, item) in items.enumerated() {
+                do {
                     let video = try await Self.loadSelectedVideo(from: item)
+
+                    guard VideoClipSegmentPlanner.canUseVideo(video, for: session) else {
+                        noMarkerCoverageCount += 1
+                        Self.removeTemporaryVideoIfNeeded(video)
+                        continue
+                    }
+
+                    try await Self.readyTrainingVideoChecker.ensureReady(video)
                     videos.append(video)
                     logger.info(
                         "video.selection.item.loaded",
@@ -217,24 +227,27 @@
                             "durationSeconds": Self.secondsString(video.duration),
                         ]),
                     )
+                } catch {
+                    failedToLoadCount += 1
+                    logger.warning(
+                        "video.selection.item.filtered",
+                        category: .video,
+                        message: "已忽略不可用视频",
+                        context: highlightContext(extra: [
+                            "itemIndex": "\(index + 1)",
+                            "reason": "failedToLoad",
+                        ]),
+                    )
                 }
-
-                selectedVideos = videos
-            } catch {
-                cleanupTemporaryVideos(videos)
-                selectedItems = []
-                logger.error(
-                    "video.selection.failed",
-                    category: .video,
-                    message: "读取所选视频失败",
-                    error: error,
-                    context: highlightContext(extra: ["requestedItemCount": "\(items.count)"]),
-                )
-                alert = HighlightFlowAlert(
-                    title: "无法读取视频",
-                    message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
-                )
             }
+
+            selectedVideos = videos
+            reportFilteredVideoSelectionIfNeeded(
+                requestedItemCount: items.count,
+                retainedVideoCount: videos.count,
+                failedToLoadCount: failedToLoadCount,
+                noMarkerCoverageCount: noMarkerCoverageCount,
+            )
         }
 
         @MainActor
@@ -371,6 +384,44 @@
             ].merging(extra) { _, newValue in newValue })
         }
 
+        private func reportFilteredVideoSelectionIfNeeded(
+            requestedItemCount: Int,
+            retainedVideoCount: Int,
+            failedToLoadCount: Int,
+            noMarkerCoverageCount: Int,
+        ) {
+            let filteredVideoCount = failedToLoadCount + noMarkerCoverageCount
+            guard filteredVideoCount > 0 else {
+                return
+            }
+
+            logger.info(
+                "video.selection.filtered",
+                category: .video,
+                message: "已过滤不可用视频",
+                context: highlightContext(extra: [
+                    "requestedItemCount": "\(requestedItemCount)",
+                    "retainedVideoCount": "\(retainedVideoCount)",
+                    "filteredVideoCount": "\(filteredVideoCount)",
+                    "failedToLoadCount": "\(failedToLoadCount)",
+                    "noMarkerCoverageCount": "\(noMarkerCoverageCount)",
+                ]),
+            )
+
+            if retainedVideoCount == 0 {
+                selectedItems = []
+                alert = HighlightFlowAlert(
+                    title: "没有可用视频",
+                    message: "没有可用于本次训练的视频。请确认视频已下载、包含拍摄时间，并覆盖本次训练时间。",
+                )
+            } else {
+                alert = HighlightFlowAlert(
+                    title: "已忽略不可用视频",
+                    message: "已忽略 \(filteredVideoCount) 个不可用视频。请确认视频已下载、包含拍摄时间，并覆盖本次训练时间。",
+                )
+            }
+        }
+
         private func cleanupTemporaryVideos() {
             cleanupTemporaryVideos(selectedVideos)
         }
@@ -472,6 +523,13 @@
             return TrainingVideoMetadata(recordedStartAt: recordedStartAt, duration: duration)
         }
 
+        nonisolated private static var readyTrainingVideoChecker: SelectedTrainingVideoReadinessChecker {
+            SelectedTrainingVideoReadinessChecker { assetIdentifier in
+                let asset = try photoAsset(with: assetIdentifier)
+                try await requestLocalAVAsset(for: asset)
+            }
+        }
+
         nonisolated private static func requestAVAsset(
             for asset: PHAsset,
             deliveryQuality: HighlightClipPhotoLibraryDeliveryQuality,
@@ -502,6 +560,33 @@
             }
         }
 
+        nonisolated private static func requestLocalAVAsset(for asset: PHAsset) async throws {
+            let options = PHVideoRequestOptions()
+            options.deliveryMode = .mediumQualityFormat
+            options.isNetworkAccessAllowed = false
+
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
+                    if let error = info?[PHImageErrorKey] as? Error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+
+                    if let isCancelled = info?[PHImageCancelledKey] as? Bool, isCancelled {
+                        continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
+                        return
+                    }
+
+                    guard avAsset != nil else {
+                        continuation.resume(throwing: HighlightVideoSelectionError.videoNotReady)
+                        return
+                    }
+
+                    continuation.resume()
+                }
+            }
+        }
+
         nonisolated private static func loadTemporaryVideoURL(
             from item: PhotosPickerItem,
         ) async throws -> URL {
@@ -513,11 +598,15 @@
         }
 
         nonisolated private static func temporaryVideoURL(from videoID: String) -> URL? {
-            guard let url = URL(string: videoID), url.isFileURL else {
-                return nil
+            SelectedTrainingVideoReadinessChecker.temporaryVideoURL(from: videoID)
+        }
+
+        nonisolated private static func removeTemporaryVideoIfNeeded(_ video: SelectedTrainingVideo) {
+            guard let url = temporaryVideoURL(from: video.id) else {
+                return
             }
 
-            return url
+            try? FileManager.default.removeItem(at: url)
         }
 
         nonisolated private static func requiresPhotoLibraryReadAccess(for segments: [HighlightClipSegment]) -> Bool {
@@ -589,6 +678,7 @@
         case photoLibraryAccessDenied
         case missingRecordedStartAt
         case invalidDuration
+        case videoNotReady
 
         var errorDescription: String? {
             switch self {
@@ -600,6 +690,8 @@
                 "所选视频缺少拍摄时间，暂时无法用于自动剪辑。"
             case .invalidDuration:
                 "所选视频无法读取时长，请重新选择其他视频。"
+            case .videoNotReady:
+                "所选视频还没有下载完成，暂时无法用于自动剪辑。"
             }
         }
     }
