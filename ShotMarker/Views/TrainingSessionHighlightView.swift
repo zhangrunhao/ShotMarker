@@ -318,37 +318,7 @@
                                 "requestedDurationSeconds": Self.secondsString(request.requestedDuration),
                             ]),
                         )
-                        logger.info(
-                            "video.asset.picker_file_load.started",
-                            category: .video,
-                            message: "开始读取选择器临时视频文件",
-                            context: highlightContext(extra: [
-                                "requestedDurationSeconds": Self.secondsString(request.requestedDuration),
-                            ]),
-                        )
-                        let pickedVideoURL: URL
-                        do {
-                            pickedVideoURL = try await Self.loadTemporaryVideoURL(from: pickerItem)
-                        } catch {
-                            logger.error(
-                                "video.asset.picker_file_load.failed",
-                                category: .video,
-                                message: "选择器临时视频文件读取失败",
-                                error: error,
-                                context: highlightContext(extra: [
-                                    "requestedDurationSeconds": Self.secondsString(request.requestedDuration),
-                                ]),
-                            )
-                            throw PhotoLibraryVideoAccess.userFacingError(for: error)
-                        }
-                        logger.info(
-                            "video.asset.picker_file_load.succeeded",
-                            category: .video,
-                            message: "选择器临时视频文件读取成功",
-                            context: highlightContext(extra: [
-                                "requestedDurationSeconds": Self.secondsString(request.requestedDuration),
-                            ]),
-                        )
+                        let pickedVideoURL = try await Self.loadTemporaryVideoURL(from: pickerItem)
                         fallbackTemporaryVideoURLs.append(pickedVideoURL)
                         return AVURLAsset(url: pickedVideoURL)
                     }
@@ -506,9 +476,28 @@
             for asset: PHAsset,
             deliveryQuality: HighlightClipPhotoLibraryDeliveryQuality,
         ) async throws -> AVAsset {
-            try await PhotoLibraryVideoAccess.requestAVAsset(deliveryQuality: deliveryQuality) { options, completion in
+            let options = PHVideoRequestOptions()
+            options.deliveryMode = deliveryQuality.photoVideoRequestDeliveryMode
+            options.isNetworkAccessAllowed = true
+
+            return try await withCheckedThrowingContinuation { continuation in
                 PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
-                    completion(avAsset, info)
+                    if let error = info?[PHImageErrorKey] as? Error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+
+                    if let isCancelled = info?[PHImageCancelledKey] as? Bool, isCancelled {
+                        continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
+                        return
+                    }
+
+                    guard let avAsset else {
+                        continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
+                        return
+                    }
+
+                    continuation.resume(returning: avAsset)
                 }
             }
         }
@@ -516,11 +505,7 @@
         nonisolated private static func loadTemporaryVideoURL(
             from item: PhotosPickerItem,
         ) async throws -> URL {
-            guard let pickedVideo = try await PhotoLibraryVideoAccess.withTimeout(
-                operation: {
-                    try await item.loadTransferable(type: PickedTrainingVideo.self)
-                },
-            ) else {
+            guard let pickedVideo = try await item.loadTransferable(type: PickedTrainingVideo.self) else {
                 throw HighlightVideoSelectionError.videoLoadFailed
             }
 
@@ -554,6 +539,17 @@
         }
     }
 
+    private extension HighlightClipPhotoLibraryDeliveryQuality {
+        nonisolated var photoVideoRequestDeliveryMode: PHVideoRequestOptionsDeliveryMode {
+            switch self {
+            case .high:
+                .highQualityFormat
+            case .medium:
+                .mediumQualityFormat
+            }
+        }
+    }
+
     private struct TrainingVideoMetadata {
         let recordedStartAt: Date
         let duration: TimeInterval
@@ -564,7 +560,7 @@
         let message: String
     }
 
-    private struct PickedTrainingVideo: Sendable, Transferable {
+    private struct PickedTrainingVideo: Transferable {
         let url: URL
 
         static var transferRepresentation: some TransferRepresentation {
@@ -599,7 +595,7 @@
             case .videoLoadFailed:
                 "无法读取选择的视频。"
             case .photoLibraryAccessDenied:
-                "没有相册读取权限。请允许 ShotMarker 读取所选视频后再试。"
+                "没有相册读取权限。请允许山药蛋读取所选视频后再试。"
             case .missingRecordedStartAt:
                 "所选视频缺少拍摄时间，暂时无法用于自动剪辑。"
             case .invalidDuration:

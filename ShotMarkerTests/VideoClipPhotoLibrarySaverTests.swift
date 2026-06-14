@@ -1,5 +1,4 @@
 @testable import ShotMarker
-import AVFoundation
 import Photos
 import XCTest
 
@@ -77,101 +76,6 @@ final class VideoClipPhotoLibrarySaverTests: XCTestCase {
             (userFacingError as? LocalizedError)?.errorDescription,
             "无法从 iCloud 读取所选视频。请确认网络可用，或先在照片 App 打开这个视频让它下载完成后再试。",
         )
-    }
-
-    func testPhotoLibraryVideoAccessCancelsAssetRequestWhenItTimesOut() async {
-        var didStartRequest = false
-        var cancelledRequestIDs: [PHImageRequestID] = []
-
-        do {
-            _ = try await PhotoLibraryVideoAccess.requestAVAsset(
-                deliveryQuality: .high,
-                timeout: .milliseconds(1),
-                startRequest: { options, _ in
-                    didStartRequest = true
-                    XCTAssertEqual(options.deliveryMode, .highQualityFormat)
-                    return PHImageRequestID(42)
-                },
-                cancelRequest: { cancelledRequestIDs.append($0) },
-            )
-            XCTFail("Expected request timeout")
-        } catch PhotoLibraryVideoAccessError.requestTimedOut {
-            XCTAssertTrue(didStartRequest)
-            XCTAssertEqual(cancelledRequestIDs, [PHImageRequestID(42)])
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
-    }
-
-    func testPhotoLibraryVideoAccessRequestsCurrentVideoVersion() async throws {
-        let asset = AVMutableComposition()
-
-        let requestedAsset = try await PhotoLibraryVideoAccess.requestAVAsset(
-            deliveryQuality: .high,
-            timeout: .seconds(1),
-            startRequest: { options, completion in
-                XCTAssertEqual(options.version, .current)
-                completion(asset, nil)
-                return PHImageRequestID(42)
-            },
-        )
-
-        XCTAssertTrue(requestedAsset === asset)
-    }
-
-    func testPhotoLibraryVideoAccessTreatsTimeoutAsPickerFallbackCandidate() {
-        XCTAssertTrue(PhotoLibraryVideoAccess.shouldFallbackToPickerFile(for: PhotoLibraryVideoAccessError.requestTimedOut))
-    }
-
-    func testPhotoLibraryVideoAccessMapsTimeoutToActionableMessage() {
-        let userFacingError = PhotoLibraryVideoAccess.userFacingError(for: PhotoLibraryVideoAccessError.requestTimedOut)
-
-        XCTAssertEqual(
-            (userFacingError as? LocalizedError)?.errorDescription,
-            "系统相册无法读取所选视频的高质量版本，常见于 iCloud 未下载或相册内裁剪、调整后的视频。请先在照片 App 打开并等待下载完成，或导出/复制为新视频后再选择。",
-        )
-    }
-
-    func testPhotoLibraryVideoAccessWithTimeoutReturnsCompletedValue() async throws {
-        let value = try await PhotoLibraryVideoAccess.withTimeout(timeout: .seconds(1)) {
-            "loaded"
-        }
-
-        XCTAssertEqual(value, "loaded")
-    }
-
-    func testPhotoLibraryVideoAccessWithTimeoutThrowsWhenOperationDoesNotComplete() async {
-        do {
-            _ = try await PhotoLibraryVideoAccess.withTimeout(timeout: .milliseconds(1)) {
-                try await Task.sleep(for: .seconds(60))
-                return "loaded"
-            }
-            XCTFail("Expected request timeout")
-        } catch PhotoLibraryVideoAccessError.requestTimedOut {
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
-    }
-
-    func testPhotoLibraryVideoAccessWithTimeoutReturnsPromptlyWhenOperationIgnoresCancellation() async {
-        let start = ContinuousClock.now
-
-        do {
-            _ = try await PhotoLibraryVideoAccess.withTimeout(timeout: .milliseconds(1)) {
-                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
-                        continuation.resume()
-                    }
-                }
-                return "loaded"
-            }
-            XCTFail("Expected request timeout")
-        } catch PhotoLibraryVideoAccessError.requestTimedOut {
-            let elapsed = start.duration(to: .now)
-            XCTAssertTrue(elapsed < .milliseconds(100), "Expected timeout to return promptly, got \(elapsed)")
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
     }
 }
 

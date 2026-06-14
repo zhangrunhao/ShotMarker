@@ -217,6 +217,30 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.canMergeSelectedSessions)
     }
 
+    func testSelectedSessionsForExportReturnsSelectedSessionsInVisibleRowOrder() throws {
+        let older = try makeSession(
+            id: "00000000-0000-0000-0000-000000000801",
+            startedAt: Date(timeIntervalSince1970: 1000),
+        )
+        let newer = try makeSession(
+            id: "00000000-0000-0000-0000-000000000802",
+            startedAt: Date(timeIntervalSince1970: 2000),
+        )
+        let unselected = try makeSession(
+            id: "00000000-0000-0000-0000-000000000803",
+            startedAt: Date(timeIntervalSince1970: 3000),
+        )
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: [older, newer, unselected]),
+        )
+
+        viewModel.load()
+        viewModel.beginSelection(with: older.id)
+        viewModel.toggleSelection(for: newer.id)
+
+        XCTAssertEqual(viewModel.selectedSessionsForExport(), [newer, older])
+    }
+
     func testMergeSelectedSessionsLogsSuccess() throws {
         let firstSession = try makeSession(id: "00000000-0000-0000-0000-000000000601")
         let secondSession = try makeSession(id: "00000000-0000-0000-0000-000000000602")
@@ -319,15 +343,18 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         ])
     }
 
-    private func makeSession(id: String) throws -> TrainingSession {
+    private func makeSession(
+        id: String,
+        startedAt: Date = Date(timeIntervalSince1970: 2000),
+    ) throws -> TrainingSession {
         TrainingSession(
             id: try XCTUnwrap(UUID(uuidString: id)),
-            startedAt: Date(timeIntervalSince1970: 2000),
-            endedAt: Date(timeIntervalSince1970: 2600),
+            startedAt: startedAt,
+            endedAt: startedAt.addingTimeInterval(600),
             events: [
                 ShotMarkerEvent(
                     id: UUID(),
-                    markedAt: Date(timeIntervalSince1970: 2300),
+                    markedAt: startedAt.addingTimeInterval(300),
                 ),
             ],
         )

@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>ShotMarker</string>
+	<string>山药蛋</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -22,9 +22,9 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<!-- HealthKit usage strings are required before watchOS will show the Health authorization dialog. -->
 	<key>NSHealthShareUsageDescription</key>
-	<string>ShotMarker uses workout access to keep the watch training screen active during a session.</string>
+	<string>山药蛋 uses workout access to keep the watch training screen active during a session.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>ShotMarker writes a workout session so the watch can stay active while you train.</string>
+	<string>山药蛋 writes a workout session so the watch can stay active while you train.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

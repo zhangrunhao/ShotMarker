@@ -33,14 +33,19 @@ final class AppLogExportServiceTests: XCTestCase {
             timestamp: fixedDate(year: 2026, month: 5, day: 10, hour: 11),
             name: "diagnostics.export.started",
         )
-        let store = AppLogStore(directoryURL: logDirectory, calendar: calendar)
+        let fixedExportDate = try XCTUnwrap(exportDate)
+        let store = AppLogStore(
+            directoryURL: logDirectory,
+            calendar: calendar,
+            now: { fixedExportDate },
+        )
         await store.append(event)
         let service = makeService(store: store)
 
         let fileURL = try await service.export()
         let bundle = try decodeBundle(at: fileURL)
 
-        XCTAssertEqual(fileURL.lastPathComponent, "ShotMarker-Diagnostics-20260510-113500.json")
+        XCTAssertEqual(fileURL.lastPathComponent, "山药蛋-Diagnostics-20260510-113500.json")
         XCTAssertEqual(bundle.manifest.schemaVersion, 1)
         XCTAssertEqual(bundle.manifest.exportedAt, exportDate)
         XCTAssertEqual(bundle.manifest.appVersion, "1.2.3")

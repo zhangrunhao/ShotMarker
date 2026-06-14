@@ -147,6 +147,34 @@ final class TrainingSessionListViewModel: ObservableObject {
         selectedSessionIDs.contains(sessionID)
     }
 
+    func selectedSessionsForExport() -> [TrainingSession] {
+        rows.compactMap { row in
+            guard selectedSessionIDs.contains(row.id) else {
+                return nil
+            }
+
+            return session(for: row.id)
+        }
+    }
+
+    func importTrainingSessions(from fileURL: URL) throws -> TrainingSessionJSONImportResult {
+        let service = TrainingSessionJSONTransferService(
+            store: store,
+            notificationCenter: notificationCenter,
+        )
+        let result = try service.importTrainingSessions(from: fileURL)
+        load()
+        return result
+    }
+
+    func exportSelectedSessionsData() throws -> Data {
+        try TrainingSessionJSONTransferService(
+            store: store,
+            notificationCenter: notificationCenter,
+        )
+        .exportData(for: selectedSessionsForExport())
+    }
+
     func mergeSelectedSessions() {
         guard canMergeSelectedSessions else {
             return

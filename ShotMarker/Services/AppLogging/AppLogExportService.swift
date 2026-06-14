@@ -167,7 +167,7 @@ nonisolated struct AppLogExportService {
     private func filename(for date: Date) -> String {
         let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
         return String(
-            format: "ShotMarker-Diagnostics-%04d%02d%02d-%02d%02d%02d.json",
+            format: "山药蛋-Diagnostics-%04d%02d%02d-%02d%02d%02d.json",
             components.year ?? 0,
             components.month ?? 0,
             components.day ?? 0,
