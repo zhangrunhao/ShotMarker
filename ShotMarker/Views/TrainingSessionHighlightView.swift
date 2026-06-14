@@ -390,8 +390,13 @@
             failedToLoadCount: Int,
             noMarkerCoverageCount: Int,
         ) {
-            let filteredVideoCount = failedToLoadCount + noMarkerCoverageCount
-            guard filteredVideoCount > 0 else {
+            let summary = SelectedTrainingVideoFilterSummary(
+                requestedItemCount: requestedItemCount,
+                retainedVideoCount: retainedVideoCount,
+                failedToLoadCount: failedToLoadCount,
+                noMarkerCoverageCount: noMarkerCoverageCount,
+            )
+            guard summary.filteredVideoCount > 0 else {
                 return
             }
 
@@ -400,25 +405,19 @@
                 category: .video,
                 message: "已过滤不可用视频",
                 context: highlightContext(extra: [
-                    "requestedItemCount": "\(requestedItemCount)",
-                    "retainedVideoCount": "\(retainedVideoCount)",
-                    "filteredVideoCount": "\(filteredVideoCount)",
-                    "failedToLoadCount": "\(failedToLoadCount)",
-                    "noMarkerCoverageCount": "\(noMarkerCoverageCount)",
+                    "requestedItemCount": "\(summary.requestedItemCount)",
+                    "retainedVideoCount": "\(summary.retainedVideoCount)",
+                    "filteredVideoCount": "\(summary.filteredVideoCount)",
+                    "failedToLoadCount": "\(summary.failedToLoadCount)",
+                    "noMarkerCoverageCount": "\(summary.noMarkerCoverageCount)",
                 ]),
             )
 
-            if retainedVideoCount == 0 {
+            switch summary.presentationAction {
+            case .clearPickerSelection:
                 selectedItems = []
-                alert = HighlightFlowAlert(
-                    title: "没有可用视频",
-                    message: "没有可用于本次训练的视频。请确认视频已下载、包含拍摄时间，并覆盖本次训练时间。",
-                )
-            } else {
-                alert = HighlightFlowAlert(
-                    title: "已忽略不可用视频",
-                    message: "已忽略 \(filteredVideoCount) 个不可用视频。请确认视频已下载、包含拍摄时间，并覆盖本次训练时间。",
-                )
+            case .none:
+                break
             }
         }
 
