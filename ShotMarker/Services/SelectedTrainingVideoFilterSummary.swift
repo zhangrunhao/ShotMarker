@@ -22,4 +22,12 @@ nonisolated struct SelectedTrainingVideoFilterSummary: Equatable {
     var presentationAction: PresentationAction {
         shouldClearPickerSelection ? .clearPickerSelection : .none
     }
+
+    var inlineNotice: String? {
+        guard shouldClearPickerSelection else {
+            return nil
+        }
+
+        return "没有可用视频。已隐藏未下载、未准备好或不覆盖本次训练的视频。"
+    }
 }

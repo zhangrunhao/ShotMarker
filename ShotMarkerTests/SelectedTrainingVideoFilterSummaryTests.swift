@@ -14,7 +14,7 @@ final class SelectedTrainingVideoFilterSummaryTests: XCTestCase {
         XCTAssertEqual(summary.presentationAction, .none)
     }
 
-    func testSummaryClearsPickerSelectionSilentlyWhenAllVideosAreFiltered() {
+    func testSummaryShowsInlineNoticeWhenAllVideosAreFiltered() {
         let summary = SelectedTrainingVideoFilterSummary(
             requestedItemCount: 2,
             retainedVideoCount: 0,
@@ -24,6 +24,10 @@ final class SelectedTrainingVideoFilterSummaryTests: XCTestCase {
 
         XCTAssertEqual(summary.filteredVideoCount, 2)
         XCTAssertEqual(summary.presentationAction, .clearPickerSelection)
+        XCTAssertEqual(
+            summary.inlineNotice,
+            "没有可用视频。已隐藏未下载、未准备好或不覆盖本次训练的视频。",
+        )
     }
 
     func testSummaryKeepsPresentationSilentWhenNoVideosAreFiltered() {

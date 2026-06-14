@@ -19,6 +19,7 @@
         @State private var isGenerating = false
         @State private var clipSettings = ClipSettingsStore.shared.load()
         @State private var generationProgress: HighlightClipGenerationProgress?
+        @State private var selectionFilterSummary: SelectedTrainingVideoFilterSummary?
         @State private var alert: HighlightFlowAlert?
 
         init(session: TrainingSession, logger: AppLogging = AppLogger.shared) {
@@ -67,6 +68,12 @@
 
                     if isLoadingVideos {
                         ProgressView("读取视频")
+                    }
+
+                    if let inlineNotice = selectionFilterSummary?.inlineNotice {
+                        Text(inlineNotice)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -188,6 +195,7 @@
             guard !items.isEmpty else {
                 return
             }
+            selectionFilterSummary = nil
 
             logger.info(
                 "video.selection.started",
@@ -339,6 +347,7 @@
                 try await photoLibrarySaver.saveVideo(at: outputURL)
                 try? FileManager.default.removeItem(at: outputURL)
                 cleanupTemporaryVideos()
+                selectionFilterSummary = nil
                 selectedItems = []
                 selectedVideos = []
                 logger.info(
@@ -397,8 +406,10 @@
                 noMarkerCoverageCount: noMarkerCoverageCount,
             )
             guard summary.filteredVideoCount > 0 else {
+                selectionFilterSummary = nil
                 return
             }
+            selectionFilterSummary = summary
 
             logger.info(
                 "video.selection.filtered",
