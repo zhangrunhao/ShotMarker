@@ -5,6 +5,7 @@
     import Photos
     import PhotosUI
     import SwiftUI
+    import UIKit
     import UniformTypeIdentifiers
 
     struct TrainingSessionHighlightView: View {
@@ -19,7 +20,7 @@
         @State private var isGenerating = false
         @State private var clipSettings = ClipSettingsStore.shared.load()
         @State private var generationProgress: HighlightClipGenerationProgress?
-        @State private var selectionFilterSummary: SelectedTrainingVideoFilterSummary?
+        @State private var selectedVideoItems: [SelectedTrainingVideoSelectionItem] = []
         @State private var alert: HighlightFlowAlert?
 
         init(session: TrainingSession, logger: AppLogging = AppLogger.shared) {
@@ -62,18 +63,25 @@
                         matching: .videos,
                         photoLibrary: .shared(),
                     ) {
-                        Label(selectedVideos.isEmpty ? "选择视频" : "继续选择视频", systemImage: "video.badge.plus")
+                        Label(selectedVideoItems.isEmpty ? "选择视频" : "继续选择视频", systemImage: "video.badge.plus")
                     }
                     .disabled(isLoadingVideos || isGenerating)
 
                     if isLoadingVideos {
                         ProgressView("读取视频")
                     }
+                }
 
-                    if let inlineNotice = selectionFilterSummary?.inlineNotice {
-                        Text(inlineNotice)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                if !selectedVideoItems.isEmpty {
+                    Section("已选视频") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            LazyHStack(spacing: 12) {
+                                ForEach(selectedVideoItems) { item in
+                                    selectedVideoItemCard(item)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
                     }
                 }
 
@@ -169,6 +177,73 @@
             )
         }
 
+        private func selectedVideoItemCard(_ item: SelectedTrainingVideoSelectionItem) -> some View {
+            VStack(alignment: .leading, spacing: 6) {
+                ZStack {
+                    selectedVideoThumbnail(for: item)
+
+                    if item.isAvailable {
+                        VStack {
+                            HStack {
+                                Label("可用", systemImage: "checkmark.circle.fill")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 4)
+                                    .background(.green.opacity(0.9), in: Capsule())
+                                    .foregroundStyle(.white)
+
+                                Spacer()
+                            }
+
+                            Spacer()
+                        }
+                        .padding(6)
+                    } else {
+                        Color.black.opacity(0.58)
+
+                        Text(item.statusText)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                    }
+                }
+                .frame(width: 156, height: 88)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                Text(item.title)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 156, alignment: .leading)
+        }
+
+        @ViewBuilder
+        private func selectedVideoThumbnail(for item: SelectedTrainingVideoSelectionItem) -> some View {
+            if let thumbnailData = item.thumbnailData,
+               let image = UIImage(data: thumbnailData)
+            {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 156, height: 88)
+                    .clipped()
+            } else {
+                ZStack {
+                    Rectangle()
+                        .fill(.secondary.opacity(0.16))
+
+                    Image(systemName: "video")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(width: 156, height: 88)
+            }
+        }
+
         private func logHighlightViewOpened() {
             logger.info(
                 "highlight.view.opened",
@@ -191,11 +266,11 @@
         private func loadSelectedVideos(from items: [PhotosPickerItem]) async {
             cleanupTemporaryVideos()
             selectedVideos = []
+            selectedVideoItems = []
 
             guard !items.isEmpty else {
                 return
             }
-            selectionFilterSummary = nil
 
             logger.info(
                 "video.selection.started",
@@ -208,54 +283,40 @@
                 isLoadingVideos = false
             }
 
-            var videos: [SelectedTrainingVideo] = []
-            var failedToLoadCount = 0
-            var noMarkerCoverageCount = 0
+            var selectionItems: [SelectedTrainingVideoSelectionItem] = []
 
             for (index, item) in items.enumerated() {
-                do {
-                    let video = try await Self.loadSelectedVideo(from: item)
+                let selectionItem = await loadSelectedVideoItem(from: item, at: index)
+                selectionItems.append(selectionItem)
 
-                    guard VideoClipSegmentPlanner.canUseVideo(video, for: session) else {
-                        noMarkerCoverageCount += 1
-                        Self.removeTemporaryVideoIfNeeded(video)
-                        continue
-                    }
-
-                    try await Self.readyTrainingVideoChecker.ensureReady(video)
-                    videos.append(video)
+                if let video = selectionItem.video {
                     logger.info(
                         "video.selection.item.loaded",
                         category: .video,
                         message: "已读取所选视频",
                         context: highlightContext(extra: [
                             "itemIndex": "\(index + 1)",
-                            "loadedVideoCount": "\(videos.count)",
+                            "loadedVideoCount": "\(selectionItems.availableVideos.count)",
                             "source": item.itemIdentifier == nil ? "pickerFile" : "photoLibrary",
                             "durationSeconds": Self.secondsString(video.duration),
                         ]),
                     )
-                } catch {
-                    failedToLoadCount += 1
+                } else if let unavailableReason = selectionItem.unavailableReason {
                     logger.warning(
                         "video.selection.item.filtered",
                         category: .video,
                         message: "已忽略不可用视频",
                         context: highlightContext(extra: [
                             "itemIndex": "\(index + 1)",
-                            "reason": "failedToLoad",
+                            "reason": unavailableReason.logReason,
                         ]),
                     )
                 }
             }
 
-            selectedVideos = videos
-            reportFilteredVideoSelectionIfNeeded(
-                requestedItemCount: items.count,
-                retainedVideoCount: videos.count,
-                failedToLoadCount: failedToLoadCount,
-                noMarkerCoverageCount: noMarkerCoverageCount,
-            )
+            selectedVideoItems = selectionItems
+            selectedVideos = selectionItems.availableVideos
+            reportVideoSelectionResultsIfNeeded(selectionItems)
         }
 
         @MainActor
@@ -347,9 +408,9 @@
                 try await photoLibrarySaver.saveVideo(at: outputURL)
                 try? FileManager.default.removeItem(at: outputURL)
                 cleanupTemporaryVideos()
-                selectionFilterSummary = nil
                 selectedItems = []
                 selectedVideos = []
+                selectedVideoItems = []
                 logger.info(
                     "highlight.generate.succeeded",
                     category: .video,
@@ -393,43 +454,88 @@
             ].merging(extra) { _, newValue in newValue })
         }
 
-        private func reportFilteredVideoSelectionIfNeeded(
-            requestedItemCount: Int,
-            retainedVideoCount: Int,
-            failedToLoadCount: Int,
-            noMarkerCoverageCount: Int,
-        ) {
-            let summary = SelectedTrainingVideoFilterSummary(
-                requestedItemCount: requestedItemCount,
-                retainedVideoCount: retainedVideoCount,
-                failedToLoadCount: failedToLoadCount,
-                noMarkerCoverageCount: noMarkerCoverageCount,
-            )
-            guard summary.filteredVideoCount > 0 else {
-                selectionFilterSummary = nil
+        @MainActor
+        private func loadSelectedVideoItem(
+            from item: PhotosPickerItem,
+            at index: Int,
+        ) async -> SelectedTrainingVideoSelectionItem {
+            let title = "视频 \(index + 1)"
+            let fallbackID = "selection-\(index + 1)"
+
+            do {
+                let loadedVideo = try await Self.loadSelectedVideoWithThumbnail(
+                    from: item,
+                    fallbackID: fallbackID,
+                )
+                guard VideoClipSegmentPlanner.canUseVideo(loadedVideo.video, for: session) else {
+                    Self.removeTemporaryVideoIfNeeded(loadedVideo.video)
+                    return .unavailable(
+                        id: loadedVideo.video.id,
+                        title: title,
+                        reason: .noMarkerCoverage,
+                        thumbnailData: loadedVideo.thumbnailData,
+                    )
+                }
+
+                do {
+                    try await Self.readyTrainingVideoChecker.ensureReady(loadedVideo.video)
+                } catch {
+                    return .unavailable(
+                        id: loadedVideo.video.id,
+                        title: title,
+                        reason: .notReady,
+                        thumbnailData: loadedVideo.thumbnailData,
+                    )
+                }
+
+                return .available(
+                    id: loadedVideo.video.id,
+                    title: title,
+                    video: loadedVideo.video,
+                    thumbnailData: loadedVideo.thumbnailData,
+                )
+            } catch let failure as SelectedTrainingVideoLoadFailure {
+                return .unavailable(
+                    id: failure.id,
+                    title: title,
+                    reason: Self.unavailableReason(for: failure.error),
+                    thumbnailData: failure.thumbnailData,
+                )
+            } catch {
+                return .unavailable(
+                    id: item.itemIdentifier ?? fallbackID,
+                    title: title,
+                    reason: Self.unavailableReason(for: error),
+                    thumbnailData: nil,
+                )
+            }
+        }
+
+        private func reportVideoSelectionResultsIfNeeded(_ selectionItems: [SelectedTrainingVideoSelectionItem]) {
+            let unavailableItems = selectionItems.filter { !$0.isAvailable }
+            guard !unavailableItems.isEmpty else {
                 return
             }
-            selectionFilterSummary = summary
+
+            let countByReason = Dictionary(grouping: unavailableItems.compactMap(\.unavailableReason)) { $0 }
+                .mapValues(\.count)
 
             logger.info(
                 "video.selection.filtered",
                 category: .video,
                 message: "已过滤不可用视频",
                 context: highlightContext(extra: [
-                    "requestedItemCount": "\(summary.requestedItemCount)",
-                    "retainedVideoCount": "\(summary.retainedVideoCount)",
-                    "filteredVideoCount": "\(summary.filteredVideoCount)",
-                    "failedToLoadCount": "\(summary.failedToLoadCount)",
-                    "noMarkerCoverageCount": "\(summary.noMarkerCoverageCount)",
+                    "requestedItemCount": "\(selectionItems.count)",
+                    "retainedVideoCount": "\(selectionItems.availableVideos.count)",
+                    "filteredVideoCount": "\(unavailableItems.count)",
+                    "failedToLoadCount": "\(countByReason[.failedToLoad, default: 0])",
+                    "missingRecordedStartAtCount": "\(countByReason[.missingRecordedStartAt, default: 0])",
+                    "invalidDurationCount": "\(countByReason[.invalidDuration, default: 0])",
+                    "notReadyCount": "\(countByReason[.notReady, default: 0])",
+                    "noMarkerCoverageCount": "\(countByReason[.noMarkerCoverage, default: 0])",
+                    "photoLibraryAccessDeniedCount": "\(countByReason[.photoLibraryAccessDenied, default: 0])",
                 ]),
             )
-
-            switch summary.presentationAction {
-            case .clearPickerSelection:
-                selectedItems = []
-            case .none:
-                break
-            }
         }
 
         private func cleanupTemporaryVideos() {
@@ -442,40 +548,76 @@
             }
         }
 
-        nonisolated private static func loadSelectedVideo(
+        nonisolated private static func loadSelectedVideoWithThumbnail(
             from item: PhotosPickerItem,
-        ) async throws -> SelectedTrainingVideo {
+            fallbackID: String,
+        ) async throws -> LoadedTrainingVideo {
+            var photoLibraryFailure: SelectedTrainingVideoLoadFailure?
+
             if let assetIdentifier = item.itemIdentifier {
                 do {
                     try await ensurePhotoLibraryReadAccess()
-                    return try selectedVideoFromPhotoLibraryAsset(with: assetIdentifier)
+                    let asset = try photoAsset(with: assetIdentifier)
+                    let thumbnailData = await thumbnailData(from: asset)
+                    do {
+                        let metadata = try loadVideoMetadata(from: asset)
+                        return LoadedTrainingVideo(
+                            video: SelectedTrainingVideo(
+                                id: asset.localIdentifier,
+                                recordedStartAt: metadata.recordedStartAt,
+                                duration: metadata.duration,
+                            ),
+                            thumbnailData: thumbnailData,
+                        )
+                    } catch {
+                        throw SelectedTrainingVideoLoadFailure(
+                            id: assetIdentifier,
+                            thumbnailData: thumbnailData,
+                            error: error,
+                        )
+                    }
+                } catch let failure as SelectedTrainingVideoLoadFailure {
+                    photoLibraryFailure = failure
                 } catch {
                     // PhotosPicker can still provide a scoped file copy even when PHAsset access is unavailable.
+                    photoLibraryFailure = SelectedTrainingVideoLoadFailure(
+                        id: assetIdentifier,
+                        thumbnailData: nil,
+                        error: error,
+                    )
                 }
             }
 
-            guard let pickedVideo = try await item.loadTransferable(type: PickedTrainingVideo.self) else {
-                throw HighlightVideoSelectionError.videoLoadFailed
+            do {
+                let pickedVideo = try await loadPickedTrainingVideo(from: item)
+                let thumbnailData = await thumbnailData(from: pickedVideo.url)
+                do {
+                    let metadata = try await loadVideoMetadata(from: pickedVideo.url)
+                    return LoadedTrainingVideo(
+                        video: SelectedTrainingVideo(
+                            id: pickedVideo.url.absoluteString,
+                            recordedStartAt: metadata.recordedStartAt,
+                            duration: metadata.duration,
+                        ),
+                        thumbnailData: thumbnailData,
+                    )
+                } catch {
+                    try? FileManager.default.removeItem(at: pickedVideo.url)
+                    throw SelectedTrainingVideoLoadFailure(
+                        id: pickedVideo.url.absoluteString,
+                        thumbnailData: thumbnailData,
+                        error: error,
+                    )
+                }
+            } catch let failure as SelectedTrainingVideoLoadFailure {
+                throw failure
+            } catch {
+                throw photoLibraryFailure ?? SelectedTrainingVideoLoadFailure(
+                    id: item.itemIdentifier ?? fallbackID,
+                    thumbnailData: nil,
+                    error: error,
+                )
             }
-
-            let metadata = try await loadVideoMetadata(from: pickedVideo.url)
-            return SelectedTrainingVideo(
-                id: pickedVideo.url.absoluteString,
-                recordedStartAt: metadata.recordedStartAt,
-                duration: metadata.duration,
-            )
-        }
-
-        nonisolated private static func selectedVideoFromPhotoLibraryAsset(
-            with localIdentifier: String,
-        ) throws -> SelectedTrainingVideo {
-            let asset = try photoAsset(with: localIdentifier)
-            let metadata = try loadVideoMetadata(from: asset)
-            return SelectedTrainingVideo(
-                id: asset.localIdentifier,
-                recordedStartAt: metadata.recordedStartAt,
-                duration: metadata.duration,
-            )
         }
 
         nonisolated private static func ensurePhotoLibraryReadAccess() async throws {
@@ -531,6 +673,60 @@
             }
 
             return TrainingVideoMetadata(recordedStartAt: recordedStartAt, duration: duration)
+        }
+
+        nonisolated private static func thumbnailData(from asset: PHAsset) async -> Data? {
+            let options = PHImageRequestOptions()
+            options.deliveryMode = .fastFormat
+            options.resizeMode = .fast
+            options.isNetworkAccessAllowed = false
+            options.isSynchronous = true
+
+            var thumbnailData: Data?
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: CGSize(width: 320, height: 180),
+                contentMode: .aspectFill,
+                options: options,
+            ) { image, _ in
+                thumbnailData = image?.jpegData(compressionQuality: 0.72)
+            }
+            return thumbnailData
+        }
+
+        nonisolated private static func thumbnailData(from url: URL) async -> Data? {
+            let asset = AVURLAsset(url: url)
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 320, height: 180)
+
+            do {
+                let image = try await cgImage(from: generator, at: .zero)
+                return UIImage(cgImage: image).jpegData(compressionQuality: 0.72)
+            } catch {
+                return nil
+            }
+        }
+
+        nonisolated private static func cgImage(
+            from generator: AVAssetImageGenerator,
+            at time: CMTime,
+        ) async throws -> CGImage {
+            try await withCheckedThrowingContinuation { continuation in
+                generator.generateCGImageAsynchronously(for: time) { image, _, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+
+                    guard let image else {
+                        continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
+                        return
+                    }
+
+                    continuation.resume(returning: image)
+                }
+            }
         }
 
         nonisolated private static var readyTrainingVideoChecker: SelectedTrainingVideoReadinessChecker {
@@ -600,11 +796,17 @@
         nonisolated private static func loadTemporaryVideoURL(
             from item: PhotosPickerItem,
         ) async throws -> URL {
+            try await loadPickedTrainingVideo(from: item).url
+        }
+
+        nonisolated private static func loadPickedTrainingVideo(
+            from item: PhotosPickerItem,
+        ) async throws -> PickedTrainingVideo {
             guard let pickedVideo = try await item.loadTransferable(type: PickedTrainingVideo.self) else {
                 throw HighlightVideoSelectionError.videoLoadFailed
             }
 
-            return pickedVideo.url
+            return pickedVideo
         }
 
         nonisolated private static func temporaryVideoURL(from videoID: String) -> URL? {
@@ -636,6 +838,23 @@
                 }
             }
         }
+
+        nonisolated private static func unavailableReason(for error: Error) -> SelectedTrainingVideoUnavailableReason {
+            switch error as? HighlightVideoSelectionError {
+            case .videoLoadFailed:
+                .failedToLoad
+            case .photoLibraryAccessDenied:
+                .photoLibraryAccessDenied
+            case .missingRecordedStartAt:
+                .missingRecordedStartAt
+            case .invalidDuration:
+                .invalidDuration
+            case .videoNotReady:
+                .notReady
+            case nil:
+                .failedToLoad
+            }
+        }
     }
 
     private extension HighlightClipPhotoLibraryDeliveryQuality {
@@ -652,6 +871,17 @@
     private struct TrainingVideoMetadata {
         let recordedStartAt: Date
         let duration: TimeInterval
+    }
+
+    private struct LoadedTrainingVideo {
+        let video: SelectedTrainingVideo
+        let thumbnailData: Data?
+    }
+
+    private struct SelectedTrainingVideoLoadFailure: Error {
+        let id: String
+        let thumbnailData: Data?
+        let error: Error
     }
 
     private struct HighlightFlowAlert {
