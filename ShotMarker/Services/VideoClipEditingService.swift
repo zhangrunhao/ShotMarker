@@ -67,9 +67,21 @@ struct HighlightClipMarkerLabelOverlayStyle {
 
 struct VideoClipEditingService {
     private let logger: AppLogging
+    private let exportAsset: (AVAssetExportSession, URL, AVFileType) async throws -> Void
+    private let cancelExportSession: (AVAssetExportSession) -> Void
 
-    init(logger: AppLogging = AppLogger.shared) {
+    init(
+        logger: AppLogging = AppLogger.shared,
+        exportAsset: @escaping (AVAssetExportSession, URL, AVFileType) async throws -> Void = { exportSession, outputURL, fileType in
+            try await exportSession.export(to: outputURL, as: fileType)
+        },
+        cancelExportSession: @escaping (AVAssetExportSession) -> Void = { exportSession in
+            exportSession.cancelExport()
+        },
+    ) {
         self.logger = logger
+        self.exportAsset = exportAsset
+        self.cancelExportSession = cancelExportSession
     }
 
     func makeTestClip(from sourceURL: URL) async throws -> URL {
@@ -376,7 +388,12 @@ struct VideoClipEditingService {
             progressTask?.cancel()
         }
 
-        try await exportSession.export(to: outputURL, as: .mov)
+        try await withTaskCancellationHandler {
+            try await exportAsset(exportSession, outputURL, .mov)
+            try Task.checkCancellation()
+        } onCancel: {
+            cancelExportSession(exportSession)
+        }
 
         if let progressTotalMarkerCount, let progressHandler {
             progressHandler(

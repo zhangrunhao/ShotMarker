@@ -304,6 +304,50 @@ final class VideoClipEditingServiceTests: XCTestCase {
         }
     }
 
+    func testMakeHighlightClipCancelsExportSessionWhenTaskIsCancelled() async throws {
+        let sourceURL = temporaryDirectory.appendingPathComponent("highlight-cancel-source.mov")
+        try await makeSilentVideo(at: sourceURL, duration: 8)
+        let markerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002601"))
+        let exportStarted = XCTestExpectation(description: "export started")
+        let exportCancelled = XCTestExpectation(description: "export cancelled")
+        let service = VideoClipEditingService(
+            exportAsset: { _, _, _ in
+                exportStarted.fulfill()
+                try await Task.sleep(for: .seconds(10))
+            },
+            cancelExportSession: { _ in
+                exportCancelled.fulfill()
+            },
+        )
+        let segments = [
+            HighlightClipSegment(
+                markerID: markerID,
+                videoID: "video",
+                markerAt: Date(timeIntervalSince1970: 1_000),
+                start: 1,
+                duration: 2,
+            ),
+        ]
+
+        let task = Task {
+            try await service.makeHighlightClip(from: segments) { _ in
+                AVURLAsset(url: sourceURL)
+            }
+        }
+        await fulfillment(of: [exportStarted], timeout: 5)
+
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            await fulfillment(of: [exportCancelled], timeout: 5)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testMarkerLabelOverlayStyleUsesLargeOpaqueLabel() {
         let style = HighlightClipMarkerLabelOverlayStyle.default
 
