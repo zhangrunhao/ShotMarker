@@ -143,6 +143,35 @@ final class HighlightJobManagerTests: XCTestCase {
         XCTAssertNotNil(try store.loadJobs().first?.photoLibrarySavedAt)
     }
 
+    func testSaveAlreadySavedCompletedJobSavesAgainAndRefreshesSavedAt() async throws {
+        let fileStore = HighlightJobFileStore(baseDirectoryURL: temporaryDirectory)
+        let jobID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000040001"))
+        let outputURL = temporaryDirectory.appendingPathComponent("output.mov")
+        try Data([1]).write(to: outputURL)
+        let outputRelativePath = try fileStore.moveOutputVideo(at: outputURL, jobID: jobID)
+        let previousSavedAt = Date(timeIntervalSince1970: 4_000)
+        var completedJob = try makeJob(id: jobID, status: .completed)
+        completedJob.outputVideoPath = outputRelativePath
+        completedJob.photoLibrarySavedAt = previousSavedAt
+        let store = InMemoryHighlightJobStore(jobs: [completedJob])
+        var savedURLs: [URL] = []
+        let manager = HighlightJobManager(
+            store: store,
+            fileStore: fileStore,
+            runnerFactory: { _ in .immediateCompleted },
+            saveVideoToPhotoLibrary: { url in
+                savedURLs.append(url)
+            },
+        )
+        manager.load()
+
+        await manager.saveToPhotoLibrary(jobID: jobID)
+
+        XCTAssertEqual(savedURLs, [try fileStore.url(forRelativePath: outputRelativePath)])
+        XCTAssertGreaterThan(try XCTUnwrap(manager.jobs.first?.photoLibrarySavedAt), previousSavedAt)
+        XCTAssertGreaterThan(try XCTUnwrap(try store.loadJobs().first?.photoLibrarySavedAt), previousSavedAt)
+    }
+
     func testSaveCompletedJobToPhotoLibraryFailureLeavesJobCompletedAndRetryable() async throws {
         let fileStore = HighlightJobFileStore(baseDirectoryURL: temporaryDirectory)
         let jobID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000040001"))

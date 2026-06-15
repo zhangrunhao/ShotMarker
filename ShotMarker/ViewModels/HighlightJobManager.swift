@@ -202,8 +202,7 @@ final class HighlightJobManager: ObservableObject {
     func saveToPhotoLibrary(jobID: UUID) async {
         guard !photoLibrarySavingJobIDs.contains(jobID),
               let index = jobs.firstIndex(where: { $0.id == jobID }),
-              jobs[index].status == .completed,
-              jobs[index].photoLibrarySavedAt == nil
+              jobs[index].status == .completed
         else {
             return
         }

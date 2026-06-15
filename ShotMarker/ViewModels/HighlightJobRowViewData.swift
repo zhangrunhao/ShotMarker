@@ -21,7 +21,6 @@ struct HighlightJobRowViewData: Identifiable, Equatable {
         showsPlay = job.status == .completed
         showsSave = job.status == .completed
             && !isSavingToPhotoLibrary
-            && job.photoLibrarySavedAt == nil
             && job.outputVideoPath != nil
         showsClear = job.status == .completed || job.status == .failed || job.status == .interrupted
     }

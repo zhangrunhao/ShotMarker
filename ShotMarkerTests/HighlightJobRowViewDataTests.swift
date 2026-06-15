@@ -27,7 +27,7 @@ final class HighlightJobRowViewDataTests: XCTestCase {
         XCTAssertTrue(row.showsClear)
     }
 
-    func testCompletedSavedJobHidesSaveAction() throws {
+    func testCompletedSavedJobStillShowsSaveAction() throws {
         var job = try makeJob(status: .completed)
         job.photoLibrarySavedAt = Date(timeIntervalSince1970: 4_000)
 
@@ -35,7 +35,7 @@ final class HighlightJobRowViewDataTests: XCTestCase {
 
         XCTAssertEqual(row.statusText, "已保存到相册")
         XCTAssertTrue(row.showsPlay)
-        XCTAssertFalse(row.showsSave)
+        XCTAssertTrue(row.showsSave)
         XCTAssertTrue(row.showsClear)
     }
 
