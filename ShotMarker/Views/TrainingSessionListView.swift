@@ -1,5 +1,28 @@
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(iOS)
+    import UIKit
+#endif
+
+struct TrainingSessionPressFeedbackState: Equatable {
+    private(set) var pressedSessionID: UUID?
+
+    func isPressing(_ sessionID: UUID) -> Bool {
+        pressedSessionID == sessionID
+    }
+
+    mutating func setPressing(_ sessionID: UUID, isPressing: Bool) {
+        if isPressing {
+            pressedSessionID = sessionID
+        } else if pressedSessionID == sessionID {
+            pressedSessionID = nil
+        }
+    }
+
+    mutating func clear() {
+        pressedSessionID = nil
+    }
+}
 
 struct TrainingSessionListView: View {
     @StateObject private var viewModel: TrainingSessionListViewModel
@@ -12,6 +35,7 @@ struct TrainingSessionListView: View {
     @State private var isConfirmingLogExport = false
     @State private var exportedLogURL: URL?
     @State private var logExportErrorMessage: String?
+    @State private var pressFeedbackState = TrainingSessionPressFeedbackState()
     private let diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)?
     private let logger: AppLogging
     private let logExportService: AppLogExportService?
@@ -162,19 +186,33 @@ struct TrainingSessionListView: View {
                     }
                     .listRowBackground(viewModel.isSelected(row.id) ? Color.accentColor.opacity(0.12) : Color.clear)
                 } else {
-                    NavigationLink {
-                        destination(for: row)
-                    } label: {
-                        TrainingSessionRow(row: row)
-                    }
-                    .simultaneousGesture(
-                        LongPressGesture().onEnded { _ in
-                            viewModel.beginSelection(with: row.id)
-                        },
-                    )
+                    trainingSessionNavigationRow(for: row)
                 }
             }
         }
+    }
+
+    private func trainingSessionNavigationRow(for row: TrainingSessionRowViewData) -> some View {
+        let isPressing = pressFeedbackState.isPressing(row.id)
+
+        return NavigationLink {
+            destination(for: row)
+        } label: {
+            TrainingSessionRow(row: row)
+                .scaleEffect(isPressing ? 0.98 : 1)
+                .animation(.easeInOut(duration: 0.12), value: isPressing)
+        }
+        .onLongPressGesture(
+            minimumDuration: 0.5,
+            maximumDistance: 20,
+            perform: {
+                handleTrainingSessionLongPress(row.id)
+            },
+            onPressingChanged: { isPressing in
+                setTrainingSessionPressFeedback(row.id, isPressing: isPressing)
+            },
+        )
+        .listRowBackground(isPressing ? Color.accentColor.opacity(0.10) : Color.clear)
     }
 
     @ViewBuilder
@@ -187,6 +225,29 @@ struct TrainingSessionListView: View {
             }
         #else
             ContentUnavailableView("无法生成集锦", systemImage: "video.slash")
+        #endif
+    }
+
+    @MainActor
+    private func setTrainingSessionPressFeedback(_ sessionID: UUID, isPressing: Bool) {
+        withAnimation(.easeInOut(duration: 0.12)) {
+            pressFeedbackState.setPressing(sessionID, isPressing: isPressing)
+        }
+    }
+
+    @MainActor
+    private func handleTrainingSessionLongPress(_ sessionID: UUID) {
+        playSelectionFeedback()
+
+        withAnimation(.easeInOut(duration: 0.12)) {
+            pressFeedbackState.clear()
+            viewModel.beginSelection(with: sessionID)
+        }
+    }
+
+    private func playSelectionFeedback() {
+        #if os(iOS)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         #endif
     }
 

@@ -278,6 +278,30 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode([TrainingSession].self, from: data), [newer, older])
     }
 
+    func testTrainingSessionPressFeedbackStateTracksPressedSession() throws {
+        let firstID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000901"))
+        let secondID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000902"))
+        var state = TrainingSessionPressFeedbackState()
+
+        XCTAssertNil(state.pressedSessionID)
+        XCTAssertFalse(state.isPressing(firstID))
+
+        state.setPressing(firstID, isPressing: true)
+
+        XCTAssertEqual(state.pressedSessionID, firstID)
+        XCTAssertTrue(state.isPressing(firstID))
+        XCTAssertFalse(state.isPressing(secondID))
+
+        state.setPressing(secondID, isPressing: true)
+        state.setPressing(firstID, isPressing: false)
+
+        XCTAssertEqual(state.pressedSessionID, secondID)
+
+        state.clear()
+
+        XCTAssertNil(state.pressedSessionID)
+    }
+
     func testMergeSelectedSessionsLogsSuccess() throws {
         let firstSession = try makeSession(id: "00000000-0000-0000-0000-000000000601")
         let secondSession = try makeSession(id: "00000000-0000-0000-0000-000000000602")
