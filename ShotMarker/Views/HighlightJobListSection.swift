@@ -38,20 +38,41 @@ struct HighlightJobListSection: View {
         }
     }
 
+    @ViewBuilder
     private func row(_ row: HighlightJobRowViewData) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(row.title)
-                    .font(.headline)
-                Text(row.statusText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+        switch row.actionLayout {
+        case .completedActionBar:
+            completedActionBarRow(row)
+        case .compact:
+            compactRow(row)
+        }
+    }
 
-                if let progressFraction = row.progressFraction {
-                    ProgressView(value: progressFraction)
+    private func completedActionBarRow(_ row: HighlightJobRowViewData) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            rowTextContent(row)
+
+            HStack(spacing: 8) {
+                actionBarButton("播放", systemImage: "play.circle.fill", accessibilityLabel: "播放集锦") {
+                    onPlay(row.id)
+                }
+
+                actionBarButton("保存", systemImage: "square.and.arrow.down.fill", accessibilityLabel: "保存到相册") {
+                    actionConfirmation = .save(jobID: row.id)
+                }
+
+                actionBarButton("删除", systemImage: "trash.fill", tint: .red, accessibilityLabel: "删除任务") {
+                    actionConfirmation = .clear(jobID: row.id)
                 }
             }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func compactRow(_ row: HighlightJobRowViewData) -> some View {
+        HStack(spacing: 12) {
+            rowTextContent(row)
 
             Spacer(minLength: 8)
 
@@ -91,6 +112,21 @@ struct HighlightJobListSection: View {
         .padding(.vertical, 4)
     }
 
+    private func rowTextContent(_ row: HighlightJobRowViewData) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(row.title)
+                .font(.headline)
+            Text(row.statusText)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            if let progressFraction = row.progressFraction {
+                ProgressView(value: progressFraction)
+            }
+        }
+    }
+
     private func iconButton(
         _ accessibilityLabel: String,
         systemImage: String,
@@ -101,6 +137,26 @@ struct HighlightJobListSection: View {
                 .imageScale(.large)
         }
         .foregroundStyle(systemImage == "xmark.circle.fill" || systemImage == "trash" ? Color.red : Color.accentColor)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func actionBarButton(
+        _ title: String,
+        systemImage: String,
+        tint: Color = .accentColor,
+        accessibilityLabel: String,
+        action: @escaping () -> Void,
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity, minHeight: 36)
+                .padding(.horizontal, 8)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .foregroundStyle(tint)
+        }
         .accessibilityLabel(accessibilityLabel)
     }
 

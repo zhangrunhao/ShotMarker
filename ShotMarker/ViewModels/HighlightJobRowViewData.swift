@@ -69,11 +69,17 @@ struct HighlightJobActionConfirmation: Identifiable, Equatable {
     }
 }
 
+enum HighlightJobRowActionLayout: Equatable {
+    case compact
+    case completedActionBar
+}
+
 struct HighlightJobRowViewData: Identifiable, Equatable {
     let id: UUID
     let title: String
     let statusText: String
     let progressFraction: Double?
+    let actionLayout: HighlightJobRowActionLayout
     let showsCancel: Bool
     let showsRestart: Bool
     let showsPlay: Bool
@@ -92,6 +98,7 @@ struct HighlightJobRowViewData: Identifiable, Equatable {
             && !isSavingToPhotoLibrary
             && job.outputVideoPath != nil
         showsClear = job.status == .completed || job.status == .failed || job.status == .interrupted
+        actionLayout = showsPlay && showsSave && showsClear ? .completedActionBar : .compact
     }
 
     private static func statusText(for job: HighlightJob, isSavingToPhotoLibrary: Bool) -> String {

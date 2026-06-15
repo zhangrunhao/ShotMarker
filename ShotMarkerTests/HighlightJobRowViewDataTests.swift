@@ -40,6 +40,7 @@ final class HighlightJobRowViewDataTests: XCTestCase {
 
         XCTAssertEqual(row.statusText, "正在生成 3/10")
         XCTAssertEqual(row.progressFraction, 0.3)
+        XCTAssertEqual(row.actionLayout, .compact)
         XCTAssertTrue(row.showsCancel)
         XCTAssertFalse(row.showsRestart)
         XCTAssertFalse(row.showsPlay)
@@ -50,6 +51,7 @@ final class HighlightJobRowViewDataTests: XCTestCase {
 
         XCTAssertEqual(row.statusText, "已完成")
         XCTAssertNil(row.progressFraction)
+        XCTAssertEqual(row.actionLayout, .completedActionBar)
         XCTAssertTrue(row.showsPlay)
         XCTAssertTrue(row.showsSave)
         XCTAssertTrue(row.showsClear)
@@ -62,6 +64,7 @@ final class HighlightJobRowViewDataTests: XCTestCase {
         let row = HighlightJobRowViewData(job: job)
 
         XCTAssertEqual(row.statusText, "已保存到相册")
+        XCTAssertEqual(row.actionLayout, .completedActionBar)
         XCTAssertTrue(row.showsPlay)
         XCTAssertTrue(row.showsSave)
         XCTAssertTrue(row.showsClear)
@@ -81,6 +84,7 @@ final class HighlightJobRowViewDataTests: XCTestCase {
         let row = HighlightJobRowViewData(job: try makeJob(status: .completed), isSavingToPhotoLibrary: true)
 
         XCTAssertEqual(row.statusText, "正在保存到相册")
+        XCTAssertEqual(row.actionLayout, .compact)
         XCTAssertTrue(row.showsPlay)
         XCTAssertFalse(row.showsSave)
         XCTAssertTrue(row.showsClear)
