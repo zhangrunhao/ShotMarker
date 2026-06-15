@@ -64,6 +64,8 @@ struct TrainingSessionListView: View {
     @State private var isConfirmingLogExport = false
     @State private var exportedLogURL: URL?
     @State private var logExportErrorMessage: String?
+    @State private var highlightPlaybackURL: URL?
+    @State private var highlightPlaybackErrorMessage: String?
     @State private var pressFeedbackState = TrainingSessionPressFeedbackState()
     @State private var titlePressFeedbackState = TrainingSessionTitlePressFeedbackState()
     @State private var navigationState = TrainingSessionNavigationState()
@@ -179,6 +181,11 @@ struct TrainingSessionListView: View {
                     AppLogShareSheet(fileURL: exportedLogURL)
                 }
             }
+            .sheet(isPresented: highlightPlaybackSheetBinding) {
+                if let highlightPlaybackURL {
+                    HighlightJobVideoPlayerView(videoURL: highlightPlaybackURL)
+                }
+            }
             #endif
             .alert("导出日志失败", isPresented: logExportErrorBinding) {
                 Button("好", role: .cancel) {
@@ -186,6 +193,13 @@ struct TrainingSessionListView: View {
                 }
             } message: {
                 Text(logExportErrorMessage ?? "未知错误")
+            }
+            .alert("无法打开集锦", isPresented: highlightPlaybackErrorBinding) {
+                Button("好", role: .cancel) {
+                    highlightPlaybackErrorMessage = nil
+                }
+            } message: {
+                Text(highlightPlaybackErrorMessage ?? "未知错误")
             }
             .alert("是否导出诊断日志？", isPresented: $isConfirmingLogExport) {
                 Button("取消", role: .cancel) {}
@@ -380,7 +394,11 @@ struct TrainingSessionListView: View {
 
     @MainActor
     private func playHighlightJob(_ jobID: UUID) {
-        _ = jobID
+        do {
+            highlightPlaybackURL = try highlightJobManager.playbackURL(for: jobID)
+        } catch {
+            highlightPlaybackErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
     }
 
     @MainActor
@@ -429,6 +447,28 @@ struct TrainingSessionListView: View {
             set: { isPresented in
                 if !isPresented {
                     logExportErrorMessage = nil
+                }
+            },
+        )
+    }
+
+    private var highlightPlaybackSheetBinding: Binding<Bool> {
+        Binding(
+            get: { highlightPlaybackURL != nil },
+            set: { isPresented in
+                if !isPresented {
+                    highlightPlaybackURL = nil
+                }
+            },
+        )
+    }
+
+    private var highlightPlaybackErrorBinding: Binding<Bool> {
+        Binding(
+            get: { highlightPlaybackErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    highlightPlaybackErrorMessage = nil
                 }
             },
         )
