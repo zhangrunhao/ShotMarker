@@ -73,6 +73,7 @@ struct HighlightJobListSection: View {
             Image(systemName: systemImage)
                 .imageScale(.large)
         }
+        .foregroundStyle(systemImage == "xmark.circle.fill" || systemImage == "trash" ? Color.red : Color.accentColor)
         .accessibilityLabel(accessibilityLabel)
     }
 }

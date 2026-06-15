@@ -12,16 +12,19 @@ final class HighlightJobManager: ObservableObject {
     private let store: HighlightJobStoreProtocol
     private let fileStore: HighlightJobFileStoreProtocol
     private let runnerFactory: (HighlightJob) -> HighlightJobRunner
+    private let logger: AppLogging
     private var runningTasks: [UUID: Task<Void, Never>] = [:]
 
     init(
         store: HighlightJobStoreProtocol,
         fileStore: HighlightJobFileStoreProtocol,
         runnerFactory: @escaping (HighlightJob) -> HighlightJobRunner,
+        logger: AppLogging = AppLogger.shared,
     ) {
         self.store = store
         self.fileStore = fileStore
         self.runnerFactory = runnerFactory
+        self.logger = logger
     }
 
     #if os(iOS)
@@ -63,6 +66,7 @@ final class HighlightJobManager: ObservableObject {
                         },
                     )
                 },
+                logger: logger,
             )
         }
     #endif
@@ -102,16 +106,31 @@ final class HighlightJobManager: ObservableObject {
 
         jobs.insert(job, at: 0)
         persist()
+        logger.info(
+            "highlight.job.queued",
+            category: .video,
+            message: "集锦任务已加入队列",
+            context: ["jobID": job.id.uuidString],
+        )
         startNextQueuedJobIfPossible()
         return job
     }
 
     func cancel(jobID: UUID) {
+        let didRemoveJob = jobs.contains { $0.id == jobID }
         runningTasks[jobID]?.cancel()
         runningTasks[jobID] = nil
         try? fileStore.removeAllFiles(for: jobID)
         jobs.removeAll { $0.id == jobID }
         persist()
+        if didRemoveJob {
+            logger.info(
+                "highlight.job.cancelled",
+                category: .video,
+                message: "集锦任务已取消",
+                context: ["jobID": jobID.uuidString],
+            )
+        }
         startNextQueuedJobIfPossible()
     }
 
@@ -127,15 +146,30 @@ final class HighlightJobManager: ObservableObject {
         jobs[index].errorMessage = nil
         jobs[index].updatedAt = Date()
         persist()
+        logger.info(
+            "highlight.job.restarted",
+            category: .video,
+            message: "集锦任务重新开始",
+            context: ["jobID": jobID.uuidString],
+        )
         startNextQueuedJobIfPossible()
     }
 
     func clear(jobID: UUID) {
+        let didRemoveJob = jobs.contains { $0.id == jobID }
         runningTasks[jobID]?.cancel()
         runningTasks[jobID] = nil
         try? fileStore.removeAllFiles(for: jobID)
         jobs.removeAll { $0.id == jobID }
         persist()
+        if didRemoveJob {
+            logger.info(
+                "highlight.job.cleared",
+                category: .video,
+                message: "集锦任务已清理",
+                context: ["jobID": jobID.uuidString],
+            )
+        }
         startNextQueuedJobIfPossible()
     }
 
