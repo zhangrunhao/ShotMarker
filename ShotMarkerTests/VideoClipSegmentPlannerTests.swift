@@ -90,7 +90,7 @@ final class VideoClipSegmentPlannerTests: XCTestCase {
         ])
     }
 
-    func testHighlightPlanMergesOverlappingSegmentsForNearbyMarkers() throws {
+    func testHighlightPlanMergesOverlappingSegmentsAndUsesMarkerRangeLabel() throws {
         let firstMarker = try ShotMarkerEvent(
             id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000001301")),
             markedAt: Date(timeIntervalSince1970: 110),
@@ -133,7 +133,48 @@ final class VideoClipSegmentPlannerTests: XCTestCase {
         ])
     }
 
-    func testHighlightPlanDefaultWindowKeepsClipsTightAroundMarker() throws {
+    func testHighlightPlanMergesSegmentsSeparatedByOneSecondGap() throws {
+        let firstMarker = try ShotMarkerEvent(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000001601")),
+            markedAt: Date(timeIntervalSince1970: 110),
+        )
+        let secondMarker = try ShotMarkerEvent(
+            id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000001602")),
+            markedAt: Date(timeIntervalSince1970: 117),
+        )
+        let video = SelectedTrainingVideo(
+            id: "video",
+            recordedStartAt: Date(timeIntervalSince1970: 100),
+            duration: 60,
+        )
+        let session = TrainingSession(
+            startedAt: Date(timeIntervalSince1970: 100),
+            endedAt: Date(timeIntervalSince1970: 160),
+            events: [secondMarker, firstMarker],
+        )
+
+        let plan = VideoClipSegmentPlanner.highlightPlan(
+            for: session,
+            videos: [video],
+            clipSettings: ClipSettings(secondsBeforeMarker: 4, secondsAfterMarker: 2),
+        )
+
+        XCTAssertEqual(plan.matchedMarkerCount, 2)
+        XCTAssertEqual(plan.segments.map(\.markerLabel), ["1-2/2"])
+        XCTAssertEqual(plan.segments, [
+            HighlightClipSegment(
+                markerID: firstMarker.id,
+                videoID: video.id,
+                markerAt: firstMarker.markedAt,
+                start: 6,
+                duration: 13,
+                markerNumberRange: 1...2,
+                markerTotalCount: 2,
+            ),
+        ])
+    }
+
+    func testHighlightPlanDefaultWindowUsesNineSecondsBeforeAndFourSecondsAfterMarker() throws {
         let marker = try ShotMarkerEvent(
             id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000001401")),
             markedAt: Date(timeIntervalSince1970: 110),
@@ -151,8 +192,8 @@ final class VideoClipSegmentPlannerTests: XCTestCase {
 
         let plan = VideoClipSegmentPlanner.highlightPlan(for: session, videos: [video])
 
-        XCTAssertEqual(plan.segments.first?.start, 5)
-        XCTAssertEqual(plan.segments.first?.duration, 7)
+        XCTAssertEqual(plan.segments.first?.start, 1)
+        XCTAssertEqual(plan.segments.first?.duration, 13)
     }
 
     func testHighlightPlanClipsSegmentsToVideoBoundaries() throws {
