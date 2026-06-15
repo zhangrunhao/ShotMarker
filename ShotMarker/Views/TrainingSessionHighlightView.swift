@@ -1172,22 +1172,6 @@
         }
     }
 
-    private struct TrainingVideoMetadata {
-        let recordedStartAt: Date
-        let duration: TimeInterval
-    }
-
-    private struct LoadedTrainingVideo {
-        let video: SelectedTrainingVideo
-        let thumbnailData: Data?
-    }
-
-    private struct SelectedTrainingVideoLoadFailure: Error {
-        let id: String
-        let thumbnailData: Data?
-        let error: Error
-    }
-
     nonisolated private final class PhotoLibraryAssetRequestCancellationBox: @unchecked Sendable {
         private let lock = NSLock()
         private var requestID = PHInvalidImageRequestID
@@ -1244,29 +1228,6 @@
 
                 try FileManager.default.copyItem(at: received.file, to: copyURL)
                 return PickedTrainingVideo(url: copyURL)
-            }
-        }
-    }
-
-    private enum HighlightVideoSelectionError: LocalizedError {
-        case videoLoadFailed
-        case photoLibraryAccessDenied
-        case missingRecordedStartAt
-        case invalidDuration
-        case videoNotReady
-
-        var errorDescription: String? {
-            switch self {
-            case .videoLoadFailed:
-                "无法读取选择的视频。"
-            case .photoLibraryAccessDenied:
-                "没有相册读取权限。请允许 ShotMarker 读取所选视频后再试。"
-            case .missingRecordedStartAt:
-                "所选视频缺少拍摄时间，暂时无法用于自动剪辑。"
-            case .invalidDuration:
-                "所选视频无法读取时长，请重新选择其他视频。"
-            case .videoNotReady:
-                "所选视频还没有下载完成，暂时无法用于自动剪辑。"
             }
         }
     }
