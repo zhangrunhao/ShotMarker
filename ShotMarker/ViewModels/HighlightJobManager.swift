@@ -1,5 +1,9 @@
+import AVFoundation
 import Combine
 import Foundation
+#if os(iOS)
+    import Photos
+#endif
 
 @MainActor
 final class HighlightJobManager: ObservableObject {
@@ -19,6 +23,49 @@ final class HighlightJobManager: ObservableObject {
         self.fileStore = fileStore
         self.runnerFactory = runnerFactory
     }
+
+    #if os(iOS)
+        static func live(logger: AppLogging = AppLogger.shared) -> HighlightJobManager {
+            let store = HighlightJobStore()
+            let fileStore = HighlightJobFileStore()
+            let photoLibraryAssetProvider = PhotoLibraryVideoAssetProvider()
+            let photoLibrarySaver = VideoClipPhotoLibrarySaver(logger: logger)
+            let editingService = VideoClipEditingService(logger: logger)
+
+            return HighlightJobManager(
+                store: store,
+                fileStore: fileStore,
+                runnerFactory: { _ in
+                    HighlightJobRunner(
+                        fileStore: fileStore,
+                        makeHighlightClip: { segments, progressHandler, assetProvider in
+                            try await editingService.makeHighlightClip(
+                                from: segments,
+                                progressHandler: progressHandler,
+                                assetProvider,
+                            )
+                        },
+                        saveVideo: { outputURL in
+                            try await photoLibrarySaver.saveVideo(at: outputURL)
+                        },
+                        assetForJobVideo: { jobVideo, request in
+                            switch jobVideo.source {
+                            case let .photoLibraryAsset(localIdentifier):
+                                try await photoLibraryAssetProvider.ensureReadAccess()
+                                let asset = try photoLibraryAssetProvider.photoAsset(with: localIdentifier)
+                                return try await photoLibraryAssetProvider.requestAVAsset(
+                                    for: asset,
+                                    deliveryQuality: request.photoLibraryDeliveryQuality(forSourceDuration: asset.duration),
+                                )
+                            case let .jobInputFile(relativePath):
+                                return AVURLAsset(url: try fileStore.url(forRelativePath: relativePath))
+                            }
+                        },
+                    )
+                },
+            )
+        }
+    #endif
 
     func load() {
         do {

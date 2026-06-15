@@ -12,6 +12,9 @@ struct ContentView: View {
     private let syncService: PhoneWatchSyncService?
     private let logger: AppLogging
     private let logExportService: AppLogExportService?
+    #if os(iOS)
+        private let highlightJobManager: HighlightJobManager?
+    #endif
 
     @MainActor
     init(
@@ -19,11 +22,15 @@ struct ContentView: View {
         syncService: PhoneWatchSyncService? = nil,
         logger: AppLogging = AppLogger.shared,
         logExportService: AppLogExportService? = nil,
+        highlightJobManager: HighlightJobManager? = nil,
     ) {
         self.store = store
         self.syncService = syncService
         self.logger = logger
         self.logExportService = logExportService
+        #if os(iOS)
+            self.highlightJobManager = highlightJobManager
+        #endif
     }
 
     var body: some View {
@@ -32,6 +39,7 @@ struct ContentView: View {
             diagnosticsSnapshotProvider: syncService?.diagnosticsSnapshot,
             logger: logger,
             logExportService: logExportService,
+            highlightJobManager: highlightJobManager,
         )
     }
 }

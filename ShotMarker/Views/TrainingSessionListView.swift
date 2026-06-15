@@ -69,6 +69,7 @@ struct TrainingSessionListView: View {
     private let diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)?
     private let logger: AppLogging
     private let logExportService: AppLogExportService?
+    private let highlightJobManager: HighlightJobManager?
 
     @MainActor
     init(
@@ -76,10 +77,12 @@ struct TrainingSessionListView: View {
         diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)? = nil,
         logger: AppLogging = AppLogger.shared,
         logExportService: AppLogExportService? = nil,
+        highlightJobManager: HighlightJobManager? = nil,
     ) {
         self.diagnosticsSnapshotProvider = diagnosticsSnapshotProvider
         self.logger = logger
         self.logExportService = logExportService
+        self.highlightJobManager = highlightJobManager
         _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(store: store, logger: logger))
     }
 
@@ -89,10 +92,12 @@ struct TrainingSessionListView: View {
         diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)? = nil,
         logger: AppLogging = AppLogger.shared,
         logExportService: AppLogExportService? = nil,
+        highlightJobManager: HighlightJobManager? = nil,
     ) {
         self.diagnosticsSnapshotProvider = diagnosticsSnapshotProvider
         self.logger = logger
         self.logExportService = logExportService
+        self.highlightJobManager = highlightJobManager
         _viewModel = StateObject(wrappedValue: viewModel)
     }
 

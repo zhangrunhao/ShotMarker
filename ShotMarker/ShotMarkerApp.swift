@@ -13,6 +13,9 @@ struct ShotMarkerApp: App {
     private let syncService: PhoneWatchSyncService
     private let logger: AppLogging
     private let logExportService: AppLogExportService
+    #if os(iOS)
+        @StateObject private var highlightJobManager: HighlightJobManager
+    #endif
 
     @MainActor
     init() {
@@ -31,6 +34,11 @@ struct ShotMarkerApp: App {
             store: logStore,
             diagnosticsSnapshotProvider: syncService.diagnosticsSnapshot,
         )
+        #if os(iOS)
+            let highlightJobManager = HighlightJobManager.live(logger: logger)
+            _highlightJobManager = StateObject(wrappedValue: highlightJobManager)
+            highlightJobManager.load()
+        #endif
 
         self.store = store
         self.syncService = syncService
@@ -51,6 +59,7 @@ struct ShotMarkerApp: App {
                 syncService: syncService,
                 logger: logger,
                 logExportService: logExportService,
+                highlightJobManager: highlightJobManager,
             )
         }
     }
