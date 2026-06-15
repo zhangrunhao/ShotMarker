@@ -36,6 +36,22 @@ struct TrainingSessionTitlePressFeedbackState: Equatable {
     }
 }
 
+struct TrainingSessionNavigationTarget: Identifiable, Hashable {
+    let id: UUID
+}
+
+struct TrainingSessionNavigationState: Equatable {
+    private(set) var target: TrainingSessionNavigationTarget?
+
+    mutating func open(_ sessionID: UUID) {
+        target = TrainingSessionNavigationTarget(id: sessionID)
+    }
+
+    mutating func clear() {
+        target = nil
+    }
+}
+
 struct TrainingSessionListView: View {
     @StateObject private var viewModel: TrainingSessionListViewModel
     @State private var isImportingTrainingSessions = false
@@ -49,6 +65,7 @@ struct TrainingSessionListView: View {
     @State private var logExportErrorMessage: String?
     @State private var pressFeedbackState = TrainingSessionPressFeedbackState()
     @State private var titlePressFeedbackState = TrainingSessionTitlePressFeedbackState()
+    @State private var navigationState = TrainingSessionNavigationState()
     private let diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)?
     private let logger: AppLogging
     private let logExportService: AppLogExportService?
@@ -92,6 +109,9 @@ struct TrainingSessionListView: View {
             }
             .navigationTitle("训练记录")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(item: navigationTargetBinding) { target in
+                destination(for: target.id)
+            }
             .task {
                 viewModel.load()
             }
@@ -221,24 +241,38 @@ struct TrainingSessionListView: View {
     private func trainingSessionNavigationRow(for row: TrainingSessionRowViewData) -> some View {
         let isPressing = pressFeedbackState.isPressing(row.id)
 
-        return NavigationLink {
-            destination(for: row)
-        } label: {
-            TrainingSessionRow(row: row)
-                .scaleEffect(isPressing ? 0.98 : 1)
-                .animation(.easeInOut(duration: 0.12), value: isPressing)
-        }
-        .onLongPressGesture(
-            minimumDuration: 0.5,
-            maximumDistance: 20,
-            perform: {
-                handleTrainingSessionLongPress(row.id)
-            },
-            onPressingChanged: { isPressing in
-                setTrainingSessionPressFeedback(row.id, isPressing: isPressing)
+        return TrainingSessionRow(row: row)
+            .scaleEffect(isPressing ? 0.98 : 1)
+            .animation(.easeInOut(duration: 0.12), value: isPressing)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                navigationState.open(row.id)
+            }
+            .onLongPressGesture(
+                minimumDuration: 0.5,
+                maximumDistance: 20,
+                perform: {
+                    handleTrainingSessionLongPress(row.id)
+                },
+                onPressingChanged: { isPressing in
+                    setTrainingSessionPressFeedback(row.id, isPressing: isPressing)
+                },
+            )
+            .accessibilityAddTraits(.isButton)
+            .listRowBackground(isPressing ? Color.accentColor.opacity(0.10) : Color.clear)
+    }
+
+    private var navigationTargetBinding: Binding<TrainingSessionNavigationTarget?> {
+        Binding(
+            get: { navigationState.target },
+            set: { target in
+                if let target {
+                    navigationState.open(target.id)
+                } else {
+                    navigationState.clear()
+                }
             },
         )
-        .listRowBackground(isPressing ? Color.accentColor.opacity(0.10) : Color.clear)
     }
 
     @MainActor
@@ -264,9 +298,9 @@ struct TrainingSessionListView: View {
     }
 
     @ViewBuilder
-    private func destination(for row: TrainingSessionRowViewData) -> some View {
+    private func destination(for sessionID: UUID) -> some View {
         #if os(iOS)
-            if let session = viewModel.session(for: row.id) {
+            if let session = viewModel.session(for: sessionID) {
                 TrainingSessionHighlightView(session: session)
             } else {
                 ContentUnavailableView("无法加载训练记录", systemImage: "exclamationmark.triangle")

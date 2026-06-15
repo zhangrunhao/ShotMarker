@@ -321,6 +321,61 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertFalse(state.isPressing)
     }
 
+    func testTrainingSessionNavigationStateTracksTargetSession() throws {
+        let sessionID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000903"))
+        var state = TrainingSessionNavigationState()
+
+        XCTAssertNil(state.target)
+
+        state.open(sessionID)
+
+        XCTAssertEqual(state.target?.id, sessionID)
+
+        state.clear()
+
+        XCTAssertNil(state.target)
+    }
+
+    func testTrainingSessionRowPresentationUsesCompactSameDayTimeRange() throws {
+        let sameDayStart = Date(timeIntervalSince1970: 1_767_355_200)
+        let sameDayEnd = sameDayStart.addingTimeInterval(30 * 60)
+        let row = TrainingSessionRowViewData(
+            id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000904")),
+            startedAt: sameDayStart,
+            titleDate: sameDayStart,
+            descriptionStartedAt: sameDayStart,
+            descriptionEndedAt: sameDayEnd,
+            markerCount: 12,
+        )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        let presentation = TrainingSessionRowPresentation(row: row, calendar: calendar)
+
+        XCTAssertFalse(presentation.includesDateInTimeRange)
+        XCTAssertEqual(presentation.markerCountText, "12")
+        XCTAssertEqual(presentation.markerUnitText, "打点")
+    }
+
+    func testTrainingSessionRowPresentationIncludesDateForCrossDayTimeRange() throws {
+        let firstDay = Date(timeIntervalSince1970: 1_767_355_200)
+        let nextDay = firstDay.addingTimeInterval(24 * 60 * 60)
+        let row = TrainingSessionRowViewData(
+            id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000905")),
+            startedAt: firstDay,
+            titleDate: firstDay,
+            descriptionStartedAt: firstDay,
+            descriptionEndedAt: nextDay,
+            markerCount: 2,
+        )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        let presentation = TrainingSessionRowPresentation(row: row, calendar: calendar)
+
+        XCTAssertTrue(presentation.includesDateInTimeRange)
+    }
+
     func testMergeSelectedSessionsLogsSuccess() throws {
         let firstSession = try makeSession(id: "00000000-0000-0000-0000-000000000601")
         let secondSession = try makeSession(id: "00000000-0000-0000-0000-000000000602")
