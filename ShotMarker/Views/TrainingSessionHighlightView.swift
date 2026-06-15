@@ -1,5 +1,4 @@
 #if os(iOS)
-    import AVFoundation
     import Foundation
     import PhotosUI
     import SwiftUI
@@ -8,9 +7,10 @@
 
     struct TrainingSessionHighlightView: View {
         let session: TrainingSession
+        @Environment(\.dismiss) private var dismiss
+
         private let logger: AppLogging
-        private let editingService: VideoClipEditingService
-        private let photoLibrarySaver: VideoClipPhotoLibrarySaver
+        private let highlightJobManager: HighlightJobManager?
         private let videoLoadingService: TrainingVideoLoadingService<PhotosPickerItem>
         private let photoLibraryAssetProvider: PhotoLibraryVideoAssetProvider
         private let temporaryFileStore: TrainingVideoTemporaryFileStore
@@ -18,9 +18,8 @@
         @State private var selectedItems: [PhotosPickerItem] = []
         @State private var selectedVideos: [SelectedTrainingVideo] = []
         @State private var isLoadingVideos = false
-        @State private var isGenerating = false
+        @State private var isCreatingHighlightJob = false
         @State private var clipSettings = ClipSettingsStore.shared.load()
-        @State private var generationProgress: HighlightClipGenerationProgress?
         @State private var selectedVideoItems: [SelectedTrainingVideoSelectionItem] = []
         @State private var preparationConfirmationItemID: String?
         @State private var preparationTasks: [String: Task<Void, Never>] = [:]
@@ -29,9 +28,14 @@
         @State private var isExportingTrainingSession = false
         @State private var trainingSessionExportDocument: TrainingSessionJSONDocument?
 
-        init(session: TrainingSession, logger: AppLogging = AppLogger.shared) {
+        init(
+            session: TrainingSession,
+            logger: AppLogging = AppLogger.shared,
+            highlightJobManager: HighlightJobManager? = nil,
+        ) {
             self.session = session
             self.logger = logger
+            self.highlightJobManager = highlightJobManager
 
             let photoLibraryAssetProvider = PhotoLibraryVideoAssetProvider()
             let temporaryFileStore = TrainingVideoTemporaryFileStore()
@@ -41,8 +45,6 @@
                 photoLibraryAssetProvider: photoLibraryAssetProvider,
                 temporaryFileStore: temporaryFileStore,
             )
-            editingService = VideoClipEditingService(logger: logger)
-            photoLibrarySaver = VideoClipPhotoLibrarySaver(logger: logger)
         }
 
         private var plan: HighlightClipPlan {
@@ -69,7 +71,7 @@
                     } label: {
                         Label("导出记录", systemImage: "square.and.arrow.up")
                     }
-                    .disabled(isGenerating || isExportingTrainingSession)
+                    .disabled(isCreatingHighlightJob || isExportingTrainingSession)
                 }
             }
             .fileExporter(
@@ -110,9 +112,7 @@
             }
             .onDisappear {
                 cancelPreparationTasks()
-                if !isGenerating {
-                    cleanupTemporaryVideos()
-                }
+                cleanupTemporaryVideos()
             }
         }
 
@@ -161,7 +161,7 @@
                     LabeledContent("打点后", value: "\(Int(clipSettings.secondsAfterMarker)) 秒")
                 }
             }
-            .disabled(isGenerating)
+            .disabled(isCreatingHighlightJob)
         }
 
         private var videoPickerSection: some View {
@@ -174,7 +174,7 @@
                 ) {
                     Label(selectedVideoItems.isEmpty ? "选择视频" : "继续选择视频", systemImage: "video.badge.plus")
                 }
-                .disabled(isLoadingVideos || isGenerating)
+                .disabled(isLoadingVideos || isCreatingHighlightJob)
 
                 if isLoadingVideos {
                     ProgressView("读取视频")
@@ -213,29 +213,20 @@
             Section {
                 Button {
                     Task {
-                        await generateHighlight()
+                        await createHighlightJob()
                     }
                 } label: {
                     HStack {
-                        if isGenerating {
+                        if isCreatingHighlightJob {
                             ProgressView()
                         }
 
-                        Text(isGenerating ? "生成中" : "生成集锦")
+                        Text(isCreatingHighlightJob ? "创建中" : "生成集锦")
                             .frame(maxWidth: .infinity)
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!plan.canGenerate || isLoadingVideos || isGenerating)
-
-                if isGenerating, let generationProgress {
-                    ProgressView(
-                        value: Double(generationProgress.completedMarkerCount),
-                        total: Double(generationProgress.totalMarkerCount),
-                    ) {
-                        Text("正在生成 \(generationProgress.completedMarkerCount)/\(generationProgress.totalMarkerCount)")
-                    }
-                }
+                .disabled(!plan.canGenerate || isLoadingVideos || isCreatingHighlightJob)
             }
         }
 
@@ -334,7 +325,7 @@
                     selectedVideoItemCardContent(item)
                 }
                 .buttonStyle(.plain)
-                .disabled(isLoadingVideos || isGenerating)
+                .disabled(isLoadingVideos || isCreatingHighlightJob)
             } else {
                 selectedVideoItemCardContent(item)
             }
@@ -722,115 +713,60 @@
         }
 
         @MainActor
-        private func generateHighlight() async {
+        private func createHighlightJob() async {
             let currentPlan = plan
-            let segments = currentPlan.segments
-            let totalMarkerCount = currentPlan.matchedMarkerCount
-            guard !segments.isEmpty else {
+            guard currentPlan.canGenerate else {
+                return
+            }
+
+            guard let highlightJobManager else {
+                alert = HighlightFlowAlert(title: "无法创建任务", message: "集锦任务管理器不可用。")
                 return
             }
 
             logger.info(
-                "highlight.generate.started",
+                "highlight.job.create.started",
                 category: .video,
-                message: "开始生成集锦",
+                message: "开始创建集锦任务",
                 context: highlightPlanContext(currentPlan, extra: [
-                    "segmentCount": "\(segments.count)",
+                    "segmentCount": "\(currentPlan.segments.count)",
                     "secondsBeforeMarker": Self.secondsString(clipSettings.secondsBeforeMarker),
                     "secondsAfterMarker": Self.secondsString(clipSettings.secondsAfterMarker),
                 ]),
             )
-            isGenerating = true
-            generationProgress = HighlightClipGenerationProgress(
-                completedMarkerCount: 0,
-                totalMarkerCount: totalMarkerCount,
-            )
-            var fallbackTemporaryVideoURLs: [URL] = []
+            isCreatingHighlightJob = true
             defer {
-                isGenerating = false
-                generationProgress = nil
-                for url in fallbackTemporaryVideoURLs {
-                    try? FileManager.default.removeItem(at: url)
-                }
+                isCreatingHighlightJob = false
             }
 
             do {
-                if requiresPhotoLibraryReadAccess(for: segments) {
-                    try await photoLibraryAssetProvider.ensureReadAccess()
-                }
-
-                let pickerItemsByAssetIdentifier = Self.pickerItemsByAssetIdentifier(from: selectedItems)
-                let outputURL = try await editingService.makeHighlightClip(
-                    from: segments,
-                    progressHandler: { progress in
-                        generationProgress = progress
-                        logger.info(
-                            "highlight.generate.progress",
-                            category: .video,
-                            message: "集锦生成进度更新",
-                            context: highlightContext(extra: [
-                                "completedMarkerCount": "\(progress.completedMarkerCount)",
-                                "totalMarkerCount": "\(progress.totalMarkerCount)",
-                            ]),
-                        )
-                    },
-                ) { request in
-                    if let fileURL = temporaryFileStore.temporaryVideoURL(from: request.videoID) {
-                        return AVURLAsset(url: fileURL)
-                    }
-
-                    let asset = try photoLibraryAssetProvider.photoAsset(with: request.videoID)
-                    do {
-                        return try await photoLibraryAssetProvider.requestAVAsset(
-                            for: asset,
-                            deliveryQuality: request.photoLibraryDeliveryQuality(
-                                forSourceDuration: asset.duration,
-                            ),
-                        )
-                    } catch {
-                        guard PhotoLibraryVideoAccess.shouldFallbackToPickerFile(for: error),
-                              let pickerItem = pickerItemsByAssetIdentifier[request.videoID]
-                        else {
-                            throw PhotoLibraryVideoAccess.userFacingError(for: error)
-                        }
-
-                        logger.warning(
-                            "video.asset.fallback_to_picker_file",
-                            category: .video,
-                            message: "改用选择器临时文件读取视频",
-                            context: highlightContext(extra: [
-                                "requestedDurationSeconds": Self.secondsString(request.requestedDuration),
-                            ]),
-                        )
-                        let pickedVideo = try await temporaryFileStore.loadPickedTrainingVideo(from: pickerItem)
-                        fallbackTemporaryVideoURLs.append(pickedVideo.url)
-                        return AVURLAsset(url: pickedVideo.url)
-                    }
-                }
-                try await photoLibrarySaver.saveVideo(at: outputURL)
-                try? FileManager.default.removeItem(at: outputURL)
+                _ = try await highlightJobManager.createJob(
+                    session: session,
+                    selectedVideos: selectedVideos,
+                    clipSettings: clipSettings,
+                )
                 cancelPreparationTasks()
                 cleanupTemporaryVideos()
                 selectedItems = []
                 selectedVideos = []
                 selectedVideoItems = []
                 logger.info(
-                    "highlight.generate.succeeded",
+                    "highlight.job.create.succeeded",
                     category: .video,
-                    message: "集锦生成成功",
-                    context: highlightPlanContext(currentPlan, extra: ["segmentCount": "\(segments.count)"]),
+                    message: "集锦任务创建成功",
+                    context: highlightPlanContext(currentPlan),
                 )
-                alert = HighlightFlowAlert(title: "集锦已保存", message: "新视频已保存到相册。")
+                dismiss()
             } catch {
                 logger.error(
-                    "highlight.generate.failed",
+                    "highlight.job.create.failed",
                     category: .video,
-                    message: "集锦生成失败",
+                    message: "集锦任务创建失败",
                     error: error,
-                    context: highlightPlanContext(currentPlan, extra: ["segmentCount": "\(segments.count)"]),
+                    context: highlightPlanContext(currentPlan),
                 )
                 alert = HighlightFlowAlert(
-                    title: "集锦生成失败",
+                    title: "创建任务失败",
                     message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
                 )
             }
@@ -907,22 +843,8 @@
             temporaryFileStore.cleanupTemporaryVideos(videos)
         }
 
-        private func requiresPhotoLibraryReadAccess(for segments: [HighlightClipSegment]) -> Bool {
-            segments.contains { temporaryFileStore.temporaryVideoURL(from: $0.videoID) == nil }
-        }
-
         private nonisolated static func secondsString(_ value: TimeInterval) -> String {
             String(format: "%.3f", value)
-        }
-
-        private nonisolated static func pickerItemsByAssetIdentifier(
-            from items: [PhotosPickerItem],
-        ) -> [String: PhotosPickerItem] {
-            items.reduce(into: [:]) { result, item in
-                if let assetIdentifier = item.itemIdentifier {
-                    result[assetIdentifier] = item
-                }
-            }
         }
     }
 

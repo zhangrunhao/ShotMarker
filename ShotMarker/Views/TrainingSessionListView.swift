@@ -360,7 +360,7 @@ struct TrainingSessionListView: View {
     private func destination(for sessionID: UUID) -> some View {
         #if os(iOS)
             if let session = viewModel.session(for: sessionID) {
-                TrainingSessionHighlightView(session: session)
+                TrainingSessionHighlightView(session: session, highlightJobManager: highlightJobManager)
             } else {
                 ContentUnavailableView("无法加载训练记录", systemImage: "exclamationmark.triangle")
             }
