@@ -49,10 +49,7 @@ struct TrainingSessionJSONTransferService {
     }
 
     func importTrainingSessions(from data: Data) throws -> TrainingSessionJSONImportResult {
-        let importedSessions: [TrainingSession]
-        do {
-            importedSessions = try decoder.decode([TrainingSession].self, from: data)
-        } catch {
+        guard let importedSessions = Self.decodeTrainingSessions(from: data, decoder: decoder) else {
             throw TrainingSessionJSONTransferError.invalidJSON
         }
 
@@ -86,5 +83,17 @@ struct TrainingSessionJSONTransferService {
         }
 
         return try encoder.encode(sessions)
+    }
+
+    private static func decodeTrainingSessions(from data: Data, decoder: JSONDecoder) -> [TrainingSession]? {
+        if let sessions = try? decoder.decode([TrainingSession].self, from: data) {
+            return sessions
+        }
+
+        if let session = try? decoder.decode(TrainingSession.self, from: data) {
+            return [session]
+        }
+
+        return nil
     }
 }

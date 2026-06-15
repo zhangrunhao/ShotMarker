@@ -9,6 +9,7 @@ struct TrainingSessionListView: View {
     @State private var trainingSessionExportCount = 0
     @State private var trainingSessionTransferAlert: TrainingSessionTransferAlert?
     @State private var isExportingLogs = false
+    @State private var isConfirmingLogExport = false
     @State private var exportedLogURL: URL?
     @State private var logExportErrorMessage: String?
     private let diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)?
@@ -53,24 +54,30 @@ struct TrainingSessionListView: View {
                 }
             }
             .navigationTitle("训练记录")
+            .navigationBarTitleDisplayMode(.inline)
             .task {
                 viewModel.load()
             }
             .toolbar {
+                if logExportService != nil {
+                    ToolbarItem(placement: .principal) {
+                        Text("训练记录")
+                            .font(.headline)
+                            .onLongPressGesture(minimumDuration: 5) {
+                                guard !isExportingLogs else {
+                                    return
+                                }
+
+                                isConfirmingLogExport = true
+                            }
+                    }
+                }
+
                 if viewModel.isSelectionMode {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("取消") {
                             viewModel.clearSelection()
                         }
-                    }
-
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            prepareSelectedTrainingSessionExport()
-                        } label: {
-                            Label("导出记录", systemImage: "square.and.arrow.up")
-                        }
-                        .disabled(isExportingTrainingSessions)
                     }
                 } else {
                     ToolbarItemGroup(placement: .primaryAction) {
@@ -81,15 +88,13 @@ struct TrainingSessionListView: View {
                         }
                         .accessibilityLabel("导入训练记录")
 
-                        if logExportService != nil {
-                            Button {
-                                Task { await exportLogs() }
-                            } label: {
-                                Image(systemName: "doc.text")
-                            }
-                            .accessibilityLabel("导出日志")
-                            .disabled(isExportingLogs)
+                        Button {
+                            prepareAllTrainingSessionExport()
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
                         }
+                        .accessibilityLabel("导出全部训练记录")
+                        .disabled(isExportingTrainingSessions || viewModel.isEmpty)
                     }
                 }
             }
@@ -113,11 +118,11 @@ struct TrainingSessionListView: View {
                 Text(trainingSessionTransferAlert?.message ?? "")
             }
             #if os(iOS)
-                .sheet(isPresented: exportedLogSheetBinding) {
-                    if let exportedLogURL {
-                        AppLogShareSheet(fileURL: exportedLogURL)
-                    }
+            .sheet(isPresented: exportedLogSheetBinding) {
+                if let exportedLogURL {
+                    AppLogShareSheet(fileURL: exportedLogURL)
                 }
+            }
             #endif
             .alert("导出日志失败", isPresented: logExportErrorBinding) {
                 Button("好", role: .cancel) {
@@ -125,6 +130,14 @@ struct TrainingSessionListView: View {
                 }
             } message: {
                 Text(logExportErrorMessage ?? "未知错误")
+            }
+            .alert("是否导出诊断日志？", isPresented: $isConfirmingLogExport) {
+                Button("取消", role: .cancel) {}
+                Button("导出") {
+                    Task { await exportLogs() }
+                }
+            } message: {
+                Text("导出文件将包含应用诊断日志。")
             }
         }
     }
@@ -226,19 +239,22 @@ struct TrainingSessionListView: View {
     }
 
     @MainActor
-    private func prepareSelectedTrainingSessionExport() {
-        let selectedCount = viewModel.selectedSessionsForExport().count
+    private func prepareAllTrainingSessionExport() {
+        let exportCount = viewModel.allSessionsForExport().count
         logger.info(
             "training.sessions.export.started",
             category: .training,
             message: "开始导出训练记录",
-            context: ["selectedTrainingSessionCount": "\(selectedCount)"],
+            context: [
+                "exportScope": "all",
+                "trainingSessionCount": "\(exportCount)",
+            ],
         )
 
         do {
-            let data = try viewModel.exportSelectedSessionsData()
+            let data = try viewModel.exportAllSessionsData()
             trainingSessionExportDocument = TrainingSessionJSONDocument(data: data)
-            trainingSessionExportCount = selectedCount
+            trainingSessionExportCount = exportCount
             isExportingTrainingSessions = true
         } catch {
             logger.error(
@@ -246,7 +262,10 @@ struct TrainingSessionListView: View {
                 category: .training,
                 message: "训练记录导出失败",
                 error: error,
-                context: ["selectedTrainingSessionCount": "\(selectedCount)"],
+                context: [
+                    "exportScope": "all",
+                    "trainingSessionCount": "\(exportCount)",
+                ],
             )
             trainingSessionTransferAlert = .exportFailed(error)
         }
@@ -266,7 +285,7 @@ struct TrainingSessionListView: View {
             trainingSessionExportDocument = nil
             trainingSessionExportCount = 0
             viewModel.clearSelection()
-        case .failure(let error):
+        case let .failure(error):
             guard !(error is CancellationError) else {
                 trainingSessionExportDocument = nil
                 trainingSessionExportCount = 0
@@ -289,7 +308,7 @@ struct TrainingSessionListView: View {
     @MainActor
     private func handleTrainingSessionImport(_ result: Result<URL, Error>) {
         switch result {
-        case .success(let fileURL):
+        case let .success(fileURL):
             logger.info(
                 "training.sessions.import.started",
                 category: .training,
@@ -318,7 +337,7 @@ struct TrainingSessionListView: View {
                 )
                 trainingSessionTransferAlert = .importFailed(error)
             }
-        case .failure(let error):
+        case let .failure(error):
             guard !(error is CancellationError) else {
                 return
             }
@@ -362,7 +381,7 @@ struct TrainingSessionListView: View {
     }
 }
 
-private struct TrainingSessionJSONDocument: FileDocument {
+struct TrainingSessionJSONDocument: FileDocument {
     static var readableContentTypes: [UTType] {
         [.json]
     }
@@ -377,7 +396,7 @@ private struct TrainingSessionJSONDocument: FileDocument {
         data = configuration.file.regularFileContents ?? Data()
     }
 
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+    func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: data)
     }
 }

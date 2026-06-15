@@ -4,6 +4,7 @@
     import PhotosUI
     import SwiftUI
     import UIKit
+    import UniformTypeIdentifiers
 
     struct TrainingSessionHighlightView: View {
         let session: TrainingSession
@@ -25,6 +26,8 @@
         @State private var preparationTasks: [String: Task<Void, Never>] = [:]
         @State private var preparationRunIDs: [String: UUID] = [:]
         @State private var alert: HighlightFlowAlert?
+        @State private var isExportingTrainingSession = false
+        @State private var trainingSessionExportDocument: TrainingSessionJSONDocument?
 
         init(session: TrainingSession, logger: AppLogging = AppLogger.shared) {
             self.session = session
@@ -52,105 +55,31 @@
 
         var body: some View {
             List {
-                Section("训练") {
-                    LabeledContent("时间", value: trainingRangeText)
-                    LabeledContent("打点", value: "\(session.markerCount) 个")
-                }
-
-                Section("剪辑范围") {
-                    Stepper(value: $clipSettings.secondsBeforeMarker, in: 0...20, step: 1) {
-                        LabeledContent("打点前", value: "\(Int(clipSettings.secondsBeforeMarker)) 秒")
-                    }
-
-                    Stepper(value: $clipSettings.secondsAfterMarker, in: 1...20, step: 1) {
-                        LabeledContent("打点后", value: "\(Int(clipSettings.secondsAfterMarker)) 秒")
-                    }
-                }
-                .disabled(isGenerating)
-
-                Section {
-                    PhotosPicker(
-                        selection: $selectedItems,
-                        maxSelectionCount: 20,
-                        matching: .videos,
-                        photoLibrary: .shared(),
-                    ) {
-                        Label(selectedVideoItems.isEmpty ? "选择视频" : "继续选择视频", systemImage: "video.badge.plus")
-                    }
-                    .disabled(isLoadingVideos || isGenerating)
-
-                    if isLoadingVideos {
-                        ProgressView("读取视频")
-                    }
-                }
-
-                if !selectedVideoItems.isEmpty {
-                    Section("已选视频") {
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(Array(selectedVideoItems.rows(maximumItemsPerRow: 2).enumerated()), id: \.offset) { row in
-                                HStack(spacing: 12) {
-                                    ForEach(row.element) { item in
-                                        selectedVideoItemCard(item)
-                                    }
-
-                                    if row.element.count < 2 {
-                                        Spacer(minLength: 0)
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-
-                if !selectedVideos.isEmpty {
-                    Section("覆盖结果") {
-                        LabeledContent("已选择", value: "\(plan.selectedVideoCount) 个视频")
-                        LabeledContent("可剪辑", value: "\(plan.matchedMarkerCount) / \(plan.totalMarkerCount) 个打点")
-
-                        if plan.unmatchedMarkerCount > 0 {
-                            Text("\(plan.unmatchedMarkerCount) 个打点不在所选视频范围内，生成时会跳过。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if !plan.canGenerate {
-                            Text("所选视频没有覆盖任何打点。请确认视频是否对应这次训练。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Section {
-                        Button {
-                            Task {
-                                await generateHighlight()
-                            }
-                        } label: {
-                            HStack {
-                                if isGenerating {
-                                    ProgressView()
-                                }
-
-                                Text(isGenerating ? "生成中" : "生成集锦")
-                                    .frame(maxWidth: .infinity)
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!plan.canGenerate || isLoadingVideos || isGenerating)
-
-                        if isGenerating, let generationProgress {
-                            ProgressView(
-                                value: Double(generationProgress.completedMarkerCount),
-                                total: Double(generationProgress.totalMarkerCount),
-                            ) {
-                                Text("正在生成 \(generationProgress.completedMarkerCount)/\(generationProgress.totalMarkerCount)")
-                            }
-                        }
-                    }
-                }
+                trainingSummarySection
+                clipSettingsSection
+                videoPickerSection
+                selectedVideoItemsSection
+                coverageAndGenerationSections
             }
             .navigationTitle("生成集锦")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        prepareTrainingSessionExport()
+                    } label: {
+                        Label("导出记录", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(isGenerating || isExportingTrainingSession)
+                }
+            }
+            .fileExporter(
+                isPresented: $isExportingTrainingSession,
+                document: trainingSessionExportDocument,
+                contentType: .json,
+                defaultFilename: "ShotMarker-TrainingSession-\(session.id.uuidString).json",
+            ) { result in
+                handleTrainingSessionExport(result)
+            }
             .onChange(of: selectedItems) { _, newItems in
                 Task {
                     await loadSelectedVideos(from: newItems)
@@ -213,6 +142,187 @@
                     }
                 },
             )
+        }
+
+        private var trainingSummarySection: some View {
+            Section("训练") {
+                LabeledContent("时间", value: trainingRangeText)
+                LabeledContent("打点", value: "\(session.markerCount) 个")
+            }
+        }
+
+        private var clipSettingsSection: some View {
+            Section("剪辑范围") {
+                Stepper(value: $clipSettings.secondsBeforeMarker, in: 0 ... 20, step: 1) {
+                    LabeledContent("打点前", value: "\(Int(clipSettings.secondsBeforeMarker)) 秒")
+                }
+
+                Stepper(value: $clipSettings.secondsAfterMarker, in: 1 ... 20, step: 1) {
+                    LabeledContent("打点后", value: "\(Int(clipSettings.secondsAfterMarker)) 秒")
+                }
+            }
+            .disabled(isGenerating)
+        }
+
+        private var videoPickerSection: some View {
+            Section {
+                PhotosPicker(
+                    selection: $selectedItems,
+                    maxSelectionCount: 20,
+                    matching: .videos,
+                    photoLibrary: .shared(),
+                ) {
+                    Label(selectedVideoItems.isEmpty ? "选择视频" : "继续选择视频", systemImage: "video.badge.plus")
+                }
+                .disabled(isLoadingVideos || isGenerating)
+
+                if isLoadingVideos {
+                    ProgressView("读取视频")
+                }
+            }
+        }
+
+        @ViewBuilder
+        private var coverageAndGenerationSections: some View {
+            if !selectedVideos.isEmpty {
+                coverageResultSection
+                generateHighlightSection
+            }
+        }
+
+        private var coverageResultSection: some View {
+            Section("覆盖结果") {
+                LabeledContent("已选择", value: "\(plan.selectedVideoCount) 个视频")
+                LabeledContent("可剪辑", value: "\(plan.matchedMarkerCount) / \(plan.totalMarkerCount) 个打点")
+
+                if plan.unmatchedMarkerCount > 0 {
+                    Text("\(plan.unmatchedMarkerCount) 个打点不在所选视频范围内，生成时会跳过。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !plan.canGenerate {
+                    Text("所选视频没有覆盖任何打点。请确认视频是否对应这次训练。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+
+        private var generateHighlightSection: some View {
+            Section {
+                Button {
+                    Task {
+                        await generateHighlight()
+                    }
+                } label: {
+                    HStack {
+                        if isGenerating {
+                            ProgressView()
+                        }
+
+                        Text(isGenerating ? "生成中" : "生成集锦")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!plan.canGenerate || isLoadingVideos || isGenerating)
+
+                if isGenerating, let generationProgress {
+                    ProgressView(
+                        value: Double(generationProgress.completedMarkerCount),
+                        total: Double(generationProgress.totalMarkerCount),
+                    ) {
+                        Text("正在生成 \(generationProgress.completedMarkerCount)/\(generationProgress.totalMarkerCount)")
+                    }
+                }
+            }
+        }
+
+        @ViewBuilder
+        private var selectedVideoItemsSection: some View {
+            if !selectedVideoItems.isEmpty {
+                Section("已选视频") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(Array(selectedVideoItems.rows(maximumItemsPerRow: 2).enumerated()), id: \.offset) { row in
+                            HStack(spacing: 12) {
+                                ForEach(row.element) { item in
+                                    selectedVideoItemCard(item)
+                                }
+
+                                if row.element.count < 2 {
+                                    Spacer(minLength: 0)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+
+        @MainActor
+        private func prepareTrainingSessionExport() {
+            logger.info(
+                "training.session.export.started",
+                category: .training,
+                message: "开始导出单次训练记录",
+                context: highlightContext(),
+            )
+
+            do {
+                let data = try TrainingSessionJSONTransferService(
+                    store: InMemoryTrainingSessionStore(sessions: []),
+                )
+                .exportData(for: [session])
+                trainingSessionExportDocument = TrainingSessionJSONDocument(data: data)
+                isExportingTrainingSession = true
+            } catch {
+                logger.error(
+                    "training.session.export.failed",
+                    category: .training,
+                    message: "单次训练记录导出失败",
+                    error: error,
+                    context: highlightContext(),
+                )
+                alert = HighlightFlowAlert(
+                    title: "导出失败",
+                    message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
+                )
+            }
+        }
+
+        @MainActor
+        private func handleTrainingSessionExport(_ result: Result<URL, Error>) {
+            switch result {
+            case .success:
+                logger.info(
+                    "training.session.export.succeeded",
+                    category: .training,
+                    message: "单次训练记录导出成功",
+                    context: highlightContext(),
+                )
+                alert = HighlightFlowAlert(title: "导出完成", message: "已导出这次训练记录。")
+                trainingSessionExportDocument = nil
+            case let .failure(error):
+                guard !(error is CancellationError) else {
+                    trainingSessionExportDocument = nil
+                    return
+                }
+
+                logger.error(
+                    "training.session.export.failed",
+                    category: .training,
+                    message: "单次训练记录导出失败",
+                    error: error,
+                    context: highlightContext(),
+                )
+                alert = HighlightFlowAlert(
+                    title: "导出失败",
+                    message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
+                )
+                trainingSessionExportDocument = nil
+            }
         }
 
         @ViewBuilder
@@ -435,7 +545,7 @@
             }
 
             let item = selectedVideoItems[itemIndex]
-            guard (item.canPrepare || item.canResumePreparation), let video = item.video else {
+            guard item.canPrepare || item.canResumePreparation, let video = item.video else {
                 return
             }
 
@@ -639,7 +749,7 @@
             defer {
                 isGenerating = false
                 generationProgress = nil
-                fallbackTemporaryVideoURLs.forEach { url in
+                for url in fallbackTemporaryVideoURLs {
                     try? FileManager.default.removeItem(at: url)
                 }
             }
@@ -801,11 +911,11 @@
             segments.contains { temporaryFileStore.temporaryVideoURL(from: $0.videoID) == nil }
         }
 
-        nonisolated private static func secondsString(_ value: TimeInterval) -> String {
+        private nonisolated static func secondsString(_ value: TimeInterval) -> String {
             String(format: "%.3f", value)
         }
 
-        nonisolated private static func pickerItemsByAssetIdentifier(
+        private nonisolated static func pickerItemsByAssetIdentifier(
             from items: [PhotosPickerItem],
         ) -> [String: PhotosPickerItem] {
             items.reduce(into: [:]) { result, item in

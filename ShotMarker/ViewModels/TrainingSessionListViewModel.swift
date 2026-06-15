@@ -157,6 +157,12 @@ final class TrainingSessionListViewModel: ObservableObject {
         }
     }
 
+    func allSessionsForExport() -> [TrainingSession] {
+        rows.compactMap { row in
+            session(for: row.id)
+        }
+    }
+
     func importTrainingSessions(from fileURL: URL) throws -> TrainingSessionJSONImportResult {
         let service = TrainingSessionJSONTransferService(
             store: store,
@@ -173,6 +179,14 @@ final class TrainingSessionListViewModel: ObservableObject {
             notificationCenter: notificationCenter,
         )
         .exportData(for: selectedSessionsForExport())
+    }
+
+    func exportAllSessionsData() throws -> Data {
+        try TrainingSessionJSONTransferService(
+            store: store,
+            notificationCenter: notificationCenter,
+        )
+        .exportData(for: allSessionsForExport())
     }
 
     func mergeSelectedSessions() {

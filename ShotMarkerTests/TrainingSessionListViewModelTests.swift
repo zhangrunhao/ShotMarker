@@ -1,5 +1,5 @@
-@testable import ShotMarker
 import Combine
+@testable import ShotMarker
 import XCTest
 
 final class TrainingSessionListViewModelTests: XCTestCase {
@@ -241,6 +241,43 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedSessionsForExport(), [newer, older])
     }
 
+    func testAllSessionsForExportReturnsAllSessionsInVisibleRowOrder() throws {
+        let older = try makeSession(
+            id: "00000000-0000-0000-0000-000000000804",
+            startedAt: Date(timeIntervalSince1970: 1000),
+        )
+        let newer = try makeSession(
+            id: "00000000-0000-0000-0000-000000000805",
+            startedAt: Date(timeIntervalSince1970: 2000),
+        )
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: [older, newer]),
+        )
+
+        viewModel.load()
+
+        XCTAssertEqual(viewModel.allSessionsForExport(), [newer, older])
+    }
+
+    func testExportAllSessionsDataEncodesAllVisibleSessions() throws {
+        let older = try makeSession(
+            id: "00000000-0000-0000-0000-000000000806",
+            startedAt: Date(timeIntervalSince1970: 1000),
+        )
+        let newer = try makeSession(
+            id: "00000000-0000-0000-0000-000000000807",
+            startedAt: Date(timeIntervalSince1970: 2000),
+        )
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: [older, newer]),
+        )
+
+        viewModel.load()
+        let data = try viewModel.exportAllSessionsData()
+
+        XCTAssertEqual(try JSONDecoder().decode([TrainingSession].self, from: data), [newer, older])
+    }
+
     func testMergeSelectedSessionsLogsSuccess() throws {
         let firstSession = try makeSession(id: "00000000-0000-0000-0000-000000000601")
         let secondSession = try makeSession(id: "00000000-0000-0000-0000-000000000602")
@@ -318,7 +355,7 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         viewModel.$rows
             .dropFirst()
             .sink { rows in
-                if rows.map({ $0.id }) == [session.id] {
+                if rows.map(\.id) == [session.id] {
                     rowsRefreshed.fulfill()
                 }
             }
@@ -347,8 +384,8 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         id: String,
         startedAt: Date = Date(timeIntervalSince1970: 2000),
     ) throws -> TrainingSession {
-        TrainingSession(
-            id: try XCTUnwrap(UUID(uuidString: id)),
+        try TrainingSession(
+            id: XCTUnwrap(UUID(uuidString: id)),
             startedAt: startedAt,
             endedAt: startedAt.addingTimeInterval(600),
             events: [
