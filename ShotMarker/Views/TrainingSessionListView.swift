@@ -24,6 +24,18 @@ struct TrainingSessionPressFeedbackState: Equatable {
     }
 }
 
+struct TrainingSessionTitlePressFeedbackState: Equatable {
+    private(set) var isPressing = false
+
+    mutating func setPressing(_ isPressing: Bool) {
+        self.isPressing = isPressing
+    }
+
+    mutating func clear() {
+        isPressing = false
+    }
+}
+
 struct TrainingSessionListView: View {
     @StateObject private var viewModel: TrainingSessionListViewModel
     @State private var isImportingTrainingSessions = false
@@ -36,6 +48,7 @@ struct TrainingSessionListView: View {
     @State private var exportedLogURL: URL?
     @State private var logExportErrorMessage: String?
     @State private var pressFeedbackState = TrainingSessionPressFeedbackState()
+    @State private var titlePressFeedbackState = TrainingSessionTitlePressFeedbackState()
     private let diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)?
     private let logger: AppLogging
     private let logExportService: AppLogExportService?
@@ -85,15 +98,7 @@ struct TrainingSessionListView: View {
             .toolbar {
                 if logExportService != nil {
                     ToolbarItem(placement: .principal) {
-                        Text("训练记录")
-                            .font(.headline)
-                            .onLongPressGesture(minimumDuration: 5) {
-                                guard !isExportingLogs else {
-                                    return
-                                }
-
-                                isConfirmingLogExport = true
-                            }
+                        diagnosticsLogExportTitle
                     }
                 }
 
@@ -166,6 +171,27 @@ struct TrainingSessionListView: View {
         }
     }
 
+    private var diagnosticsLogExportTitle: some View {
+        let isPressing = titlePressFeedbackState.isPressing
+
+        return Text("训练记录")
+            .font(.headline)
+            .foregroundStyle(isPressing ? Color.accentColor : Color.primary)
+            .scaleEffect(isPressing ? 0.94 : 1)
+            .animation(.easeInOut(duration: 0.16), value: isPressing)
+            .contentShape(Rectangle())
+            .onLongPressGesture(
+                minimumDuration: 5,
+                maximumDistance: 20,
+                perform: {
+                    handleDiagnosticsTitleLongPress()
+                },
+                onPressingChanged: { isPressing in
+                    setDiagnosticsTitlePressFeedback(isPressing)
+                },
+            )
+    }
+
     @ViewBuilder
     private var content: some View {
         if let errorMessage = viewModel.errorMessage {
@@ -213,6 +239,28 @@ struct TrainingSessionListView: View {
             },
         )
         .listRowBackground(isPressing ? Color.accentColor.opacity(0.10) : Color.clear)
+    }
+
+    @MainActor
+    private func setDiagnosticsTitlePressFeedback(_ isPressing: Bool) {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            titlePressFeedbackState.setPressing(isPressing)
+        }
+    }
+
+    @MainActor
+    private func handleDiagnosticsTitleLongPress() {
+        guard !isExportingLogs else {
+            setDiagnosticsTitlePressFeedback(false)
+            return
+        }
+
+        playSelectionFeedback()
+
+        withAnimation(.easeInOut(duration: 0.16)) {
+            titlePressFeedbackState.clear()
+            isConfirmingLogExport = true
+        }
     }
 
     @ViewBuilder

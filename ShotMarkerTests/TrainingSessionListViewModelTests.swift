@@ -302,6 +302,25 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertNil(state.pressedSessionID)
     }
 
+    func testTrainingSessionTitlePressFeedbackStateTracksPressing() {
+        var state = TrainingSessionTitlePressFeedbackState()
+
+        XCTAssertFalse(state.isPressing)
+
+        state.setPressing(true)
+
+        XCTAssertTrue(state.isPressing)
+
+        state.setPressing(false)
+
+        XCTAssertFalse(state.isPressing)
+
+        state.setPressing(true)
+        state.clear()
+
+        XCTAssertFalse(state.isPressing)
+    }
+
     func testMergeSelectedSessionsLogsSuccess() throws {
         let firstSession = try makeSession(id: "00000000-0000-0000-0000-000000000601")
         let secondSession = try makeSession(id: "00000000-0000-0000-0000-000000000602")
