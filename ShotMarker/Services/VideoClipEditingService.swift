@@ -388,11 +388,15 @@ struct VideoClipEditingService {
             progressTask?.cancel()
         }
 
+        let exportCancellation = VideoClipExportCancellationBox(
+            exportSession: exportSession,
+            cancelExportSession: cancelExportSession,
+        )
         try await withTaskCancellationHandler {
             try await exportAsset(exportSession, outputURL, .mov)
             try Task.checkCancellation()
         } onCancel: {
-            cancelExportSession(exportSession)
+            exportCancellation.cancel()
         }
 
         if let progressTotalMarkerCount, let progressHandler {
@@ -576,6 +580,36 @@ struct VideoClipEditingService {
 private struct HighlightClipOverlayRange {
     let timeRange: CMTimeRange
     let label: String
+}
+
+nonisolated private final class VideoClipExportCancellationBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private let exportSession: AVAssetExportSession
+    private let cancelExportSession: (AVAssetExportSession) -> Void
+    private var isCancelled = false
+
+    init(
+        exportSession: AVAssetExportSession,
+        cancelExportSession: @escaping (AVAssetExportSession) -> Void,
+    ) {
+        self.exportSession = exportSession
+        self.cancelExportSession = cancelExportSession
+    }
+
+    func cancel() {
+        lock.lock()
+        guard !isCancelled else {
+            lock.unlock()
+            return
+        }
+
+        isCancelled = true
+        let exportSession = exportSession
+        let cancelExportSession = cancelExportSession
+        lock.unlock()
+
+        cancelExportSession(exportSession)
+    }
 }
 
 enum VideoClipEditingError: LocalizedError {
