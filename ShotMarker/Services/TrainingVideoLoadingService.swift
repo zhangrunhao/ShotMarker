@@ -1,5 +1,7 @@
 #if os(iOS)
     import Foundation
+    import PhotosUI
+    import SwiftUI
 
     struct TrainingVideoMetadata {
         let recordedStartAt: Date
@@ -162,6 +164,72 @@
             case nil:
                 .failedToLoad
             }
+        }
+    }
+
+    extension TrainingVideoLoadingService where SelectionItem == PhotosPickerItem {
+        static func live(
+            photoLibraryAssetProvider: PhotoLibraryVideoAssetProvider,
+            temporaryFileStore: TrainingVideoTemporaryFileStore,
+        ) -> TrainingVideoLoadingService<PhotosPickerItem> {
+            let readinessChecker = SelectedTrainingVideoReadinessChecker { assetIdentifier in
+                let asset = try photoLibraryAssetProvider.photoAsset(with: assetIdentifier)
+                try await photoLibraryAssetProvider.requestLocalAVAsset(for: asset)
+            }
+
+            return TrainingVideoLoadingService<PhotosPickerItem>(
+                assetIdentifier: { $0.itemIdentifier },
+                loadPhotoLibraryVideo: { assetIdentifier in
+                    try await photoLibraryAssetProvider.ensureReadAccess()
+                    let asset = try photoLibraryAssetProvider.photoAsset(with: assetIdentifier)
+                    let thumbnailData = await photoLibraryAssetProvider.thumbnailData(from: asset)
+                    do {
+                        let metadata = try photoLibraryAssetProvider.metadata(from: asset)
+                        return LoadedTrainingVideo(
+                            video: SelectedTrainingVideo(
+                                id: asset.localIdentifier,
+                                recordedStartAt: metadata.recordedStartAt,
+                                duration: metadata.duration,
+                            ),
+                            thumbnailData: thumbnailData,
+                        )
+                    } catch {
+                        throw SelectedTrainingVideoLoadFailure(
+                            id: assetIdentifier,
+                            thumbnailData: thumbnailData,
+                            error: error,
+                        )
+                    }
+                },
+                loadPickedVideo: { item in
+                    let pickedVideo = try await temporaryFileStore.loadPickedTrainingVideo(from: item)
+                    let thumbnailData = await temporaryFileStore.thumbnailData(from: pickedVideo.url)
+                    do {
+                        let metadata = try await temporaryFileStore.metadata(from: pickedVideo.url)
+                        return LoadedTrainingVideo(
+                            video: SelectedTrainingVideo(
+                                id: pickedVideo.url.absoluteString,
+                                recordedStartAt: metadata.recordedStartAt,
+                                duration: metadata.duration,
+                            ),
+                            thumbnailData: thumbnailData,
+                        )
+                    } catch {
+                        temporaryFileStore.removeTemporaryVideo(at: pickedVideo.url)
+                        throw SelectedTrainingVideoLoadFailure(
+                            id: pickedVideo.url.absoluteString,
+                            thumbnailData: thumbnailData,
+                            error: error,
+                        )
+                    }
+                },
+                ensureReady: { video in
+                    try await readinessChecker.ensureReady(video)
+                },
+                removeTemporaryVideoIfNeeded: { video in
+                    temporaryFileStore.removeTemporaryVideoIfNeeded(video)
+                },
+            )
         }
     }
 #endif

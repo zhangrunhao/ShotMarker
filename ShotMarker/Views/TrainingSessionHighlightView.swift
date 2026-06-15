@@ -1,18 +1,18 @@
 #if os(iOS)
     import AVFoundation
-    import CoreTransferable
     import Foundation
-    import Photos
     import PhotosUI
     import SwiftUI
     import UIKit
-    import UniformTypeIdentifiers
 
     struct TrainingSessionHighlightView: View {
         let session: TrainingSession
         private let logger: AppLogging
         private let editingService: VideoClipEditingService
         private let photoLibrarySaver: VideoClipPhotoLibrarySaver
+        private let videoLoadingService: TrainingVideoLoadingService<PhotosPickerItem>
+        private let photoLibraryAssetProvider: PhotoLibraryVideoAssetProvider
+        private let temporaryFileStore: TrainingVideoTemporaryFileStore
 
         @State private var selectedItems: [PhotosPickerItem] = []
         @State private var selectedVideos: [SelectedTrainingVideo] = []
@@ -29,6 +29,15 @@
         init(session: TrainingSession, logger: AppLogging = AppLogger.shared) {
             self.session = session
             self.logger = logger
+
+            let photoLibraryAssetProvider = PhotoLibraryVideoAssetProvider()
+            let temporaryFileStore = TrainingVideoTemporaryFileStore()
+            self.photoLibraryAssetProvider = photoLibraryAssetProvider
+            self.temporaryFileStore = temporaryFileStore
+            videoLoadingService = TrainingVideoLoadingService.live(
+                photoLibraryAssetProvider: photoLibraryAssetProvider,
+                temporaryFileStore: temporaryFileStore,
+            )
             editingService = VideoClipEditingService(logger: logger)
             photoLibrarySaver = VideoClipPhotoLibrarySaver(logger: logger)
         }
@@ -442,11 +451,16 @@
             )
 
             do {
-                try await Self.preparePhotoLibraryVideo(video) { progress in
-                    Task { @MainActor in
-                        updatePreparationProgress(for: itemID, runID: runID, progress: progress)
-                    }
-                }
+                let asset = try photoLibraryAssetProvider.photoAsset(with: video.id)
+                _ = try await photoLibraryAssetProvider.requestAVAsset(
+                    for: asset,
+                    deliveryQuality: .high,
+                    progressHandler: { progress in
+                        Task { @MainActor in
+                            updatePreparationProgress(for: itemID, runID: runID, progress: progress)
+                        }
+                    },
+                )
 
                 updatePreparationProgress(for: itemID, runID: runID, progress: 1)
 
@@ -631,8 +645,8 @@
             }
 
             do {
-                if Self.requiresPhotoLibraryReadAccess(for: segments) {
-                    try await Self.ensurePhotoLibraryReadAccess()
+                if requiresPhotoLibraryReadAccess(for: segments) {
+                    try await photoLibraryAssetProvider.ensureReadAccess()
                 }
 
                 let pickerItemsByAssetIdentifier = Self.pickerItemsByAssetIdentifier(from: selectedItems)
@@ -651,13 +665,13 @@
                         )
                     },
                 ) { request in
-                    if let fileURL = Self.temporaryVideoURL(from: request.videoID) {
+                    if let fileURL = temporaryFileStore.temporaryVideoURL(from: request.videoID) {
                         return AVURLAsset(url: fileURL)
                     }
 
-                    let asset = try Self.photoAsset(with: request.videoID)
+                    let asset = try photoLibraryAssetProvider.photoAsset(with: request.videoID)
                     do {
-                        return try await Self.requestAVAsset(
+                        return try await photoLibraryAssetProvider.requestAVAsset(
                             for: asset,
                             deliveryQuality: request.photoLibraryDeliveryQuality(
                                 forSourceDuration: asset.duration,
@@ -678,9 +692,9 @@
                                 "requestedDurationSeconds": Self.secondsString(request.requestedDuration),
                             ]),
                         )
-                        let pickedVideoURL = try await Self.loadTemporaryVideoURL(from: pickerItem)
-                        fallbackTemporaryVideoURLs.append(pickedVideoURL)
-                        return AVURLAsset(url: pickedVideoURL)
+                        let pickedVideo = try await temporaryFileStore.loadPickedTrainingVideo(from: pickerItem)
+                        fallbackTemporaryVideoURLs.append(pickedVideo.url)
+                        return AVURLAsset(url: pickedVideo.url)
                     }
                 }
                 try await photoLibrarySaver.saveVideo(at: outputURL)
@@ -740,55 +754,12 @@
         ) async -> SelectedTrainingVideoSelectionItem {
             let title = "视频 \(index + 1)"
             let fallbackID = "selection-\(index + 1)"
-
-            do {
-                let loadedVideo = try await Self.loadSelectedVideoWithThumbnail(
-                    from: item,
-                    fallbackID: fallbackID,
-                )
-                guard VideoClipSegmentPlanner.canUseVideo(loadedVideo.video, for: session) else {
-                    Self.removeTemporaryVideoIfNeeded(loadedVideo.video)
-                    return .unavailable(
-                        id: loadedVideo.video.id,
-                        title: title,
-                        reason: .noMarkerCoverage,
-                        thumbnailData: loadedVideo.thumbnailData,
-                    )
-                }
-
-                do {
-                    try await Self.readyTrainingVideoChecker.ensureReady(loadedVideo.video)
-                } catch {
-                    return .unavailable(
-                        id: loadedVideo.video.id,
-                        title: title,
-                        video: loadedVideo.video,
-                        reason: .notReady,
-                        thumbnailData: loadedVideo.thumbnailData,
-                    )
-                }
-
-                return .available(
-                    id: loadedVideo.video.id,
-                    title: title,
-                    video: loadedVideo.video,
-                    thumbnailData: loadedVideo.thumbnailData,
-                )
-            } catch let failure as SelectedTrainingVideoLoadFailure {
-                return .unavailable(
-                    id: failure.id,
-                    title: title,
-                    reason: Self.unavailableReason(for: failure.error),
-                    thumbnailData: failure.thumbnailData,
-                )
-            } catch {
-                return .unavailable(
-                    id: item.itemIdentifier ?? fallbackID,
-                    title: title,
-                    reason: Self.unavailableReason(for: error),
-                    thumbnailData: nil,
-                )
-            }
+            return await videoLoadingService.loadSelectionItem(
+                from: item,
+                title: title,
+                fallbackID: fallbackID,
+                session: session,
+            )
         }
 
         private func reportVideoSelectionResultsIfNeeded(_ selectionItems: [SelectedTrainingVideoSelectionItem]) {
@@ -819,314 +790,15 @@
         }
 
         private func cleanupTemporaryVideos() {
-            cleanupTemporaryVideos(selectedVideos)
+            temporaryFileStore.cleanupTemporaryVideos(selectedVideos)
         }
 
         private func cleanupTemporaryVideos(_ videos: [SelectedTrainingVideo]) {
-            videos.compactMap { Self.temporaryVideoURL(from: $0.id) }.forEach { url in
-                try? FileManager.default.removeItem(at: url)
-            }
+            temporaryFileStore.cleanupTemporaryVideos(videos)
         }
 
-        nonisolated private static func loadSelectedVideoWithThumbnail(
-            from item: PhotosPickerItem,
-            fallbackID: String,
-        ) async throws -> LoadedTrainingVideo {
-            var photoLibraryFailure: SelectedTrainingVideoLoadFailure?
-
-            if let assetIdentifier = item.itemIdentifier {
-                do {
-                    try await ensurePhotoLibraryReadAccess()
-                    let asset = try photoAsset(with: assetIdentifier)
-                    let thumbnailData = await thumbnailData(from: asset)
-                    do {
-                        let metadata = try loadVideoMetadata(from: asset)
-                        return LoadedTrainingVideo(
-                            video: SelectedTrainingVideo(
-                                id: asset.localIdentifier,
-                                recordedStartAt: metadata.recordedStartAt,
-                                duration: metadata.duration,
-                            ),
-                            thumbnailData: thumbnailData,
-                        )
-                    } catch {
-                        throw SelectedTrainingVideoLoadFailure(
-                            id: assetIdentifier,
-                            thumbnailData: thumbnailData,
-                            error: error,
-                        )
-                    }
-                } catch let failure as SelectedTrainingVideoLoadFailure {
-                    photoLibraryFailure = failure
-                } catch {
-                    // PhotosPicker can still provide a scoped file copy even when PHAsset access is unavailable.
-                    photoLibraryFailure = SelectedTrainingVideoLoadFailure(
-                        id: assetIdentifier,
-                        thumbnailData: nil,
-                        error: error,
-                    )
-                }
-            }
-
-            do {
-                let pickedVideo = try await loadPickedTrainingVideo(from: item)
-                let thumbnailData = await thumbnailData(from: pickedVideo.url)
-                do {
-                    let metadata = try await loadVideoMetadata(from: pickedVideo.url)
-                    return LoadedTrainingVideo(
-                        video: SelectedTrainingVideo(
-                            id: pickedVideo.url.absoluteString,
-                            recordedStartAt: metadata.recordedStartAt,
-                            duration: metadata.duration,
-                        ),
-                        thumbnailData: thumbnailData,
-                    )
-                } catch {
-                    try? FileManager.default.removeItem(at: pickedVideo.url)
-                    throw SelectedTrainingVideoLoadFailure(
-                        id: pickedVideo.url.absoluteString,
-                        thumbnailData: thumbnailData,
-                        error: error,
-                    )
-                }
-            } catch let failure as SelectedTrainingVideoLoadFailure {
-                throw failure
-            } catch {
-                throw photoLibraryFailure ?? SelectedTrainingVideoLoadFailure(
-                    id: item.itemIdentifier ?? fallbackID,
-                    thumbnailData: nil,
-                    error: error,
-                )
-            }
-        }
-
-        nonisolated private static func ensurePhotoLibraryReadAccess() async throws {
-            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-            switch status {
-            case .authorized, .limited:
-                return
-            case .notDetermined:
-                let requestedStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
-                guard requestedStatus == .authorized || requestedStatus == .limited else {
-                    throw HighlightVideoSelectionError.photoLibraryAccessDenied
-                }
-            case .denied, .restricted:
-                throw HighlightVideoSelectionError.photoLibraryAccessDenied
-            @unknown default:
-                throw HighlightVideoSelectionError.photoLibraryAccessDenied
-            }
-        }
-
-        nonisolated private static func photoAsset(with localIdentifier: String) throws -> PHAsset {
-            let result = PHAsset.fetchAssets(withLocalIdentifiers: [localIdentifier], options: nil)
-            guard let asset = result.firstObject else {
-                throw HighlightVideoSelectionError.videoLoadFailed
-            }
-
-            return asset
-        }
-
-        nonisolated private static func loadVideoMetadata(from asset: PHAsset) throws -> TrainingVideoMetadata {
-            guard let recordedStartAt = asset.creationDate else {
-                throw HighlightVideoSelectionError.missingRecordedStartAt
-            }
-
-            guard asset.duration.isFinite, asset.duration > 0 else {
-                throw HighlightVideoSelectionError.invalidDuration
-            }
-
-            return TrainingVideoMetadata(recordedStartAt: recordedStartAt, duration: asset.duration)
-        }
-
-        nonisolated private static func loadVideoMetadata(from url: URL) async throws -> TrainingVideoMetadata {
-            let asset = AVURLAsset(url: url)
-            let duration = try await asset.load(.duration).seconds
-
-            guard duration.isFinite, duration > 0 else {
-                throw HighlightVideoSelectionError.invalidDuration
-            }
-
-            guard let creationDateItem = try await asset.load(.creationDate),
-                  let recordedStartAt = try await creationDateItem.load(.dateValue)
-            else {
-                throw HighlightVideoSelectionError.missingRecordedStartAt
-            }
-
-            return TrainingVideoMetadata(recordedStartAt: recordedStartAt, duration: duration)
-        }
-
-        nonisolated private static func thumbnailData(from asset: PHAsset) async -> Data? {
-            let options = PHImageRequestOptions()
-            options.deliveryMode = .fastFormat
-            options.resizeMode = .fast
-            options.isNetworkAccessAllowed = false
-            options.isSynchronous = true
-
-            var thumbnailData: Data?
-            PHImageManager.default().requestImage(
-                for: asset,
-                targetSize: CGSize(width: 320, height: 180),
-                contentMode: .aspectFill,
-                options: options,
-            ) { image, _ in
-                thumbnailData = image?.jpegData(compressionQuality: 0.72)
-            }
-            return thumbnailData
-        }
-
-        nonisolated private static func thumbnailData(from url: URL) async -> Data? {
-            let asset = AVURLAsset(url: url)
-            let generator = AVAssetImageGenerator(asset: asset)
-            generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(width: 320, height: 180)
-
-            do {
-                let image = try await cgImage(from: generator, at: .zero)
-                return UIImage(cgImage: image).jpegData(compressionQuality: 0.72)
-            } catch {
-                return nil
-            }
-        }
-
-        nonisolated private static func cgImage(
-            from generator: AVAssetImageGenerator,
-            at time: CMTime,
-        ) async throws -> CGImage {
-            try await withCheckedThrowingContinuation { continuation in
-                generator.generateCGImageAsynchronously(for: time) { image, _, error in
-                    if let error {
-                        continuation.resume(throwing: error)
-                        return
-                    }
-
-                    guard let image else {
-                        continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
-                        return
-                    }
-
-                    continuation.resume(returning: image)
-                }
-            }
-        }
-
-        nonisolated private static var readyTrainingVideoChecker: SelectedTrainingVideoReadinessChecker {
-            SelectedTrainingVideoReadinessChecker { assetIdentifier in
-                let asset = try photoAsset(with: assetIdentifier)
-                try await requestLocalAVAsset(for: asset)
-            }
-        }
-
-        nonisolated private static func preparePhotoLibraryVideo(
-            _ video: SelectedTrainingVideo,
-            progressHandler: @escaping @Sendable (Double) -> Void,
-        ) async throws {
-            let asset = try photoAsset(with: video.id)
-            _ = try await requestAVAsset(
-                for: asset,
-                deliveryQuality: .high,
-                progressHandler: progressHandler,
-            )
-        }
-
-        nonisolated private static func requestAVAsset(
-            for asset: PHAsset,
-            deliveryQuality: HighlightClipPhotoLibraryDeliveryQuality,
-            progressHandler: (@Sendable (Double) -> Void)? = nil,
-        ) async throws -> AVAsset {
-            let options = PHVideoRequestOptions()
-            options.deliveryMode = deliveryQuality.photoVideoRequestDeliveryMode
-            options.isNetworkAccessAllowed = true
-            if let progressHandler {
-                options.progressHandler = { progress, _, _, _ in
-                    progressHandler(progress)
-                }
-            }
-
-            let cancellationBox = PhotoLibraryAssetRequestCancellationBox()
-            return try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    let requestID = PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
-                        if let error = info?[PHImageErrorKey] as? Error {
-                            continuation.resume(throwing: error)
-                            return
-                        }
-
-                        if let isCancelled = info?[PHImageCancelledKey] as? Bool, isCancelled {
-                            continuation.resume(throwing: CancellationError())
-                            return
-                        }
-
-                        guard let avAsset else {
-                            continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
-                            return
-                        }
-
-                        continuation.resume(returning: avAsset)
-                    }
-                    cancellationBox.setRequestID(requestID)
-                }
-            } onCancel: {
-                cancellationBox.cancel()
-            }
-        }
-
-        nonisolated private static func requestLocalAVAsset(for asset: PHAsset) async throws {
-            let options = PHVideoRequestOptions()
-            options.deliveryMode = .mediumQualityFormat
-            options.isNetworkAccessAllowed = false
-
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
-                    if let error = info?[PHImageErrorKey] as? Error {
-                        continuation.resume(throwing: error)
-                        return
-                    }
-
-                    if let isCancelled = info?[PHImageCancelledKey] as? Bool, isCancelled {
-                        continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
-                        return
-                    }
-
-                    guard avAsset != nil else {
-                        continuation.resume(throwing: HighlightVideoSelectionError.videoNotReady)
-                        return
-                    }
-
-                    continuation.resume()
-                }
-            }
-        }
-
-        nonisolated private static func loadTemporaryVideoURL(
-            from item: PhotosPickerItem,
-        ) async throws -> URL {
-            try await loadPickedTrainingVideo(from: item).url
-        }
-
-        nonisolated private static func loadPickedTrainingVideo(
-            from item: PhotosPickerItem,
-        ) async throws -> PickedTrainingVideo {
-            guard let pickedVideo = try await item.loadTransferable(type: PickedTrainingVideo.self) else {
-                throw HighlightVideoSelectionError.videoLoadFailed
-            }
-
-            return pickedVideo
-        }
-
-        nonisolated private static func temporaryVideoURL(from videoID: String) -> URL? {
-            SelectedTrainingVideoReadinessChecker.temporaryVideoURL(from: videoID)
-        }
-
-        nonisolated private static func removeTemporaryVideoIfNeeded(_ video: SelectedTrainingVideo) {
-            guard let url = temporaryVideoURL(from: video.id) else {
-                return
-            }
-
-            try? FileManager.default.removeItem(at: url)
-        }
-
-        nonisolated private static func requiresPhotoLibraryReadAccess(for segments: [HighlightClipSegment]) -> Bool {
-            segments.contains { temporaryVideoURL(from: $0.videoID) == nil }
+        private func requiresPhotoLibraryReadAccess(for segments: [HighlightClipSegment]) -> Bool {
+            segments.contains { temporaryFileStore.temporaryVideoURL(from: $0.videoID) == nil }
         }
 
         nonisolated private static func secondsString(_ value: TimeInterval) -> String {
@@ -1142,94 +814,11 @@
                 }
             }
         }
-
-        nonisolated private static func unavailableReason(for error: Error) -> SelectedTrainingVideoUnavailableReason {
-            switch error as? HighlightVideoSelectionError {
-            case .videoLoadFailed:
-                .failedToLoad
-            case .photoLibraryAccessDenied:
-                .photoLibraryAccessDenied
-            case .missingRecordedStartAt:
-                .missingRecordedStartAt
-            case .invalidDuration:
-                .invalidDuration
-            case .videoNotReady:
-                .notReady
-            case nil:
-                .failedToLoad
-            }
-        }
-    }
-
-    private extension HighlightClipPhotoLibraryDeliveryQuality {
-        nonisolated var photoVideoRequestDeliveryMode: PHVideoRequestOptionsDeliveryMode {
-            switch self {
-            case .high:
-                .highQualityFormat
-            case .medium:
-                .mediumQualityFormat
-            }
-        }
-    }
-
-    nonisolated private final class PhotoLibraryAssetRequestCancellationBox: @unchecked Sendable {
-        private let lock = NSLock()
-        private var requestID = PHInvalidImageRequestID
-        private var isCancelled = false
-
-        func setRequestID(_ requestID: PHImageRequestID) {
-            lock.lock()
-            if isCancelled {
-                lock.unlock()
-                PHImageManager.default().cancelImageRequest(requestID)
-                return
-            }
-
-            self.requestID = requestID
-            lock.unlock()
-        }
-
-        func cancel() {
-            lock.lock()
-            isCancelled = true
-            let currentRequestID = requestID
-            lock.unlock()
-
-            guard currentRequestID != PHInvalidImageRequestID else {
-                return
-            }
-
-            PHImageManager.default().cancelImageRequest(currentRequestID)
-        }
     }
 
     private struct HighlightFlowAlert {
         let title: String
         let message: String
-    }
-
-    private struct PickedTrainingVideo: Transferable {
-        let url: URL
-
-        static var transferRepresentation: some TransferRepresentation {
-            FileRepresentation(contentType: .movie) { video in
-                SentTransferredFile(video.url)
-            } importing: { received in
-                let fileExtension = received.file.pathExtension.isEmpty ? "mov" : received.file.pathExtension
-                let copyURL = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("ShotMarker-TrainingVideo-\(UUID().uuidString).\(fileExtension)")
-
-                let isAccessingSecurityScopedResource = received.file.startAccessingSecurityScopedResource()
-                defer {
-                    if isAccessingSecurityScopedResource {
-                        received.file.stopAccessingSecurityScopedResource()
-                    }
-                }
-
-                try FileManager.default.copyItem(at: received.file, to: copyURL)
-                return PickedTrainingVideo(url: copyURL)
-            }
-        }
     }
 
     #if DEBUG
