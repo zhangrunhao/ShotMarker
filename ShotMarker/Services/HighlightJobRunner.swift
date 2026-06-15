@@ -7,11 +7,16 @@ struct HighlightJobRunner {
         @MainActor @escaping (HighlightClipGenerationProgress) -> Void,
         @escaping (HighlightClipAssetRequest) async throws -> AVAsset
     ) async throws -> URL
+    typealias RunOverride = @MainActor (
+        HighlightJob,
+        @MainActor @escaping (HighlightJob) -> Void
+    ) async throws -> HighlightJob
 
     private let fileStore: HighlightJobFileStoreProtocol
     private let makeHighlightClip: MakeHighlightClip
     private let saveVideo: (URL) async throws -> Void
     private let assetForJobVideo: (HighlightJobVideo, HighlightClipAssetRequest) async throws -> AVAsset
+    private let runOverride: RunOverride?
 
     init(
         fileStore: HighlightJobFileStoreProtocol = HighlightJobFileStore(),
@@ -23,6 +28,18 @@ struct HighlightJobRunner {
         self.makeHighlightClip = makeHighlightClip
         self.saveVideo = saveVideo
         self.assetForJobVideo = assetForJobVideo
+        runOverride = nil
+    }
+
+    init(
+        makeHighlightClip: @escaping MakeHighlightClip,
+        runOverride: @escaping RunOverride,
+    ) {
+        fileStore = HighlightJobFileStore()
+        self.makeHighlightClip = makeHighlightClip
+        saveVideo = { _ in }
+        assetForJobVideo = { _, _ in AVURLAsset(url: URL(fileURLWithPath: "/tmp/unused.mov")) }
+        self.runOverride = runOverride
     }
 
     @MainActor
@@ -30,6 +47,10 @@ struct HighlightJobRunner {
         job originalJob: HighlightJob,
         onChange: @escaping @MainActor (HighlightJob) -> Void,
     ) async throws -> HighlightJob {
+        if let runOverride {
+            return try await runOverride(originalJob, onChange)
+        }
+
         var job = originalJob
         job.status = .running
         job.progress = .zero
