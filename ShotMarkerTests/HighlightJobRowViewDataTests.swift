@@ -2,6 +2,34 @@
 import XCTest
 
 final class HighlightJobRowViewDataTests: XCTestCase {
+    func testSaveActionConfirmationRequestsExplicitSaveApproval() throws {
+        let jobID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000050010"))
+
+        let confirmation = HighlightJobActionConfirmation.save(jobID: jobID)
+
+        XCTAssertEqual(confirmation.id, "save-\(jobID.uuidString)")
+        XCTAssertEqual(confirmation.action, .save(jobID))
+        XCTAssertEqual(confirmation.jobID, jobID)
+        XCTAssertEqual(confirmation.title, "保存到相册？")
+        XCTAssertEqual(confirmation.message, "会将这个集锦视频保存到系统相册。")
+        XCTAssertEqual(confirmation.confirmButtonTitle, "保存")
+        XCTAssertFalse(confirmation.isDestructive)
+    }
+
+    func testClearActionConfirmationRequestsDestructiveDeleteApproval() throws {
+        let jobID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000050011"))
+
+        let confirmation = HighlightJobActionConfirmation.clear(jobID: jobID)
+
+        XCTAssertEqual(confirmation.id, "clear-\(jobID.uuidString)")
+        XCTAssertEqual(confirmation.action, .clear(jobID))
+        XCTAssertEqual(confirmation.jobID, jobID)
+        XCTAssertEqual(confirmation.title, "删除任务？")
+        XCTAssertEqual(confirmation.message, "会从首页移除这个集锦任务，并清理它的本地视频文件。")
+        XCTAssertEqual(confirmation.confirmButtonTitle, "删除")
+        XCTAssertTrue(confirmation.isDestructive)
+    }
+
     func testRunningJobShowsProgressAndCancelAction() throws {
         let row = HighlightJobRowViewData(
             job: try makeJob(

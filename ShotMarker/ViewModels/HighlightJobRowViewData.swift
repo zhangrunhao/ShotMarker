@@ -1,5 +1,74 @@
 import Foundation
 
+struct HighlightJobActionConfirmation: Identifiable, Equatable {
+    enum Action: Equatable {
+        case save(UUID)
+        case clear(UUID)
+    }
+
+    let action: Action
+
+    var id: String {
+        switch action {
+        case let .save(jobID):
+            "save-\(jobID.uuidString)"
+        case let .clear(jobID):
+            "clear-\(jobID.uuidString)"
+        }
+    }
+
+    var jobID: UUID {
+        switch action {
+        case let .save(jobID), let .clear(jobID):
+            jobID
+        }
+    }
+
+    var title: String {
+        switch action {
+        case .save:
+            "保存到相册？"
+        case .clear:
+            "删除任务？"
+        }
+    }
+
+    var message: String {
+        switch action {
+        case .save:
+            "会将这个集锦视频保存到系统相册。"
+        case .clear:
+            "会从首页移除这个集锦任务，并清理它的本地视频文件。"
+        }
+    }
+
+    var confirmButtonTitle: String {
+        switch action {
+        case .save:
+            "保存"
+        case .clear:
+            "删除"
+        }
+    }
+
+    var isDestructive: Bool {
+        switch action {
+        case .save:
+            false
+        case .clear:
+            true
+        }
+    }
+
+    static func save(jobID: UUID) -> HighlightJobActionConfirmation {
+        HighlightJobActionConfirmation(action: .save(jobID))
+    }
+
+    static func clear(jobID: UUID) -> HighlightJobActionConfirmation {
+        HighlightJobActionConfirmation(action: .clear(jobID))
+    }
+}
+
 struct HighlightJobRowViewData: Identifiable, Equatable {
     let id: UUID
     let title: String

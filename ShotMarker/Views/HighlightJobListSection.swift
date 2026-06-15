@@ -8,6 +8,7 @@ struct HighlightJobListSection: View {
     let onPlay: (UUID) -> Void
     let onSave: (UUID) -> Void
     let onClear: (UUID) -> Void
+    @State private var actionConfirmation: HighlightJobActionConfirmation?
 
     var body: some View {
         if !jobs.isEmpty {
@@ -20,6 +21,19 @@ struct HighlightJobListSection: View {
                         ),
                     )
                 }
+            }
+            .alert(actionConfirmation?.title ?? "", isPresented: actionConfirmationBinding) {
+                Button("取消", role: .cancel) {}
+                if let actionConfirmation {
+                    Button(
+                        actionConfirmation.confirmButtonTitle,
+                        role: actionConfirmation.isDestructive ? .destructive : nil,
+                    ) {
+                        confirm(actionConfirmation)
+                    }
+                }
+            } message: {
+                Text(actionConfirmation?.message ?? "")
             }
         }
     }
@@ -50,7 +64,7 @@ struct HighlightJobListSection: View {
 
                 if row.showsSave {
                     iconButton("保存到相册", systemImage: "square.and.arrow.down") {
-                        onSave(row.id)
+                        actionConfirmation = .save(jobID: row.id)
                     }
                 }
 
@@ -67,8 +81,8 @@ struct HighlightJobListSection: View {
                 }
 
                 if row.showsClear {
-                    iconButton("清理任务", systemImage: "trash") {
-                        onClear(row.id)
+                    iconButton("删除任务", systemImage: "trash") {
+                        actionConfirmation = .clear(jobID: row.id)
                     }
                 }
             }
@@ -88,5 +102,26 @@ struct HighlightJobListSection: View {
         }
         .foregroundStyle(systemImage == "xmark.circle.fill" || systemImage == "trash" ? Color.red : Color.accentColor)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var actionConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { actionConfirmation != nil },
+            set: { isPresented in
+                if !isPresented {
+                    actionConfirmation = nil
+                }
+            },
+        )
+    }
+
+    private func confirm(_ confirmation: HighlightJobActionConfirmation) {
+        actionConfirmation = nil
+        switch confirmation.action {
+        case let .save(jobID):
+            onSave(jobID)
+        case let .clear(jobID):
+            onClear(jobID)
+        }
     }
 }
