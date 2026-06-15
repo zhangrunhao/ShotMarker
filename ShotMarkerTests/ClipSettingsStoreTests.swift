@@ -17,8 +17,8 @@ final class ClipSettingsStoreTests: XCTestCase {
         suiteName = nil
     }
 
-    func testDefaultClipSettingsUseFiveSecondsBeforeAndTwoSecondsAfterMarker() {
-        XCTAssertEqual(ClipSettings.default, ClipSettings(secondsBeforeMarker: 5, secondsAfterMarker: 2))
+    func testDefaultClipSettingsUseNineSecondsBeforeAndFourSecondsAfterMarker() {
+        XCTAssertEqual(ClipSettings.default, ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4))
     }
 
     func testLoadReturnsDefaultSettingsWhenNothingHasBeenSaved() {

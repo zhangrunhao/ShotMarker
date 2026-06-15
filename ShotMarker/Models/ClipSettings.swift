@@ -4,7 +4,7 @@ struct ClipSettings: Codable, Equatable {
     var secondsBeforeMarker: TimeInterval
     var secondsAfterMarker: TimeInterval
 
-    static let `default` = ClipSettings(secondsBeforeMarker: 5, secondsAfterMarker: 2)
+    static let `default` = ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4)
 }
 
 struct ClipSettingsStore {
