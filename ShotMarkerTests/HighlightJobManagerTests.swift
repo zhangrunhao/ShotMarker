@@ -114,6 +114,61 @@ final class HighlightJobManagerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: try fileStore.url(forRelativePath: outputRelativePath).path))
     }
 
+    func testSaveCompletedJobToPhotoLibraryMarksItSaved() async throws {
+        let fileStore = HighlightJobFileStore(baseDirectoryURL: temporaryDirectory)
+        let jobID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000040001"))
+        let outputURL = temporaryDirectory.appendingPathComponent("output.mov")
+        try Data([1]).write(to: outputURL)
+        let outputRelativePath = try fileStore.moveOutputVideo(at: outputURL, jobID: jobID)
+        var completedJob = try makeJob(id: jobID, status: .completed)
+        completedJob.outputVideoPath = outputRelativePath
+        let store = InMemoryHighlightJobStore(jobs: [completedJob])
+        var savedURL: URL?
+        let manager = HighlightJobManager(
+            store: store,
+            fileStore: fileStore,
+            runnerFactory: { _ in .immediateCompleted },
+            saveVideoToPhotoLibrary: { url in
+                savedURL = url
+            },
+        )
+        manager.load()
+
+        await manager.saveToPhotoLibrary(jobID: jobID)
+
+        XCTAssertEqual(savedURL, try fileStore.url(forRelativePath: outputRelativePath))
+        XCTAssertEqual(manager.jobs.first?.status, .completed)
+        XCTAssertNotNil(manager.jobs.first?.photoLibrarySavedAt)
+        XCTAssertNil(manager.jobs.first?.photoLibrarySaveErrorMessage)
+        XCTAssertNotNil(try store.loadJobs().first?.photoLibrarySavedAt)
+    }
+
+    func testSaveCompletedJobToPhotoLibraryFailureLeavesJobCompletedAndRetryable() async throws {
+        let fileStore = HighlightJobFileStore(baseDirectoryURL: temporaryDirectory)
+        let jobID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000040001"))
+        let outputURL = temporaryDirectory.appendingPathComponent("output.mov")
+        try Data([1]).write(to: outputURL)
+        let outputRelativePath = try fileStore.moveOutputVideo(at: outputURL, jobID: jobID)
+        var completedJob = try makeJob(id: jobID, status: .completed)
+        completedJob.outputVideoPath = outputRelativePath
+        let manager = HighlightJobManager(
+            store: InMemoryHighlightJobStore(jobs: [completedJob]),
+            fileStore: fileStore,
+            runnerFactory: { _ in .immediateCompleted },
+            saveVideoToPhotoLibrary: { _ in
+                throw VideoClipPhotoLibraryError.accessDenied
+            },
+        )
+        manager.load()
+
+        await manager.saveToPhotoLibrary(jobID: jobID)
+
+        XCTAssertEqual(manager.jobs.first?.status, .completed)
+        XCTAssertNil(manager.jobs.first?.photoLibrarySavedAt)
+        XCTAssertEqual(manager.jobs.first?.photoLibrarySaveErrorMessage, "没有相册保存权限。请允许 ShotMarker 添加照片后再试。")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try fileStore.url(forRelativePath: outputRelativePath).path))
+    }
+
     private func makeSession() throws -> TrainingSession {
         TrainingSession(
             id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000040100")),

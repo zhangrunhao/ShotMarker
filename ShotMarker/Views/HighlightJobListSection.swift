@@ -2,16 +2,23 @@ import SwiftUI
 
 struct HighlightJobListSection: View {
     let jobs: [HighlightJob]
+    let photoLibrarySavingJobIDs: Set<UUID>
     let onCancel: (UUID) -> Void
     let onRestart: (UUID) -> Void
     let onPlay: (UUID) -> Void
+    let onSave: (UUID) -> Void
     let onClear: (UUID) -> Void
 
     var body: some View {
         if !jobs.isEmpty {
             Section("集锦任务") {
                 ForEach(jobs) { job in
-                    row(HighlightJobRowViewData(job: job))
+                    row(
+                        HighlightJobRowViewData(
+                            job: job,
+                            isSavingToPhotoLibrary: photoLibrarySavingJobIDs.contains(job.id),
+                        ),
+                    )
                 }
             }
         }
@@ -38,6 +45,12 @@ struct HighlightJobListSection: View {
                 if row.showsPlay {
                     iconButton("播放集锦", systemImage: "play.circle") {
                         onPlay(row.id)
+                    }
+                }
+
+                if row.showsSave {
+                    iconButton("保存到相册", systemImage: "square.and.arrow.down") {
+                        onSave(row.id)
                     }
                 }
 

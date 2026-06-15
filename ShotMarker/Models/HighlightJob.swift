@@ -8,6 +8,8 @@ struct HighlightJob: Identifiable, Codable, Equatable {
     var status: HighlightJobStatus
     var progress: HighlightJobProgress
     var outputVideoPath: String?
+    var photoLibrarySavedAt: Date? = nil
+    var photoLibrarySaveErrorMessage: String? = nil
     var errorMessage: String?
     var createdAt: Date
     var updatedAt: Date
@@ -32,6 +34,8 @@ struct HighlightJob: Identifiable, Codable, Equatable {
         case status
         case progress
         case outputVideoPath
+        case photoLibrarySavedAt
+        case photoLibrarySaveErrorMessage
         case errorMessage
         case createdAt
         case updatedAt
@@ -46,6 +50,8 @@ struct HighlightJob: Identifiable, Codable, Equatable {
         try container.encode(status, forKey: .status)
         try container.encode(progress, forKey: .progress)
         try container.encode(outputVideoPath, forKey: .outputVideoPath)
+        try container.encode(photoLibrarySavedAt, forKey: .photoLibrarySavedAt)
+        try container.encode(photoLibrarySaveErrorMessage, forKey: .photoLibrarySaveErrorMessage)
         try container.encode(errorMessage, forKey: .errorMessage)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)

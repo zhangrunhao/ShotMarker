@@ -17,12 +17,44 @@ final class HighlightJobRowViewDataTests: XCTestCase {
         XCTAssertFalse(row.showsPlay)
     }
 
-    func testCompletedJobShowsPlayAndClearActions() throws {
+    func testCompletedJobShowsPlaySaveAndClearActions() throws {
         let row = HighlightJobRowViewData(job: try makeJob(status: .completed))
 
         XCTAssertEqual(row.statusText, "已完成")
         XCTAssertNil(row.progressFraction)
         XCTAssertTrue(row.showsPlay)
+        XCTAssertTrue(row.showsSave)
+        XCTAssertTrue(row.showsClear)
+    }
+
+    func testCompletedSavedJobHidesSaveAction() throws {
+        var job = try makeJob(status: .completed)
+        job.photoLibrarySavedAt = Date(timeIntervalSince1970: 4_000)
+
+        let row = HighlightJobRowViewData(job: job)
+
+        XCTAssertEqual(row.statusText, "已保存到相册")
+        XCTAssertTrue(row.showsPlay)
+        XCTAssertFalse(row.showsSave)
+        XCTAssertTrue(row.showsClear)
+    }
+
+    func testCompletedJobShowsPhotoLibrarySaveFailureAndRetryAction() throws {
+        var job = try makeJob(status: .completed)
+        job.photoLibrarySaveErrorMessage = "没有相册保存权限。请允许 ShotMarker 添加照片后再试。"
+
+        let row = HighlightJobRowViewData(job: job)
+
+        XCTAssertEqual(row.statusText, "没有相册保存权限。请允许 ShotMarker 添加照片后再试。")
+        XCTAssertTrue(row.showsSave)
+    }
+
+    func testCompletedJobSavingToPhotoLibraryShowsSavingText() throws {
+        let row = HighlightJobRowViewData(job: try makeJob(status: .completed), isSavingToPhotoLibrary: true)
+
+        XCTAssertEqual(row.statusText, "正在保存到相册")
+        XCTAssertTrue(row.showsPlay)
+        XCTAssertFalse(row.showsSave)
         XCTAssertTrue(row.showsClear)
     }
 

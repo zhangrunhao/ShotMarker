@@ -280,12 +280,16 @@ struct TrainingSessionListView: View {
     private var highlightJobSection: some View {
         HighlightJobListSection(
             jobs: highlightJobManager.jobs,
+            photoLibrarySavingJobIDs: highlightJobManager.photoLibrarySavingJobIDs,
             onCancel: { highlightJobManager.cancel(jobID: $0) },
             onRestart: { jobID in
                 Task { await highlightJobManager.restart(jobID: jobID) }
             },
             onPlay: { jobID in
                 playHighlightJob(jobID)
+            },
+            onSave: { jobID in
+                Task { await highlightJobManager.saveToPhotoLibrary(jobID: jobID) }
             },
             onClear: { highlightJobManager.clear(jobID: $0) },
         )

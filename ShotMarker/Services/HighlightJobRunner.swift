@@ -14,19 +14,16 @@ struct HighlightJobRunner {
 
     private let fileStore: HighlightJobFileStoreProtocol
     private let makeHighlightClip: MakeHighlightClip
-    private let saveVideo: (URL) async throws -> Void
     private let assetForJobVideo: (HighlightJobVideo, HighlightClipAssetRequest) async throws -> AVAsset
     private let runOverride: RunOverride?
 
     init(
         fileStore: HighlightJobFileStoreProtocol = HighlightJobFileStore(),
         makeHighlightClip: @escaping MakeHighlightClip,
-        saveVideo: @escaping (URL) async throws -> Void,
         assetForJobVideo: @escaping (HighlightJobVideo, HighlightClipAssetRequest) async throws -> AVAsset,
     ) {
         self.fileStore = fileStore
         self.makeHighlightClip = makeHighlightClip
-        self.saveVideo = saveVideo
         self.assetForJobVideo = assetForJobVideo
         runOverride = nil
     }
@@ -37,7 +34,6 @@ struct HighlightJobRunner {
     ) {
         fileStore = HighlightJobFileStore()
         self.makeHighlightClip = makeHighlightClip
-        saveVideo = { _ in }
         assetForJobVideo = { _, _ in AVURLAsset(url: URL(fileURLWithPath: "/tmp/unused.mov")) }
         self.runOverride = runOverride
     }
@@ -97,21 +93,6 @@ struct HighlightJobRunner {
 
             let outputRelativePath = try fileStore.moveOutputVideo(at: temporaryOutputURL, jobID: job.id)
             job.outputVideoPath = outputRelativePath
-            job.status = .saving
-            job.updatedAt = Date()
-            onChange(job)
-
-            let outputURL = try fileStore.url(forRelativePath: outputRelativePath)
-            do {
-                try await saveVideo(outputURL)
-            } catch {
-                job.status = .failed
-                job.errorMessage = "视频已生成，但保存到相册失败。"
-                job.updatedAt = Date()
-                onChange(job)
-                return job
-            }
-
             job.status = .completed
             job.progress = HighlightJobProgress(
                 completedMarkerCount: plan.matchedMarkerCount,

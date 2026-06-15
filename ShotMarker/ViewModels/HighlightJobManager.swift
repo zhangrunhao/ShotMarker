@@ -8,10 +8,12 @@ import Foundation
 @MainActor
 final class HighlightJobManager: ObservableObject {
     @Published private(set) var jobs: [HighlightJob] = []
+    @Published private(set) var photoLibrarySavingJobIDs: Set<UUID> = []
 
     private let store: HighlightJobStoreProtocol
     private let fileStore: HighlightJobFileStoreProtocol
     private let runnerFactory: (HighlightJob) -> HighlightJobRunner
+    private let saveVideoToPhotoLibrary: (URL) async throws -> Void
     private let logger: AppLogging
     private var runningTasks: [UUID: Task<Void, Never>] = [:]
 
@@ -19,11 +21,13 @@ final class HighlightJobManager: ObservableObject {
         store: HighlightJobStoreProtocol,
         fileStore: HighlightJobFileStoreProtocol,
         runnerFactory: @escaping (HighlightJob) -> HighlightJobRunner,
+        saveVideoToPhotoLibrary: @escaping (URL) async throws -> Void = { _ in },
         logger: AppLogging = AppLogger.shared,
     ) {
         self.store = store
         self.fileStore = fileStore
         self.runnerFactory = runnerFactory
+        self.saveVideoToPhotoLibrary = saveVideoToPhotoLibrary
         self.logger = logger
     }
 
@@ -48,9 +52,6 @@ final class HighlightJobManager: ObservableObject {
                                 assetProvider,
                             )
                         },
-                        saveVideo: { outputURL in
-                            try await photoLibrarySaver.saveVideo(at: outputURL)
-                        },
                         assetForJobVideo: { jobVideo, request in
                             switch jobVideo.source {
                             case let .photoLibraryAsset(localIdentifier):
@@ -65,6 +66,9 @@ final class HighlightJobManager: ObservableObject {
                             }
                         },
                     )
+                },
+                saveVideoToPhotoLibrary: { outputURL in
+                    try await photoLibrarySaver.saveVideo(at: outputURL)
                 },
                 logger: logger,
             )
@@ -99,6 +103,8 @@ final class HighlightJobManager: ObservableObject {
             status: .queued,
             progress: .zero,
             outputVideoPath: nil,
+            photoLibrarySavedAt: nil,
+            photoLibrarySaveErrorMessage: nil,
             errorMessage: nil,
             createdAt: now,
             updatedAt: now,
@@ -120,6 +126,7 @@ final class HighlightJobManager: ObservableObject {
         let didRemoveJob = jobs.contains { $0.id == jobID }
         runningTasks[jobID]?.cancel()
         runningTasks[jobID] = nil
+        removePhotoLibrarySavingJobID(jobID)
         try? fileStore.removeAllFiles(for: jobID)
         jobs.removeAll { $0.id == jobID }
         persist()
@@ -143,6 +150,8 @@ final class HighlightJobManager: ObservableObject {
         jobs[index].status = .queued
         jobs[index].progress = .zero
         jobs[index].outputVideoPath = nil
+        jobs[index].photoLibrarySavedAt = nil
+        jobs[index].photoLibrarySaveErrorMessage = nil
         jobs[index].errorMessage = nil
         jobs[index].updatedAt = Date()
         persist()
@@ -159,6 +168,7 @@ final class HighlightJobManager: ObservableObject {
         let didRemoveJob = jobs.contains { $0.id == jobID }
         runningTasks[jobID]?.cancel()
         runningTasks[jobID] = nil
+        removePhotoLibrarySavingJobID(jobID)
         try? fileStore.removeAllFiles(for: jobID)
         jobs.removeAll { $0.id == jobID }
         persist()
@@ -187,6 +197,69 @@ final class HighlightJobManager: ObservableObject {
         }
 
         return url
+    }
+
+    func saveToPhotoLibrary(jobID: UUID) async {
+        guard !photoLibrarySavingJobIDs.contains(jobID),
+              let index = jobs.firstIndex(where: { $0.id == jobID }),
+              jobs[index].status == .completed,
+              jobs[index].photoLibrarySavedAt == nil
+        else {
+            return
+        }
+
+        guard let outputVideoPath = jobs[index].outputVideoPath else {
+            markJobFailed(jobID: jobID, message: "本地视频文件不存在，请重新生成。")
+            return
+        }
+
+        jobs[index].photoLibrarySaveErrorMessage = nil
+        jobs[index].updatedAt = Date()
+        persist()
+        addPhotoLibrarySavingJobID(jobID)
+
+        defer {
+            removePhotoLibrarySavingJobID(jobID)
+        }
+
+        do {
+            let outputURL = try fileStore.url(forRelativePath: outputVideoPath)
+            guard FileManager.default.fileExists(atPath: outputURL.path) else {
+                markJobFailed(jobID: jobID, message: "本地视频文件不存在，请重新生成。")
+                return
+            }
+
+            try await saveVideoToPhotoLibrary(outputURL)
+            guard let updatedIndex = jobs.firstIndex(where: { $0.id == jobID }) else {
+                return
+            }
+
+            jobs[updatedIndex].photoLibrarySavedAt = Date()
+            jobs[updatedIndex].photoLibrarySaveErrorMessage = nil
+            jobs[updatedIndex].updatedAt = Date()
+            persist()
+            logger.info(
+                "highlight.job.photo_library_save.succeeded",
+                category: .photos,
+                message: "集锦任务已保存到相册",
+                context: ["jobID": jobID.uuidString],
+            )
+        } catch {
+            guard let updatedIndex = jobs.firstIndex(where: { $0.id == jobID }) else {
+                return
+            }
+
+            jobs[updatedIndex].photoLibrarySaveErrorMessage = Self.userFacingMessage(for: error)
+            jobs[updatedIndex].updatedAt = Date()
+            persist()
+            logger.error(
+                "highlight.job.photo_library_save.failed",
+                category: .photos,
+                message: "集锦任务保存到相册失败",
+                error: error,
+                context: ["jobID": jobID.uuidString],
+            )
+        }
     }
 
     private func makeJobVideo(from video: SelectedTrainingVideo, jobID: UUID) throws -> HighlightJobVideo {
@@ -261,5 +334,25 @@ final class HighlightJobManager: ObservableObject {
 
     private func persist() {
         try? store.saveJobs(jobs)
+    }
+
+    private func addPhotoLibrarySavingJobID(_ jobID: UUID) {
+        var savingJobIDs = photoLibrarySavingJobIDs
+        savingJobIDs.insert(jobID)
+        photoLibrarySavingJobIDs = savingJobIDs
+    }
+
+    private func removePhotoLibrarySavingJobID(_ jobID: UUID) {
+        var savingJobIDs = photoLibrarySavingJobIDs
+        savingJobIDs.remove(jobID)
+        photoLibrarySavingJobIDs = savingJobIDs
+    }
+
+    private static func userFacingMessage(for error: Error) -> String {
+        if let localizedError = error as? LocalizedError, let description = localizedError.errorDescription {
+            return description
+        }
+
+        return error.localizedDescription
     }
 }

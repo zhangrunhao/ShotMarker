@@ -71,6 +71,8 @@ final class HighlightJobStoreTests: XCTestCase {
                 "status",
                 "progress",
                 "outputVideoPath",
+                "photoLibrarySavedAt",
+                "photoLibrarySaveErrorMessage",
                 "errorMessage",
                 "createdAt",
                 "updatedAt",
