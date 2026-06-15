@@ -22,6 +22,8 @@
         @State private var generationProgress: HighlightClipGenerationProgress?
         @State private var selectedVideoItems: [SelectedTrainingVideoSelectionItem] = []
         @State private var preparationConfirmationItemID: String?
+        @State private var preparationTasks: [String: Task<Void, Never>] = [:]
+        @State private var preparationRunIDs: [String: UUID] = [:]
         @State private var alert: HighlightFlowAlert?
 
         init(session: TrainingSession, logger: AppLogging = AppLogger.shared) {
@@ -169,6 +171,7 @@
                 Text("可能需要从 iCloud 下载原视频，过程中可能消耗流量。")
             }
             .onDisappear {
+                cancelPreparationTasks()
                 if !isGenerating {
                     cleanupTemporaryVideos()
                 }
@@ -205,9 +208,9 @@
 
         @ViewBuilder
         private func selectedVideoItemCard(_ item: SelectedTrainingVideoSelectionItem) -> some View {
-            if item.canPrepare {
+            if item.canControlPreparation {
                 Button {
-                    preparationConfirmationItemID = item.id
+                    handlePreparationControlTapped(for: item)
                 } label: {
                     selectedVideoItemCardContent(item)
                 }
@@ -249,6 +252,19 @@
                                 .tint(.white)
 
                             Text(item.preparationProgressText ?? "0%")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                        }
+                    } else if item.isPreparationPaused {
+                        Color.black.opacity(0.62)
+
+                        VStack(spacing: 6) {
+                            Image(systemName: "pause.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.white)
+
+                            Text(item.statusText)
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundStyle(.white)
@@ -317,30 +333,104 @@
         }
 
         @MainActor
+        private func handlePreparationControlTapped(for item: SelectedTrainingVideoSelectionItem) {
+            if item.isPreparing {
+                pausePreparingVideo(withID: item.id)
+                return
+            }
+
+            if item.canResumePreparation {
+                startPreparingVideo(withID: item.id)
+                return
+            }
+
+            if item.canPrepare {
+                preparationConfirmationItemID = item.id
+            }
+        }
+
+        @MainActor
         private func startPreparingConfirmedVideo() {
             guard let itemID = preparationConfirmationItemID else {
                 return
             }
 
             preparationConfirmationItemID = nil
-
-            Task {
-                await prepareSelectedVideoItem(withID: itemID)
-            }
+            startPreparingVideo(withID: itemID)
         }
 
         @MainActor
-        private func prepareSelectedVideoItem(withID itemID: String) async {
+        private func startPreparingVideo(withID itemID: String) {
+            guard preparationTasks[itemID] == nil else {
+                return
+            }
+
+            let runID = UUID()
+            preparationRunIDs[itemID] = runID
+
+            let task = Task {
+                await prepareSelectedVideoItem(withID: itemID, runID: runID)
+            }
+            preparationTasks[itemID] = task
+        }
+
+        @MainActor
+        private func pausePreparingVideo(withID itemID: String) {
+            guard let task = preparationTasks[itemID] else {
+                return
+            }
+
+            task.cancel()
+            preparationTasks[itemID] = nil
+            preparationRunIDs[itemID] = nil
+
             guard let itemIndex = selectedVideoItems.firstIndex(where: { $0.id == itemID }) else {
                 return
             }
 
             let item = selectedVideoItems[itemIndex]
-            guard item.canPrepare, let video = item.video else {
+            guard item.isPreparing else {
                 return
             }
 
-            selectedVideoItems[itemIndex] = item.preparing(progress: 0)
+            selectedVideoItems[itemIndex] = item.pausedPreparation()
+
+            logger.info(
+                "video.prepare.paused",
+                category: .video,
+                message: "已暂停准备所选视频",
+                context: highlightContext(extra: ["videoID": itemID]),
+            )
+        }
+
+        @MainActor
+        private func cancelPreparationTasks(excluding retainedItemIDs: Set<String> = []) {
+            for itemID in Array(preparationTasks.keys) where !retainedItemIDs.contains(itemID) {
+                preparationTasks[itemID]?.cancel()
+                preparationTasks[itemID] = nil
+                preparationRunIDs[itemID] = nil
+            }
+        }
+
+        @MainActor
+        private func prepareSelectedVideoItem(withID itemID: String, runID: UUID) async {
+            defer {
+                if preparationRunIDs[itemID] == runID {
+                    preparationTasks[itemID] = nil
+                    preparationRunIDs[itemID] = nil
+                }
+            }
+
+            guard let itemIndex = selectedVideoItems.firstIndex(where: { $0.id == itemID }) else {
+                return
+            }
+
+            let item = selectedVideoItems[itemIndex]
+            guard (item.canPrepare || item.canResumePreparation), let video = item.video else {
+                return
+            }
+
+            selectedVideoItems[itemIndex] = item.resumedPreparation()
 
             logger.info(
                 "video.prepare.started",
@@ -354,12 +444,15 @@
             do {
                 try await Self.preparePhotoLibraryVideo(video) { progress in
                     Task { @MainActor in
-                        updatePreparationProgress(for: itemID, progress: progress)
+                        updatePreparationProgress(for: itemID, runID: runID, progress: progress)
                     }
                 }
 
-                updatePreparationProgress(for: itemID, progress: 1)
+                updatePreparationProgress(for: itemID, runID: runID, progress: 1)
 
+                guard preparationRunIDs[itemID] == runID else {
+                    return
+                }
                 guard let latestIndex = selectedVideoItems.firstIndex(where: { $0.id == itemID }),
                       let availableItem = selectedVideoItems[latestIndex].availableAfterPreparation()
                 else {
@@ -378,6 +471,12 @@
                     ]),
                 )
             } catch {
+                guard preparationRunIDs[itemID] == runID,
+                      !(error is CancellationError)
+                else {
+                    return
+                }
+
                 guard let latestIndex = selectedVideoItems.firstIndex(where: { $0.id == itemID }) else {
                     return
                 }
@@ -408,7 +507,11 @@
         }
 
         @MainActor
-        private func updatePreparationProgress(for itemID: String, progress: Double) {
+        private func updatePreparationProgress(for itemID: String, runID: UUID, progress: Double) {
+            guard preparationRunIDs[itemID] == runID else {
+                return
+            }
+
             guard let itemIndex = selectedVideoItems.firstIndex(where: { $0.id == itemID }) else {
                 return
             }
@@ -423,6 +526,14 @@
 
         @MainActor
         private func loadSelectedVideos(from items: [PhotosPickerItem]) async {
+            let retainedItemIDs = Set(items.compactMap(\.itemIdentifier))
+            let retainedPreparationItems = selectedVideoItems
+                .filter { retainedItemIDs.contains($0.id) && ($0.isPreparing || $0.isPreparationPaused) }
+                .reduce(into: [String: SelectedTrainingVideoSelectionItem]()) { result, item in
+                    result[item.id] = item
+                }
+
+            cancelPreparationTasks(excluding: retainedItemIDs)
             cleanupTemporaryVideos()
             selectedVideos = []
             selectedVideoItems = []
@@ -445,7 +556,15 @@
             var selectionItems: [SelectedTrainingVideoSelectionItem] = []
 
             for (index, item) in items.enumerated() {
-                let selectionItem = await loadSelectedVideoItem(from: item, at: index)
+                var selectionItem = await loadSelectedVideoItem(from: item, at: index)
+                if let retainedItem = retainedPreparationItems[selectionItem.id],
+                   selectionItem.unavailableReason == .notReady
+                {
+                    selectionItem = selectionItem.preparing(progress: retainedItem.preparationProgress ?? 0)
+                    if retainedItem.isPreparationPaused {
+                        selectionItem = selectionItem.pausedPreparation()
+                    }
+                }
                 selectionItems.append(selectionItem)
 
                 if let video = selectionItem.video {
@@ -566,6 +685,7 @@
                 }
                 try await photoLibrarySaver.saveVideo(at: outputURL)
                 try? FileManager.default.removeItem(at: outputURL)
+                cancelPreparationTasks()
                 cleanupTemporaryVideos()
                 selectedItems = []
                 selectedVideos = []
@@ -922,25 +1042,31 @@
                 }
             }
 
-            return try await withCheckedThrowingContinuation { continuation in
-                PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
-                    if let error = info?[PHImageErrorKey] as? Error {
-                        continuation.resume(throwing: error)
-                        return
-                    }
+            let cancellationBox = PhotoLibraryAssetRequestCancellationBox()
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    let requestID = PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
+                        if let error = info?[PHImageErrorKey] as? Error {
+                            continuation.resume(throwing: error)
+                            return
+                        }
 
-                    if let isCancelled = info?[PHImageCancelledKey] as? Bool, isCancelled {
-                        continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
-                        return
-                    }
+                        if let isCancelled = info?[PHImageCancelledKey] as? Bool, isCancelled {
+                            continuation.resume(throwing: CancellationError())
+                            return
+                        }
 
-                    guard let avAsset else {
-                        continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
-                        return
-                    }
+                        guard let avAsset else {
+                            continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
+                            return
+                        }
 
-                    continuation.resume(returning: avAsset)
+                        continuation.resume(returning: avAsset)
+                    }
+                    cancellationBox.setRequestID(requestID)
                 }
+            } onCancel: {
+                cancellationBox.cancel()
             }
         }
 
@@ -1060,6 +1186,37 @@
         let id: String
         let thumbnailData: Data?
         let error: Error
+    }
+
+    nonisolated private final class PhotoLibraryAssetRequestCancellationBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var requestID = PHInvalidImageRequestID
+        private var isCancelled = false
+
+        func setRequestID(_ requestID: PHImageRequestID) {
+            lock.lock()
+            if isCancelled {
+                lock.unlock()
+                PHImageManager.default().cancelImageRequest(requestID)
+                return
+            }
+
+            self.requestID = requestID
+            lock.unlock()
+        }
+
+        func cancel() {
+            lock.lock()
+            isCancelled = true
+            let currentRequestID = requestID
+            lock.unlock()
+
+            guard currentRequestID != PHInvalidImageRequestID else {
+                return
+            }
+
+            PHImageManager.default().cancelImageRequest(currentRequestID)
+        }
     }
 
     private struct HighlightFlowAlert {

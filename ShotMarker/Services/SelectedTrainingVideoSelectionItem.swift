@@ -50,20 +50,33 @@ struct SelectedTrainingVideoSelectionItem: Identifiable, Equatable {
     let unavailableReason: SelectedTrainingVideoUnavailableReason?
     let thumbnailData: Data?
     let preparationProgress: Double?
+    let isPreparationPaused: Bool
 
     var isAvailable: Bool {
         video != nil && unavailableReason == nil
     }
 
     var isPreparing: Bool {
-        preparationProgress != nil
+        preparationProgress != nil && !isPreparationPaused
     }
 
     var canPrepare: Bool {
-        video != nil && unavailableReason == .notReady && !isPreparing
+        video != nil && unavailableReason == .notReady && preparationProgress == nil
+    }
+
+    var canResumePreparation: Bool {
+        video != nil && unavailableReason == .notReady && isPreparationPaused
+    }
+
+    var canControlPreparation: Bool {
+        canPrepare || isPreparing || canResumePreparation
     }
 
     var statusText: String {
+        if isPreparationPaused, let preparationProgressText {
+            return "已暂停 \(preparationProgressText)"
+        }
+
         if let preparationProgressText {
             return "准备中 \(preparationProgressText)"
         }
@@ -91,6 +104,31 @@ struct SelectedTrainingVideoSelectionItem: Identifiable, Equatable {
             unavailableReason: unavailableReason,
             thumbnailData: thumbnailData,
             preparationProgress: Self.clampedProgress(progress),
+            isPreparationPaused: false,
+        )
+    }
+
+    func pausedPreparation() -> SelectedTrainingVideoSelectionItem {
+        SelectedTrainingVideoSelectionItem(
+            id: id,
+            title: title,
+            video: video,
+            unavailableReason: unavailableReason,
+            thumbnailData: thumbnailData,
+            preparationProgress: preparationProgress ?? 0,
+            isPreparationPaused: true,
+        )
+    }
+
+    func resumedPreparation() -> SelectedTrainingVideoSelectionItem {
+        SelectedTrainingVideoSelectionItem(
+            id: id,
+            title: title,
+            video: video,
+            unavailableReason: unavailableReason,
+            thumbnailData: thumbnailData,
+            preparationProgress: preparationProgress ?? 0,
+            isPreparationPaused: false,
         )
     }
 
@@ -120,6 +158,7 @@ struct SelectedTrainingVideoSelectionItem: Identifiable, Equatable {
             unavailableReason: nil,
             thumbnailData: thumbnailData,
             preparationProgress: nil,
+            isPreparationPaused: false,
         )
     }
 
@@ -137,6 +176,7 @@ struct SelectedTrainingVideoSelectionItem: Identifiable, Equatable {
             unavailableReason: reason,
             thumbnailData: thumbnailData,
             preparationProgress: nil,
+            isPreparationPaused: false,
         )
     }
 

@@ -114,6 +114,34 @@ final class SelectedTrainingVideoSelectionItemTests: XCTestCase {
         XCTAssertEqual(preparingItem.statusText, "准备中 43%")
     }
 
+    func testPreparingItemCanPauseAndResumeWithProgress() {
+        let video = SelectedTrainingVideo(
+            id: "not-ready-video",
+            recordedStartAt: Date(timeIntervalSince1970: 100),
+            duration: 60,
+        )
+        let item = SelectedTrainingVideoSelectionItem.unavailable(
+            id: "item-1",
+            title: "视频 1",
+            video: video,
+            reason: .notReady,
+            thumbnailData: nil,
+        )
+
+        let pausedItem = item.preparing(progress: 0.426).pausedPreparation()
+        let resumedItem = pausedItem.resumedPreparation()
+
+        XCTAssertFalse(pausedItem.isPreparing)
+        XCTAssertTrue(pausedItem.isPreparationPaused)
+        XCTAssertTrue(pausedItem.canResumePreparation)
+        XCTAssertEqual(pausedItem.preparationProgressText, "43%")
+        XCTAssertEqual(pausedItem.statusText, "已暂停 43%")
+        XCTAssertTrue(resumedItem.isPreparing)
+        XCTAssertFalse(resumedItem.isPreparationPaused)
+        XCTAssertEqual(resumedItem.preparationProgressText, "43%")
+        XCTAssertEqual(resumedItem.statusText, "准备中 43%")
+    }
+
     func testPreparedItemBecomesAvailable() throws {
         let video = SelectedTrainingVideo(
             id: "not-ready-video",
