@@ -229,8 +229,6 @@ struct VideoClipEditingService {
                 totalMarkerCount: totalMarkerCount,
             ),
         )
-        var composedMarkerCount = 0
-        var lastReportedCompositionMarkerCount = 0
 
         for (index, segment) in validSegments.enumerated() {
             let asset: AVAsset
@@ -290,21 +288,6 @@ struct VideoClipEditingService {
                     "segmentDurationSeconds": Self.secondsString(segment.duration),
                 ],
             )
-
-            composedMarkerCount += segment.coveredMarkerCount
-            let completedMarkerCount = Self.inProgressCompletedMarkerCount(
-                completedMarkerCount: composedMarkerCount,
-                totalMarkerCount: totalMarkerCount,
-            )
-            if completedMarkerCount > lastReportedCompositionMarkerCount {
-                lastReportedCompositionMarkerCount = completedMarkerCount
-                progressHandler?(
-                    HighlightClipGenerationProgress(
-                        completedMarkerCount: completedMarkerCount,
-                        totalMarkerCount: totalMarkerCount,
-                    ),
-                )
-            }
         }
 
         return try await export(
@@ -315,7 +298,6 @@ struct VideoClipEditingService {
                 overlayRanges: overlayRanges,
             ),
             progressTotalMarkerCount: totalMarkerCount,
-            initialProgressMarkerCount: lastReportedCompositionMarkerCount,
             progressHandler: progressHandler,
         )
     }
@@ -339,7 +321,6 @@ struct VideoClipEditingService {
         outputNamePrefix: String = "ShotMarker-TestClip",
         videoComposition: AVVideoComposition? = nil,
         progressTotalMarkerCount: Int? = nil,
-        initialProgressMarkerCount: Int = 0,
         progressHandler: (@MainActor (HighlightClipGenerationProgress) -> Void)? = nil,
     ) async throws -> URL {
         let exportSessionConfiguration = Self.makeExportSession(
@@ -367,7 +348,7 @@ struct VideoClipEditingService {
 
         let progressTask: Task<Void, Never>? = if let progressTotalMarkerCount, let progressHandler {
             Task { @MainActor in
-                var lastReportedMarkerCount = initialProgressMarkerCount
+                var lastReportedMarkerCount = 0
                 while !Task.isCancelled {
                     let completedMarkerCount = Self.completedMarkerCount(
                         forExportProgress: exportSession.progress,
@@ -458,17 +439,6 @@ struct VideoClipEditingService {
         }
 
         return (nil, presetNames.last ?? AVAssetExportPresetHighestQuality)
-    }
-
-    private static func inProgressCompletedMarkerCount(
-        completedMarkerCount: Int,
-        totalMarkerCount: Int,
-    ) -> Int {
-        guard totalMarkerCount > 0 else {
-            return 0
-        }
-
-        return min(max(completedMarkerCount, 0), totalMarkerCount - 1)
     }
 
     private func logExportFailure(operation: String, error: Error) {

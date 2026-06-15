@@ -216,7 +216,7 @@ final class VideoClipEditingServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testMakeHighlightClipReportsProgressAfterEachComposedSegment() async throws {
+    func testMakeHighlightClipDoesNotConsumeProgressWhileBuildingComposition() async throws {
         let sourceURL = temporaryDirectory.appendingPathComponent("highlight-composition-progress-source.mov")
         try await makeSilentVideo(at: sourceURL, duration: 8)
         let markerAt = Date(timeIntervalSince1970: 1_000)
@@ -253,7 +253,7 @@ final class VideoClipEditingServiceTests: XCTestCase {
             if request.videoID == "second-video" {
                 XCTAssertEqual(
                     progressUpdates.last,
-                    HighlightClipGenerationProgress(completedMarkerCount: 1, totalMarkerCount: 2),
+                    HighlightClipGenerationProgress(completedMarkerCount: 0, totalMarkerCount: 2),
                 )
             }
 
@@ -262,9 +262,6 @@ final class VideoClipEditingServiceTests: XCTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
         XCTAssertEqual(requestedVideoIDs, ["first-video", "second-video"])
-        XCTAssertTrue(progressUpdates.contains(
-            HighlightClipGenerationProgress(completedMarkerCount: 1, totalMarkerCount: 2),
-        ))
     }
 
     func testHighlightClipExportProgressDoesNotReachTotalBeforeExportFinishes() {
