@@ -54,6 +54,7 @@ struct TrainingSessionNavigationState: Equatable {
 
 struct TrainingSessionListView: View {
     @StateObject private var viewModel: TrainingSessionListViewModel
+    @ObservedObject private var highlightJobManager: HighlightJobManager
     @State private var isImportingTrainingSessions = false
     @State private var isExportingTrainingSessions = false
     @State private var trainingSessionExportDocument: TrainingSessionJSONDocument?
@@ -69,7 +70,6 @@ struct TrainingSessionListView: View {
     private let diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)?
     private let logger: AppLogging
     private let logExportService: AppLogExportService?
-    private let highlightJobManager: HighlightJobManager?
 
     @MainActor
     init(
@@ -82,7 +82,8 @@ struct TrainingSessionListView: View {
         self.diagnosticsSnapshotProvider = diagnosticsSnapshotProvider
         self.logger = logger
         self.logExportService = logExportService
-        self.highlightJobManager = highlightJobManager
+        let resolvedHighlightJobManager = Self.resolvedHighlightJobManager(highlightJobManager, logger: logger)
+        _highlightJobManager = ObservedObject(wrappedValue: resolvedHighlightJobManager)
         _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(store: store, logger: logger))
     }
 
@@ -97,7 +98,8 @@ struct TrainingSessionListView: View {
         self.diagnosticsSnapshotProvider = diagnosticsSnapshotProvider
         self.logger = logger
         self.logExportService = logExportService
-        self.highlightJobManager = highlightJobManager
+        let resolvedHighlightJobManager = Self.resolvedHighlightJobManager(highlightJobManager, logger: logger)
+        _highlightJobManager = ObservedObject(wrappedValue: resolvedHighlightJobManager)
         _viewModel = StateObject(wrappedValue: viewModel)
     }
 
@@ -220,27 +222,65 @@ struct TrainingSessionListView: View {
     @ViewBuilder
     private var content: some View {
         if let errorMessage = viewModel.errorMessage {
-            ContentUnavailableView("无法加载训练记录", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+            if highlightJobManager.jobs.isEmpty {
+                ContentUnavailableView("无法加载训练记录", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+            } else {
+                List {
+                    highlightJobSection
+                    unavailableRow("无法加载训练记录", systemImage: "exclamationmark.triangle", description: errorMessage)
+                }
+            }
         } else if viewModel.isEmpty {
-            ContentUnavailableView("暂无训练记录", systemImage: "applewatch", description: Text("结束一次手表训练后，训练记录会显示在这里。"))
+            if highlightJobManager.jobs.isEmpty {
+                ContentUnavailableView("暂无训练记录", systemImage: "applewatch", description: Text("结束一次手表训练后，训练记录会显示在这里。"))
+            } else {
+                List {
+                    highlightJobSection
+                    unavailableRow("暂无训练记录", systemImage: "applewatch", description: "结束一次手表训练后，训练记录会显示在这里。")
+                }
+            }
         } else {
-            List(viewModel.rows) { row in
-                if viewModel.isSelectionMode {
-                    TrainingSessionRow(
-                        row: row,
-                        isSelectionMode: true,
-                        isSelected: viewModel.isSelected(row.id),
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        viewModel.toggleSelection(for: row.id)
+            List {
+                highlightJobSection
+
+                ForEach(viewModel.rows) { row in
+                    if viewModel.isSelectionMode {
+                        TrainingSessionRow(
+                            row: row,
+                            isSelectionMode: true,
+                            isSelected: viewModel.isSelected(row.id),
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            viewModel.toggleSelection(for: row.id)
+                        }
+                        .listRowBackground(viewModel.isSelected(row.id) ? Color.accentColor.opacity(0.12) : Color.clear)
+                    } else {
+                        trainingSessionNavigationRow(for: row)
                     }
-                    .listRowBackground(viewModel.isSelected(row.id) ? Color.accentColor.opacity(0.12) : Color.clear)
-                } else {
-                    trainingSessionNavigationRow(for: row)
                 }
             }
         }
+    }
+
+    private var highlightJobSection: some View {
+        HighlightJobListSection(
+            jobs: highlightJobManager.jobs,
+            onCancel: { highlightJobManager.cancel(jobID: $0) },
+            onRestart: { jobID in
+                Task { await highlightJobManager.restart(jobID: jobID) }
+            },
+            onPlay: { jobID in
+                playHighlightJob(jobID)
+            },
+            onClear: { highlightJobManager.clear(jobID: $0) },
+        )
+    }
+
+    private func unavailableRow(_ title: String, systemImage: String, description: String) -> some View {
+        ContentUnavailableView(title, systemImage: systemImage, description: Text(description))
+            .frame(maxWidth: .infinity, minHeight: 280)
+            .listRowSeparator(.hidden)
     }
 
     private func trainingSessionNavigationRow(for row: TrainingSessionRowViewData) -> some View {
@@ -336,6 +376,25 @@ struct TrainingSessionListView: View {
         #if os(iOS)
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         #endif
+    }
+
+    @MainActor
+    private func playHighlightJob(_ jobID: UUID) {
+        _ = jobID
+    }
+
+    @MainActor
+    private static func resolvedHighlightJobManager(
+        _ highlightJobManager: HighlightJobManager?,
+        logger: AppLogging,
+    ) -> HighlightJobManager {
+        guard let highlightJobManager else {
+            let manager = HighlightJobManager.live(logger: logger)
+            manager.load()
+            return manager
+        }
+
+        return highlightJobManager
     }
 
     private var mergeActionBar: some View {
