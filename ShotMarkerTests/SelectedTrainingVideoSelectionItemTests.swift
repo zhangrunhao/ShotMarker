@@ -58,4 +58,23 @@ final class SelectedTrainingVideoSelectionItemTests: XCTestCase {
 
         XCTAssertEqual(items.availableVideos, [availableVideo])
     }
+
+    func testSelectionItemsWrapIntoRowsWithoutDroppingVideos() {
+        let items = (1...5).map { index in
+            SelectedTrainingVideoSelectionItem.unavailable(
+                id: "item-\(index)",
+                title: "视频 \(index)",
+                reason: .notReady,
+                thumbnailData: nil,
+            )
+        }
+
+        let rows = items.rows(maximumItemsPerRow: 2)
+
+        XCTAssertEqual(rows.map { $0.map(\.id) }, [
+            ["item-1", "item-2"],
+            ["item-3", "item-4"],
+            ["item-5"],
+        ])
+    }
 }

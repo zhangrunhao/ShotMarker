@@ -74,14 +74,20 @@
 
                 if !selectedVideoItems.isEmpty {
                     Section("已选视频") {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(spacing: 12) {
-                                ForEach(selectedVideoItems) { item in
-                                    selectedVideoItemCard(item)
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(Array(selectedVideoItems.rows(maximumItemsPerRow: 2).enumerated()), id: \.offset) { row in
+                                HStack(spacing: 12) {
+                                    ForEach(row.element) { item in
+                                        selectedVideoItemCard(item)
+                                    }
+
+                                    if row.element.count < 2 {
+                                        Spacer(minLength: 0)
+                                    }
                                 }
                             }
-                            .padding(.vertical, 4)
                         }
+                        .padding(.vertical, 4)
                     }
                 }
 

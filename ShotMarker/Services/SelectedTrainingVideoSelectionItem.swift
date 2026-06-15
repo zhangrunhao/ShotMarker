@@ -97,4 +97,14 @@ extension Array where Element == SelectedTrainingVideoSelectionItem {
     var availableVideos: [SelectedTrainingVideo] {
         compactMap(\.video)
     }
+
+    func rows(maximumItemsPerRow: Int) -> [[SelectedTrainingVideoSelectionItem]] {
+        guard maximumItemsPerRow > 0 else {
+            return [self]
+        }
+
+        return stride(from: 0, to: count, by: maximumItemsPerRow).map { startIndex in
+            Array(self[startIndex..<Swift.min(startIndex + maximumItemsPerRow, count)])
+        }
+    }
 }
