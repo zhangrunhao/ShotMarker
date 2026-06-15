@@ -1,0 +1,115 @@
+@testable import ShotMarker
+import XCTest
+
+final class HighlightJobStoreTests: XCTestCase {
+    private var temporaryDirectory: URL!
+
+    override func setUpWithError() throws {
+        temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: temporaryDirectory)
+        temporaryDirectory = nil
+    }
+
+    func testLoadReturnsEmptyArrayWhenFileDoesNotExist() throws {
+        let store = HighlightJobStore(fileURL: temporaryDirectory.appendingPathComponent("missing.json"))
+
+        XCTAssertEqual(try store.loadJobs(), [])
+    }
+
+    func testSaveAndLoadRoundTripsJobs() throws {
+        let fileURL = temporaryDirectory.appendingPathComponent("highlight-jobs.json")
+        let store = HighlightJobStore(fileURL: fileURL)
+        let job = try makeJob(status: .completed)
+
+        try store.saveJobs([job])
+
+        XCTAssertEqual(try store.loadJobs(), [job])
+    }
+
+    func testLoadMarksLaunchInterruptedStatusesAsInterrupted() throws {
+        let fileURL = temporaryDirectory.appendingPathComponent("highlight-jobs.json")
+        let store = HighlightJobStore(fileURL: fileURL)
+        let queued = try makeJob(id: "00000000-0000-0000-0000-000000010001", status: .queued)
+        let running = try makeJob(id: "00000000-0000-0000-0000-000000010002", status: .running)
+        let saving = try makeJob(id: "00000000-0000-0000-0000-000000010003", status: .saving)
+        let completed = try makeJob(id: "00000000-0000-0000-0000-000000010004", status: .completed)
+        let failed = try makeJob(id: "00000000-0000-0000-0000-000000010005", status: .failed)
+        let interrupted = try makeJob(id: "00000000-0000-0000-0000-000000010006", status: .interrupted)
+        try store.saveJobs([queued, running, saving, completed, failed, interrupted])
+
+        let loaded = try store.loadJobsForLaunchRecovery()
+
+        XCTAssertEqual(loaded.map(\.status), [
+            .interrupted,
+            .interrupted,
+            .interrupted,
+            .completed,
+            .failed,
+            .interrupted,
+        ])
+        XCTAssertEqual(loaded[0].progress, queued.progress)
+        XCTAssertNil(loaded[0].errorMessage)
+    }
+
+    func testJobEncodingUsesExpectedTopLevelKeys() throws {
+        let job = try makeJob(status: .completed)
+
+        let jsonObject = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(job)) as? [String: Any])
+
+        XCTAssertEqual(
+            Set(jsonObject.keys),
+            Set([
+                "id",
+                "trainingSession",
+                "selectedVideos",
+                "clipSettings",
+                "status",
+                "progress",
+                "outputVideoPath",
+                "errorMessage",
+                "createdAt",
+                "updatedAt",
+            ]),
+        )
+    }
+
+    private func makeJob(
+        id: String = "00000000-0000-0000-0000-000000010000",
+        status: HighlightJobStatus,
+    ) throws -> HighlightJob {
+        HighlightJob(
+            id: try XCTUnwrap(UUID(uuidString: id)),
+            trainingSession: TrainingSession(
+                id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000010100")),
+                startedAt: Date(timeIntervalSince1970: 2_000),
+                endedAt: Date(timeIntervalSince1970: 2_600),
+                events: [
+                    ShotMarkerEvent(
+                        id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000010101")),
+                        markedAt: Date(timeIntervalSince1970: 2_120),
+                    ),
+                ],
+            ),
+            selectedVideos: [
+                HighlightJobVideo(
+                    id: "photo-asset-id",
+                    recordedStartAt: Date(timeIntervalSince1970: 2_000),
+                    duration: 900,
+                    source: .photoLibraryAsset(localIdentifier: "photo-asset-id"),
+                ),
+            ],
+            clipSettings: ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4),
+            status: status,
+            progress: HighlightJobProgress(completedMarkerCount: 1, totalMarkerCount: 3),
+            outputVideoPath: status == .completed ? "HighlightJobs/Outputs/job/highlight.mov" : nil,
+            errorMessage: status == .failed ? "导出失败" : nil,
+            createdAt: Date(timeIntervalSince1970: 3_000),
+            updatedAt: Date(timeIntervalSince1970: 3_100),
+        )
+    }
+}
