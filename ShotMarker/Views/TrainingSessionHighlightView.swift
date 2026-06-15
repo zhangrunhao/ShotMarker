@@ -21,6 +21,7 @@
         @State private var clipSettings = ClipSettingsStore.shared.load()
         @State private var generationProgress: HighlightClipGenerationProgress?
         @State private var selectedVideoItems: [SelectedTrainingVideoSelectionItem] = []
+        @State private var preparationConfirmationItemID: String?
         @State private var alert: HighlightFlowAlert?
 
         init(session: TrainingSession, logger: AppLogging = AppLogger.shared) {
@@ -159,6 +160,14 @@
             } message: {
                 Text(alert?.message ?? "")
             }
+            .alert("下载或准备视频？", isPresented: isShowingPreparationConfirmation) {
+                Button("取消", role: .cancel) {}
+                Button("开始") {
+                    startPreparingConfirmedVideo()
+                }
+            } message: {
+                Text("可能需要从 iCloud 下载原视频，过程中可能消耗流量。")
+            }
             .onDisappear {
                 if !isGenerating {
                     cleanupTemporaryVideos()
@@ -183,7 +192,33 @@
             )
         }
 
+        private var isShowingPreparationConfirmation: Binding<Bool> {
+            Binding(
+                get: { preparationConfirmationItemID != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        preparationConfirmationItemID = nil
+                    }
+                },
+            )
+        }
+
+        @ViewBuilder
         private func selectedVideoItemCard(_ item: SelectedTrainingVideoSelectionItem) -> some View {
+            if item.canPrepare {
+                Button {
+                    preparationConfirmationItemID = item.id
+                } label: {
+                    selectedVideoItemCardContent(item)
+                }
+                .buttonStyle(.plain)
+                .disabled(isLoadingVideos || isGenerating)
+            } else {
+                selectedVideoItemCardContent(item)
+            }
+        }
+
+        private func selectedVideoItemCardContent(_ item: SelectedTrainingVideoSelectionItem) -> some View {
             VStack(alignment: .leading, spacing: 6) {
                 ZStack {
                     selectedVideoThumbnail(for: item)
@@ -205,6 +240,19 @@
                             Spacer()
                         }
                         .padding(6)
+                    } else if item.isPreparing {
+                        Color.black.opacity(0.62)
+
+                        VStack(spacing: 6) {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .tint(.white)
+
+                            Text(item.preparationProgressText ?? "0%")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                        }
                     } else {
                         Color.black.opacity(0.58)
 
@@ -266,6 +314,111 @@
                 message: "集锦剪辑计划更新",
                 context: highlightPlanContext(plan),
             )
+        }
+
+        @MainActor
+        private func startPreparingConfirmedVideo() {
+            guard let itemID = preparationConfirmationItemID else {
+                return
+            }
+
+            preparationConfirmationItemID = nil
+
+            Task {
+                await prepareSelectedVideoItem(withID: itemID)
+            }
+        }
+
+        @MainActor
+        private func prepareSelectedVideoItem(withID itemID: String) async {
+            guard let itemIndex = selectedVideoItems.firstIndex(where: { $0.id == itemID }) else {
+                return
+            }
+
+            let item = selectedVideoItems[itemIndex]
+            guard item.canPrepare, let video = item.video else {
+                return
+            }
+
+            selectedVideoItems[itemIndex] = item.preparing(progress: 0)
+
+            logger.info(
+                "video.prepare.started",
+                category: .video,
+                message: "开始准备所选视频",
+                context: highlightContext(extra: [
+                    "videoID": video.id,
+                ]),
+            )
+
+            do {
+                try await Self.preparePhotoLibraryVideo(video) { progress in
+                    Task { @MainActor in
+                        updatePreparationProgress(for: itemID, progress: progress)
+                    }
+                }
+
+                updatePreparationProgress(for: itemID, progress: 1)
+
+                guard let latestIndex = selectedVideoItems.firstIndex(where: { $0.id == itemID }),
+                      let availableItem = selectedVideoItems[latestIndex].availableAfterPreparation()
+                else {
+                    return
+                }
+
+                selectedVideoItems[latestIndex] = availableItem
+                selectedVideos = selectedVideoItems.availableVideos
+
+                logger.info(
+                    "video.prepare.succeeded",
+                    category: .video,
+                    message: "所选视频已准备完成",
+                    context: highlightContext(extra: [
+                        "videoID": video.id,
+                    ]),
+                )
+            } catch {
+                guard let latestIndex = selectedVideoItems.firstIndex(where: { $0.id == itemID }) else {
+                    return
+                }
+
+                selectedVideoItems[latestIndex] = .unavailable(
+                    id: item.id,
+                    title: item.title,
+                    video: video,
+                    reason: .notReady,
+                    thumbnailData: item.thumbnailData,
+                )
+                selectedVideos = selectedVideoItems.availableVideos
+                alert = HighlightFlowAlert(
+                    title: "准备失败",
+                    message: "视频暂时没有准备好。请确认网络可用后再试。",
+                )
+
+                logger.warning(
+                    "video.prepare.failed",
+                    category: .video,
+                    message: "所选视频准备失败",
+                    context: highlightContext(extra: [
+                        "videoID": video.id,
+                        "error": "\(error)",
+                    ]),
+                )
+            }
+        }
+
+        @MainActor
+        private func updatePreparationProgress(for itemID: String, progress: Double) {
+            guard let itemIndex = selectedVideoItems.firstIndex(where: { $0.id == itemID }) else {
+                return
+            }
+
+            let item = selectedVideoItems[itemIndex]
+            guard item.isPreparing else {
+                return
+            }
+
+            selectedVideoItems[itemIndex] = item.preparing(progress: progress)
         }
 
         @MainActor
@@ -489,6 +642,7 @@
                     return .unavailable(
                         id: loadedVideo.video.id,
                         title: title,
+                        video: loadedVideo.video,
                         reason: .notReady,
                         thumbnailData: loadedVideo.thumbnailData,
                     )
@@ -742,13 +896,31 @@
             }
         }
 
+        nonisolated private static func preparePhotoLibraryVideo(
+            _ video: SelectedTrainingVideo,
+            progressHandler: @escaping @Sendable (Double) -> Void,
+        ) async throws {
+            let asset = try photoAsset(with: video.id)
+            _ = try await requestAVAsset(
+                for: asset,
+                deliveryQuality: .high,
+                progressHandler: progressHandler,
+            )
+        }
+
         nonisolated private static func requestAVAsset(
             for asset: PHAsset,
             deliveryQuality: HighlightClipPhotoLibraryDeliveryQuality,
+            progressHandler: (@Sendable (Double) -> Void)? = nil,
         ) async throws -> AVAsset {
             let options = PHVideoRequestOptions()
             options.deliveryMode = deliveryQuality.photoVideoRequestDeliveryMode
             options.isNetworkAccessAllowed = true
+            if let progressHandler {
+                options.progressHandler = { progress, _, _, _ in
+                    progressHandler(progress)
+                }
+            }
 
             return try await withCheckedThrowingContinuation { continuation in
                 PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in

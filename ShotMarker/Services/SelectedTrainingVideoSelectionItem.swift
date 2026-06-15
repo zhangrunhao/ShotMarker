@@ -49,17 +49,62 @@ struct SelectedTrainingVideoSelectionItem: Identifiable, Equatable {
     let video: SelectedTrainingVideo?
     let unavailableReason: SelectedTrainingVideoUnavailableReason?
     let thumbnailData: Data?
+    let preparationProgress: Double?
 
     var isAvailable: Bool {
         video != nil && unavailableReason == nil
     }
 
+    var isPreparing: Bool {
+        preparationProgress != nil
+    }
+
+    var canPrepare: Bool {
+        video != nil && unavailableReason == .notReady && !isPreparing
+    }
+
     var statusText: String {
-        unavailableReason?.displayText ?? "可用"
+        if let preparationProgressText {
+            return "准备中 \(preparationProgressText)"
+        }
+
+        return unavailableReason?.displayText ?? "可用"
     }
 
     var unavailableReasonText: String? {
         unavailableReason?.displayText
+    }
+
+    var preparationProgressText: String? {
+        guard let preparationProgress else {
+            return nil
+        }
+
+        return "\(Int((Self.clampedProgress(preparationProgress) * 100).rounded()))%"
+    }
+
+    func preparing(progress: Double) -> SelectedTrainingVideoSelectionItem {
+        SelectedTrainingVideoSelectionItem(
+            id: id,
+            title: title,
+            video: video,
+            unavailableReason: unavailableReason,
+            thumbnailData: thumbnailData,
+            preparationProgress: Self.clampedProgress(progress),
+        )
+    }
+
+    func availableAfterPreparation() -> SelectedTrainingVideoSelectionItem? {
+        guard let video else {
+            return nil
+        }
+
+        return .available(
+            id: id,
+            title: title,
+            video: video,
+            thumbnailData: thumbnailData,
+        )
     }
 
     static func available(
@@ -74,28 +119,37 @@ struct SelectedTrainingVideoSelectionItem: Identifiable, Equatable {
             video: video,
             unavailableReason: nil,
             thumbnailData: thumbnailData,
+            preparationProgress: nil,
         )
     }
 
     static func unavailable(
         id: String,
         title: String,
+        video: SelectedTrainingVideo? = nil,
         reason: SelectedTrainingVideoUnavailableReason,
         thumbnailData: Data?,
     ) -> SelectedTrainingVideoSelectionItem {
         SelectedTrainingVideoSelectionItem(
             id: id,
             title: title,
-            video: nil,
+            video: video,
             unavailableReason: reason,
             thumbnailData: thumbnailData,
+            preparationProgress: nil,
         )
+    }
+
+    private static func clampedProgress(_ value: Double) -> Double {
+        min(max(value, 0), 1)
     }
 }
 
 extension Array where Element == SelectedTrainingVideoSelectionItem {
     var availableVideos: [SelectedTrainingVideo] {
-        compactMap(\.video)
+        compactMap { item in
+            item.isAvailable ? item.video : nil
+        }
     }
 
     func rows(maximumItemsPerRow: Int) -> [[SelectedTrainingVideoSelectionItem]] {

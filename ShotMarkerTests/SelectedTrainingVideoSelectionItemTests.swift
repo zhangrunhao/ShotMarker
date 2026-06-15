@@ -41,11 +41,23 @@ final class SelectedTrainingVideoSelectionItemTests: XCTestCase {
             recordedStartAt: Date(timeIntervalSince1970: 100),
             duration: 60,
         )
+        let unavailableVideo = SelectedTrainingVideo(
+            id: "unavailable-video",
+            recordedStartAt: Date(timeIntervalSince1970: 200),
+            duration: 60,
+        )
         let items = [
             SelectedTrainingVideoSelectionItem.unavailable(
                 id: "item-1",
                 title: "视频 1",
                 reason: .noMarkerCoverage,
+                thumbnailData: nil,
+            ),
+            SelectedTrainingVideoSelectionItem.unavailable(
+                id: "item-3",
+                title: "视频 3",
+                video: unavailableVideo,
+                reason: .notReady,
                 thumbnailData: nil,
             ),
             SelectedTrainingVideoSelectionItem.available(
@@ -76,5 +88,51 @@ final class SelectedTrainingVideoSelectionItemTests: XCTestCase {
             ["item-3", "item-4"],
             ["item-5"],
         ])
+    }
+
+    func testNotReadyItemCanShowPreparationProgress() {
+        let video = SelectedTrainingVideo(
+            id: "not-ready-video",
+            recordedStartAt: Date(timeIntervalSince1970: 100),
+            duration: 60,
+        )
+        let item = SelectedTrainingVideoSelectionItem.unavailable(
+            id: "item-1",
+            title: "视频 1",
+            video: video,
+            reason: .notReady,
+            thumbnailData: nil,
+        )
+
+        let preparingItem = item.preparing(progress: 0.426)
+
+        XCTAssertTrue(item.canPrepare)
+        XCTAssertFalse(item.isPreparing)
+        XCTAssertTrue(preparingItem.isPreparing)
+        XCTAssertFalse(preparingItem.canPrepare)
+        XCTAssertEqual(preparingItem.preparationProgressText, "43%")
+        XCTAssertEqual(preparingItem.statusText, "准备中 43%")
+    }
+
+    func testPreparedItemBecomesAvailable() throws {
+        let video = SelectedTrainingVideo(
+            id: "not-ready-video",
+            recordedStartAt: Date(timeIntervalSince1970: 100),
+            duration: 60,
+        )
+        let item = SelectedTrainingVideoSelectionItem.unavailable(
+            id: "item-1",
+            title: "视频 1",
+            video: video,
+            reason: .notReady,
+            thumbnailData: Data([1]),
+        )
+
+        let availableItem = try XCTUnwrap(item.availableAfterPreparation())
+
+        XCTAssertTrue(availableItem.isAvailable)
+        XCTAssertEqual(availableItem.video, video)
+        XCTAssertEqual(availableItem.thumbnailData, Data([1]))
+        XCTAssertEqual([availableItem].availableVideos, [video])
     }
 }
