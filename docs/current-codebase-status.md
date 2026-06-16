@@ -219,10 +219,10 @@ Watch entitlements：
 
 当前用于 App Store Connect 的公开页面已经部署到 `zhangrh.shop`：
 
-- Support URL：`https://zhangrh.shop/shotmaker/support`
-- Privacy Policy URL：`https://zhangrh.shop/shotmaker/privacy`
+- Support URL：`https://zhangrh.shop/shotmarker/support`
+- Privacy Policy URL：`https://zhangrh.shop/shotmarker/privacy`
 
-注意：线上路径当前使用 `shotmaker`，不是仓库名 `ShotMarker` 的 `shotmarker` 拼写。本仓库不再保留这两个页面的本地 HTML 副本。
+注意：线上路径已统一为 `shotmarker`，与仓库名 `ShotMarker` 的小写拼写保持一致；旧 `shotmaker` 路径已下线，`/shotmaker/` 和 `/shotmaker/support` 当前返回 404。本仓库不再保留这两个页面的本地 HTML 副本。
 
 ## 5. 产品需求与当前实现对齐
 
