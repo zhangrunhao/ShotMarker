@@ -135,3 +135,27 @@ struct WatchTrainingView: View {
         }
     }
 }
+
+struct CrownMarkerThresholdTracker: Equatable {
+    let threshold: Double
+    private(set) var baseline: Double
+
+    init(threshold: Double, baseline: Double = 0) {
+        precondition(threshold > 0, "Crown marker threshold must be positive.")
+        self.threshold = threshold
+        self.baseline = baseline
+    }
+
+    mutating func reset(baseline: Double) {
+        self.baseline = baseline
+    }
+
+    mutating func update(currentValue: Double) -> Bool {
+        guard abs(currentValue - baseline) >= threshold else {
+            return false
+        }
+
+        baseline = currentValue
+        return true
+    }
+}

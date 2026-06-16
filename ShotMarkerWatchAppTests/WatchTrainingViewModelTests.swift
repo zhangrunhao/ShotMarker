@@ -180,6 +180,45 @@ final class WatchTrainingViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.markerCount, 1)
         XCTAssertEqual(viewModel.markerCountText, "打点数: 1")
     }
+
+    func testCrownMarkerThresholdDoesNotTriggerBeforeThreshold() {
+        var tracker = CrownMarkerThresholdTracker(threshold: 8, baseline: 0)
+
+        let didTrigger = tracker.update(currentValue: 7.9)
+
+        XCTAssertFalse(didTrigger)
+        XCTAssertEqual(tracker.baseline, 0)
+    }
+
+    func testCrownMarkerThresholdTriggersAtPositiveThresholdAndResetsBaseline() {
+        var tracker = CrownMarkerThresholdTracker(threshold: 8, baseline: 0)
+
+        let didTrigger = tracker.update(currentValue: 8)
+
+        XCTAssertTrue(didTrigger)
+        XCTAssertEqual(tracker.baseline, 8)
+        XCTAssertFalse(tracker.update(currentValue: 8))
+    }
+
+    func testCrownMarkerThresholdTriggersAtNegativeThresholdAndResetsBaseline() {
+        var tracker = CrownMarkerThresholdTracker(threshold: 8, baseline: 20)
+
+        let didTrigger = tracker.update(currentValue: 12)
+
+        XCTAssertTrue(didTrigger)
+        XCTAssertEqual(tracker.baseline, 12)
+        XCTAssertFalse(tracker.update(currentValue: 12))
+    }
+
+    func testCrownMarkerThresholdCanResetWhenTrainingStateChanges() {
+        var tracker = CrownMarkerThresholdTracker(threshold: 8, baseline: 0)
+
+        tracker.reset(baseline: 100)
+
+        XCTAssertEqual(tracker.baseline, 100)
+        XCTAssertFalse(tracker.update(currentValue: 107.9))
+        XCTAssertTrue(tracker.update(currentValue: 108))
+    }
 }
 
 private enum SyncError: Error {
