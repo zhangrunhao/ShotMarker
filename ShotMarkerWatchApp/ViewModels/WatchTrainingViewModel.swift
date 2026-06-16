@@ -28,7 +28,7 @@ final class WatchTrainingViewModel: ObservableObject {
         case .notTraining:
             "长按开始"
         case .training:
-            "双击打点 / 长按结束"
+            "双击/旋钮打点\n长按结束"
         }
     }
 

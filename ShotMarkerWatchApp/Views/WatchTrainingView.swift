@@ -10,10 +10,14 @@ struct WatchTrainingView: View {
     @State private var isPressingButton = false
     @State private var isCompletingLongPress = false
     @State private var isShowingDiagnostics = false
+    @State private var crownRotationValue = 0.0
+    @State private var crownMarkerThresholdTracker = CrownMarkerThresholdTracker(threshold: 8)
 
     private let syncService: WatchTrainingSyncServiceProtocol
     private let longPressTransitionDuration = 0.5
     private let returnTransitionDuration = 0.18
+    private let crownRotationLowerBound = -10_000.0
+    private let crownRotationUpperBound = 10_000.0
 
     @MainActor
     init(
@@ -63,8 +67,39 @@ struct WatchTrainingView: View {
             .buttonStyle(.borderless)
         }
         .padding()
+        .focusable(true)
+        .digitalCrownRotation(
+            $crownRotationValue,
+            from: crownRotationLowerBound,
+            through: crownRotationUpperBound,
+            by: 1,
+            sensitivity: .medium,
+            isContinuous: false,
+            isHapticFeedbackEnabled: false,
+        )
+        .onChange(of: crownRotationValue) { _, newValue in
+            handleCrownRotationChange(newValue)
+        }
+        .onChange(of: viewModel.state) { _, _ in
+            crownMarkerThresholdTracker.reset(baseline: crownRotationValue)
+        }
         .sheet(isPresented: $isShowingDiagnostics) {
             WatchSyncDiagnosticsView(snapshotProvider: syncService.diagnosticsSnapshot)
+        }
+    }
+
+    private func handleCrownRotationChange(_ newValue: Double) {
+        guard viewModel.state == .training else {
+            crownMarkerThresholdTracker.reset(baseline: newValue)
+            return
+        }
+
+        guard crownMarkerThresholdTracker.update(currentValue: newValue) else {
+            return
+        }
+
+        if viewModel.handleDoubleTap() {
+            WKInterfaceDevice.current().play(.success)
         }
     }
 

@@ -21,7 +21,7 @@ final class WatchTrainingViewModelTests: XCTestCase {
         XCTAssertNil(payload)
         XCTAssertEqual(viewModel.state, .training)
         XCTAssertEqual(viewModel.startedAt, Date(timeIntervalSince1970: 1000))
-        XCTAssertEqual(viewModel.buttonTitle, "双击打点 / 长按结束")
+        XCTAssertEqual(viewModel.buttonTitle, "双击/旋钮打点\n长按结束")
         XCTAssertEqual(viewModel.buttonColor, .red)
         XCTAssertEqual(viewModel.markerCountText, "打点数: 0")
     }
