@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShotMarker 使用说明</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23111'/%3E%3Ccircle cx='32' cy='32' r='18' fill='%232fd158'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f5f5f7;
+      --surface: #ffffff;
+      --ink: #111111;
+      --muted: #6e6e73;
+      --line: #d7d7dc;
+      --accent: #0071e3;
+      --green: #2fd158;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    .page {
+      overflow: hidden;
+    }
+
+    .hero {
+      min-height: 92vh;
+      display: grid;
+      align-items: center;
+      padding: 56px 24px 32px;
+      background: var(--surface);
+    }
+
+    .hero-inner,
+    .steps,
+    .tips {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+    }
+
+    .hero-inner {
+      display: grid;
+      grid-template-columns: 0.86fr 1.14fr;
+      gap: 54px;
+      align-items: center;
+    }
+
+    .eyebrow {
+      margin: 0 0 18px;
+      color: var(--accent);
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(48px, 7vw, 96px);
+      line-height: 0.94;
+      font-weight: 800;
+    }
+
+    .hero-copy {
+      max-width: 520px;
+    }
+
+    .hero-copy p:not(.eyebrow) {
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: clamp(20px, 2.4vw, 30px);
+      line-height: 1.3;
+      font-weight: 500;
+    }
+
+    .quick-flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 34px;
+    }
+
+    .flow-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 8px 13px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: #333333;
+      font-size: 14px;
+      font-weight: 650;
+      background: #fbfbfd;
+    }
+
+    .device-stage {
+      min-height: 620px;
+      position: relative;
+      display: grid;
+      place-items: center;
+    }
+
+    .phone {
+      width: min(300px, 38vw);
+      border-radius: 30px;
+      box-shadow: 0 28px 60px rgba(0, 0, 0, 0.18);
+      background: #ececf1;
+    }
+
+    .phone.front {
+      position: relative;
+      z-index: 2;
+      transform: translateX(72px);
+    }
+
+    .phone.back {
+      position: absolute;
+      z-index: 1;
+      opacity: 0.9;
+      transform: translate(-108px, 28px) scale(0.94);
+    }
+
+    .watch {
+      position: absolute;
+      z-index: 3;
+      width: min(198px, 28vw);
+      right: 7%;
+      bottom: 11%;
+      border-radius: 32px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.24);
+      background: #000000;
+    }
+
+    .scroll-hint {
+      margin-top: 34px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .steps {
+      padding: 72px 24px 36px;
+    }
+
+    .section-title {
+      display: grid;
+      gap: 12px;
+      max-width: 760px;
+      margin-bottom: 34px;
+    }
+
+    .section-title h2 {
+      font-size: clamp(34px, 4.5vw, 62px);
+      line-height: 1.04;
+      font-weight: 800;
+    }
+
+    .section-title p {
+      color: var(--muted);
+      font-size: 19px;
+      line-height: 1.45;
+      font-weight: 500;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 0.8fr 1.2fr;
+      gap: 42px;
+      align-items: center;
+      min-height: 520px;
+      padding: 48px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .step-copy {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .step-number {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--ink);
+      color: white;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .step h3 {
+      font-size: clamp(28px, 3vw, 44px);
+      line-height: 1.08;
+      font-weight: 800;
+    }
+
+    .step p {
+      color: var(--muted);
+      font-size: 19px;
+      line-height: 1.55;
+      font-weight: 500;
+      max-width: 480px;
+    }
+
+    .action-line {
+      display: grid;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 18px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      max-width: 480px;
+    }
+
+    .action-line strong {
+      font-size: 15px;
+    }
+
+    .action-line span {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    .visual {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      min-height: 520px;
+    }
+
+    .visual.single .watch-large {
+      width: min(270px, 58vw);
+      border-radius: 44px;
+      box-shadow: 0 30px 64px rgba(0, 0, 0, 0.22);
+    }
+
+    .visual.single .phone-large {
+      width: min(330px, 58vw);
+      border-radius: 32px;
+      box-shadow: 0 30px 64px rgba(0, 0, 0, 0.18);
+    }
+
+    .visual.pair .phone-large {
+      width: min(284px, 36vw);
+      border-radius: 30px;
+      box-shadow: 0 28px 58px rgba(0, 0, 0, 0.17);
+    }
+
+    .tips {
+      padding: 18px 24px 92px;
+    }
+
+    .tip-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      border-top: 1px solid var(--line);
+      padding-top: 28px;
+    }
+
+    .tip {
+      min-height: 124px;
+      padding: 22px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+    }
+
+    .tip strong {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    .tip span {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 920px) {
+      .hero {
+        min-height: auto;
+        padding-top: 44px;
+      }
+
+      .hero-inner {
+        grid-template-columns: 1fr;
+        gap: 32px;
+      }
+
+      .device-stage {
+        min-height: 510px;
+      }
+
+      .phone {
+        width: min(270px, 48vw);
+      }
+
+      .phone.front {
+        transform: translateX(42px);
+      }
+
+      .phone.back {
+        transform: translate(-74px, 32px) scale(0.92);
+      }
+
+      .watch {
+        width: min(150px, 32vw);
+        right: 4%;
+        bottom: 13%;
+      }
+
+      .step {
+        grid-template-columns: 1fr;
+        gap: 22px;
+        min-height: 0;
+        padding: 42px 0;
+      }
+
+      .visual {
+        min-height: 0;
+      }
+
+      .tip-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .hero {
+        padding: 38px 18px 26px;
+      }
+
+      .steps,
+      .tips {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+
+      .device-stage {
+        min-height: 430px;
+      }
+
+      .phone {
+        width: min(222px, 58vw);
+        border-radius: 24px;
+      }
+
+      .phone.front {
+        transform: translateX(24px);
+      }
+
+      .phone.back {
+        transform: translate(-52px, 26px) scale(0.9);
+      }
+
+      .watch {
+        width: min(118px, 34vw);
+        right: 1%;
+        bottom: 14%;
+        border-radius: 24px;
+      }
+
+      .quick-flow {
+        gap: 7px;
+      }
+
+      .flow-pill {
+        min-height: 34px;
+        font-size: 13px;
+      }
+
+      .visual.pair {
+        flex-direction: column;
+      }
+
+      .visual.pair .phone-large,
+      .visual.single .phone-large {
+        width: min(260px, 76vw);
+      }
+
+      .visual.single .watch-large {
+        width: min(230px, 70vw);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero" aria-labelledby="page-title">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <p class="eyebrow">Apple Watch + iPhone</p>
+          <h1 id="page-title">ShotMarker</h1>
+          <p>训练时打点，结束后把投篮视频整理成集锦。</p>
+          <div class="quick-flow" aria-label="使用流程">
+            <span class="flow-pill">手表打点</span>
+            <span class="flow-pill">选择记录</span>
+            <span class="flow-pill">生成集锦</span>
+          </div>
+          <div class="scroll-hint">向下看三步操作</div>
+        </div>
+
+        <div class="device-stage" aria-label="ShotMarker 产品截图">
+          <img class="phone back" src="assets/iphone-training-records.png" alt="iPhone 上的训练记录列表">
+          <img class="phone front" src="assets/iphone-highlight-ready.png" alt="iPhone 上的集锦生成页面">
+          <img class="watch" src="assets/apple-watch-49mm.jpg" alt="Apple Watch 上的 ShotMarker 训练按钮">
+        </div>
+      </div>
+    </section>
+
+    <section class="steps" aria-labelledby="steps-title">
+      <div class="section-title">
+        <h2 id="steps-title">只记住这三步</h2>
+        <p>ShotMarker 不需要复杂设置。训练时留下打点，训练后选择视频，剩下交给应用处理。</p>
+      </div>
+
+      <article class="step">
+        <div class="step-copy">
+          <div class="step-number">1</div>
+          <h3>用 Apple Watch 给好球打点</h3>
+          <p>长按开始。看到想保留的投篮，双击按钮或转动数码表冠。结束时再长按。</p>
+          <div class="action-line">
+            <strong>手表上怎么操作</strong>
+            <span>长按开始 / 双击或转动数码表冠打点 / 长按结束。</span>
+          </div>
+        </div>
+        <div class="visual single">
+          <img class="watch-large" src="assets/apple-watch-49mm.jpg" alt="Apple Watch 长按开始训练界面">
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="step-copy">
+          <div class="step-number">2</div>
+          <h3>打开 iPhone 里的训练记录</h3>
+          <p>训练结束后，记录会同步到 iPhone。找到对应日期和时间，点进这次训练。</p>
+          <div class="action-line">
+            <strong>看哪一条记录</strong>
+            <span>用训练日期、时间和打点数量确认是否是同一次训练。</span>
+          </div>
+        </div>
+        <div class="visual single">
+          <img class="phone-large" src="assets/iphone-training-records.png" alt="iPhone 训练记录列表">
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="step-copy">
+          <div class="step-number">3</div>
+          <h3>选择视频，生成集锦</h3>
+          <p>选择这次训练拍下的视频。确认可剪辑打点后，点“生成集锦”。</p>
+          <div class="action-line">
+            <strong>生成后做什么</strong>
+            <span>集锦完成后可以播放，也可以保存到系统相册。</span>
+          </div>
+        </div>
+        <div class="visual pair">
+          <img class="phone-large" src="assets/iphone-highlight-ready.png" alt="已选择视频并显示可剪辑打点">
+          <img class="phone-large" src="assets/iphone-highlight-generate.png" alt="点击生成集锦的页面">
+        </div>
+      </article>
+    </section>
+
+    <section class="tips" aria-label="使用提示">
+      <div class="tip-grid">
+        <div class="tip">
+          <strong>视频要对得上训练时间</strong>
+          <span>选择同一次训练拍摄的视频，应用会按时间自动匹配打点。</span>
+        </div>
+        <div class="tip">
+          <strong>剪辑范围可以调整</strong>
+          <span>默认保留打点前 9 秒、打点后 4 秒。</span>
+        </div>
+        <div class="tip">
+          <strong>不用手动拖进度条</strong>
+          <span>ShotMarker 会把有效打点整理成一条集锦。</span>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
