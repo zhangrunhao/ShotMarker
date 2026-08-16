@@ -35,10 +35,12 @@ final class HighlightJobManagerTests: XCTestCase {
         try Data([1, 2, 3]).write(to: sourceURL)
         let store = InMemoryHighlightJobStore()
         let fileStore = HighlightJobFileStore(baseDirectoryURL: temporaryDirectory)
+        let analytics = SpyAnalyticsTracker()
         let manager = HighlightJobManager(
             store: store,
             fileStore: fileStore,
             runnerFactory: { _ in .immediateCompleted },
+            analytics: analytics,
         )
 
         let job = try await manager.createJob(
@@ -58,6 +60,27 @@ final class HighlightJobManagerTests: XCTestCase {
         XCTAssertEqual(manager.jobs.first?.status, .completed)
         let storedJobs = try store.loadJobs()
         XCTAssertEqual(storedJobs.first?.status, .completed)
+        XCTAssertEqual(analytics.events, [.highlightGenerateSucceeded])
+    }
+
+    func testFailedHighlightGenerationDoesNotTrackSuccess() async throws {
+        let analytics = SpyAnalyticsTracker()
+        let manager = HighlightJobManager(
+            store: InMemoryHighlightJobStore(),
+            fileStore: HighlightJobFileStore(baseDirectoryURL: temporaryDirectory),
+            runnerFactory: { _ in .immediateFailed },
+            analytics: analytics,
+        )
+
+        _ = try await manager.createJob(
+            session: makeSession(),
+            selectedVideos: [makeSelectedVideo()],
+            clipSettings: ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4),
+        )
+        await Task.yield()
+
+        XCTAssertEqual(manager.jobs.first?.status, .failed)
+        XCTAssertTrue(analytics.events.isEmpty)
     }
 
     func testCancelRunningJobRemovesItAndPersistsRemoval() async throws {
@@ -124,6 +147,7 @@ final class HighlightJobManagerTests: XCTestCase {
         completedJob.outputVideoPath = outputRelativePath
         let store = InMemoryHighlightJobStore(jobs: [completedJob])
         var savedURL: URL?
+        let analytics = SpyAnalyticsTracker()
         let manager = HighlightJobManager(
             store: store,
             fileStore: fileStore,
@@ -131,6 +155,7 @@ final class HighlightJobManagerTests: XCTestCase {
             saveVideoToPhotoLibrary: { url in
                 savedURL = url
             },
+            analytics: analytics,
         )
         manager.load()
 
@@ -141,6 +166,7 @@ final class HighlightJobManagerTests: XCTestCase {
         XCTAssertNotNil(manager.jobs.first?.photoLibrarySavedAt)
         XCTAssertNil(manager.jobs.first?.photoLibrarySaveErrorMessage)
         XCTAssertNotNil(try store.loadJobs().first?.photoLibrarySavedAt)
+        XCTAssertEqual(analytics.events, [.highlightSaveSucceeded])
     }
 
     func testSaveAlreadySavedCompletedJobSavesAgainAndRefreshesSavedAt() async throws {
@@ -155,6 +181,7 @@ final class HighlightJobManagerTests: XCTestCase {
         completedJob.photoLibrarySavedAt = previousSavedAt
         let store = InMemoryHighlightJobStore(jobs: [completedJob])
         var savedURLs: [URL] = []
+        let analytics = SpyAnalyticsTracker()
         let manager = HighlightJobManager(
             store: store,
             fileStore: fileStore,
@@ -162,6 +189,7 @@ final class HighlightJobManagerTests: XCTestCase {
             saveVideoToPhotoLibrary: { url in
                 savedURLs.append(url)
             },
+            analytics: analytics,
         )
         manager.load()
 
@@ -170,6 +198,7 @@ final class HighlightJobManagerTests: XCTestCase {
         XCTAssertEqual(savedURLs, [try fileStore.url(forRelativePath: outputRelativePath)])
         XCTAssertGreaterThan(try XCTUnwrap(manager.jobs.first?.photoLibrarySavedAt), previousSavedAt)
         XCTAssertGreaterThan(try XCTUnwrap(try store.loadJobs().first?.photoLibrarySavedAt), previousSavedAt)
+        XCTAssertEqual(analytics.events, [.highlightSaveSucceeded])
     }
 
     func testSaveCompletedJobToPhotoLibraryFailureLeavesJobCompletedAndRetryable() async throws {
@@ -180,6 +209,7 @@ final class HighlightJobManagerTests: XCTestCase {
         let outputRelativePath = try fileStore.moveOutputVideo(at: outputURL, jobID: jobID)
         var completedJob = try makeJob(id: jobID, status: .completed)
         completedJob.outputVideoPath = outputRelativePath
+        let analytics = SpyAnalyticsTracker()
         let manager = HighlightJobManager(
             store: InMemoryHighlightJobStore(jobs: [completedJob]),
             fileStore: fileStore,
@@ -187,6 +217,7 @@ final class HighlightJobManagerTests: XCTestCase {
             saveVideoToPhotoLibrary: { _ in
                 throw VideoClipPhotoLibraryError.accessDenied
             },
+            analytics: analytics,
         )
         manager.load()
 
@@ -196,6 +227,7 @@ final class HighlightJobManagerTests: XCTestCase {
         XCTAssertNil(manager.jobs.first?.photoLibrarySavedAt)
         XCTAssertEqual(manager.jobs.first?.photoLibrarySaveErrorMessage, "没有相册保存权限。请允许 ShotMarker 添加照片后再试。")
         XCTAssertTrue(FileManager.default.fileExists(atPath: try fileStore.url(forRelativePath: outputRelativePath).path))
+        XCTAssertTrue(analytics.events.isEmpty)
     }
 
     private func makeSession() throws -> TrainingSession {
@@ -273,4 +305,15 @@ private extension HighlightJobRunner {
             return running
         },
     )
+
+    static let immediateFailed = HighlightJobRunner(
+        makeHighlightClip: { _, _, _ in URL(fileURLWithPath: "/tmp/unused.mov") },
+        runOverride: { _, _ in
+            throw HighlightJobRunnerTestError.failed
+        },
+    )
+}
+
+private enum HighlightJobRunnerTestError: Error {
+    case failed
 }

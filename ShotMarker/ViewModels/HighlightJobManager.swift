@@ -15,6 +15,7 @@ final class HighlightJobManager: ObservableObject {
     private let runnerFactory: (HighlightJob) -> HighlightJobRunner
     private let saveVideoToPhotoLibrary: (URL) async throws -> Void
     private let logger: AppLogging
+    private let analytics: AnalyticsTracking
     private var runningTasks: [UUID: Task<Void, Never>] = [:]
 
     init(
@@ -23,16 +24,21 @@ final class HighlightJobManager: ObservableObject {
         runnerFactory: @escaping (HighlightJob) -> HighlightJobRunner,
         saveVideoToPhotoLibrary: @escaping (URL) async throws -> Void = { _ in },
         logger: AppLogging = AppLogger.shared,
+        analytics: AnalyticsTracking = NoopAnalyticsTracker(),
     ) {
         self.store = store
         self.fileStore = fileStore
         self.runnerFactory = runnerFactory
         self.saveVideoToPhotoLibrary = saveVideoToPhotoLibrary
         self.logger = logger
+        self.analytics = analytics
     }
 
     #if os(iOS)
-        static func live(logger: AppLogging = AppLogger.shared) -> HighlightJobManager {
+        static func live(
+            logger: AppLogging = AppLogger.shared,
+            analytics: AnalyticsTracking = NoopAnalyticsTracker(),
+        ) -> HighlightJobManager {
             let store = HighlightJobStore()
             let fileStore = HighlightJobFileStore()
             let photoLibraryAssetProvider = PhotoLibraryVideoAssetProvider()
@@ -71,6 +77,7 @@ final class HighlightJobManager: ObservableObject {
                     try await photoLibrarySaver.saveVideo(at: outputURL)
                 },
                 logger: logger,
+                analytics: analytics,
             )
         }
     #endif
@@ -237,6 +244,7 @@ final class HighlightJobManager: ObservableObject {
             jobs[updatedIndex].photoLibrarySaveErrorMessage = nil
             jobs[updatedIndex].updatedAt = Date()
             persist()
+            analytics.track(.highlightSaveSucceeded)
             logger.info(
                 "highlight.job.photo_library_save.succeeded",
                 category: .photos,
@@ -298,6 +306,9 @@ final class HighlightJobManager: ObservableObject {
                     self.update(updatedJob)
                 }
                 self.update(finalJob)
+                if finalJob.status == .completed {
+                    analytics.track(.highlightGenerateSucceeded)
+                }
             } catch is CancellationError {
                 jobs.removeAll { $0.id == job.id }
                 persist()
