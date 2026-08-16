@@ -139,6 +139,32 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
         )
     }
 
+    func testSuccessfulSyncImportsThenTracksThenTransfersAck() throws {
+        let recorder = SyncOperationRecorder()
+        let importer = SpyTrainingSessionImporter(
+            onImport: { recorder.record(.imported) },
+        )
+        let analytics = OrderRecordingAnalyticsTracker(recorder: recorder)
+        let session = FakePhoneWatchConnectivitySession(
+            isSupported: true,
+            onTransferUserInfo: { recorder.record(.ackTransferred) },
+        )
+        let service = PhoneWatchSyncService(
+            importer: importer,
+            session: session,
+            analytics: analytics,
+        )
+
+        service.handleReceivedUserInfo(
+            try makeCompletedTrainingSessionUserInfo(payload: makePayload()),
+        )
+
+        XCTAssertEqual(
+            recorder.operations,
+            [.imported, .tracked(.trainingSyncSucceeded), .ackTransferred],
+        )
+    }
+
     func testCompletedTrainingSessionUserInfoLogsPayloadImportAndAck() throws {
         let payload = try makePayload()
         let logger = SpyAppLogger()
@@ -450,13 +476,16 @@ private final class SpyAppLogger: AppLogging {
 
 private final class SpyTrainingSessionImporter: TrainingSessionImporting {
     private let error: Error?
+    private let onImport: () -> Void
     private(set) var importedPayloads: [TrainingSessionSyncPayload] = []
 
-    init(error: Error? = nil) {
+    init(error: Error? = nil, onImport: @escaping () -> Void = {}) {
         self.error = error
+        self.onImport = onImport
     }
 
     func `import`(_ payload: TrainingSessionSyncPayload) throws {
+        onImport()
         importedPayloads.append(payload)
 
         if let error {
@@ -467,6 +496,7 @@ private final class SpyTrainingSessionImporter: TrainingSessionImporting {
 
 private final class FakePhoneWatchConnectivitySession: PhoneWatchConnectivitySessionProtocol {
     let isSupported: Bool
+    private let onTransferUserInfo: () -> Void
     var isPaired = false
     var isWatchAppInstalled = false
     var activationStateDescription = "notActivated"
@@ -476,8 +506,9 @@ private final class FakePhoneWatchConnectivitySession: PhoneWatchConnectivitySes
     var transferUserInfoError: Error?
     weak var delegate: WCSessionDelegate?
 
-    init(isSupported: Bool) {
+    init(isSupported: Bool, onTransferUserInfo: @escaping () -> Void = {}) {
         self.isSupported = isSupported
+        self.onTransferUserInfo = onTransferUserInfo
     }
 
     func setDelegate(_ delegate: WCSessionDelegate) {
@@ -490,10 +521,44 @@ private final class FakePhoneWatchConnectivitySession: PhoneWatchConnectivitySes
     }
 
     func transferUserInfo(_ userInfo: [String: Any]) throws {
+        onTransferUserInfo()
         if let transferUserInfoError {
             throw transferUserInfoError
         }
 
         transferredUserInfos.append(userInfo)
+    }
+}
+
+nonisolated private enum SyncOperation: Equatable, Sendable {
+    case imported
+    case tracked(AnalyticsEvent)
+    case ackTransferred
+}
+
+nonisolated private final class SyncOperationRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedOperations: [SyncOperation] = []
+
+    var operations: [SyncOperation] {
+        lock.withLock { storedOperations }
+    }
+
+    func record(_ operation: SyncOperation) {
+        lock.withLock {
+            storedOperations.append(operation)
+        }
+    }
+}
+
+nonisolated private final class OrderRecordingAnalyticsTracker: AnalyticsTracking, @unchecked Sendable {
+    private let recorder: SyncOperationRecorder
+
+    init(recorder: SyncOperationRecorder) {
+        self.recorder = recorder
+    }
+
+    func track(_ event: AnalyticsEvent) {
+        recorder.record(.tracked(event))
     }
 }
