@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		FF6000012FA5E00000B04685 /* ShotMarkerWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = FF2000022FA5000000B04685 /* ShotMarkerWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		FF7000032FA6000000B04685 /* Sentry-Static in Frameworks */ = {isa = PBXBuildFile; productRef = FF7000022FA6000000B04685 /* Sentry-Static */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -109,6 +110,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FF7000032FA6000000B04685 /* Sentry-Static in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -230,6 +232,7 @@
 			);
 			name = ShotMarker;
 			packageProductDependencies = (
+				FF7000022FA6000000B04685 /* Sentry-Static */,
 			);
 			productName = ShotMarker;
 			productReference = FF5C7E9F2FA46C7E00B04685 /* ShotMarker.app */;
@@ -272,6 +275,9 @@
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FF5C7EA02FA46C7E00B04685 /* Products */;
+			packageReferences = (
+				FF7000012FA6000000B04685 /* XCRemoteSwiftPackageReference "sentry-apple-binaries" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -362,6 +368,25 @@
 			targetProxy = FF6000032FA5E00000B04685 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		FF7000012FA6000000B04685 /* XCRemoteSwiftPackageReference "sentry-apple-binaries" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-apple-binaries.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.26.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FF7000022FA6000000B04685 /* Sentry-Static */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FF7000012FA6000000B04685 /* XCRemoteSwiftPackageReference "sentry-apple-binaries" */;
+			productName = "Sentry-Static";
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		FF1000082FA4800000B04685 /* Debug */ = {
@@ -678,6 +703,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				GLITCHTIP_DSN = "";
+				INFOPLIST_FILE = "Config/ShotMarker-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ShotMarker;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将生成的训练集锦保存到相册。";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ShotMarker 会读取所选训练视频的拍摄时间和片段内容，用于生成训练集锦。";
@@ -726,6 +753,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				GLITCHTIP_DSN = "";
+				INFOPLIST_FILE = "Config/ShotMarker-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ShotMarker;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将生成的训练集锦保存到相册。";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ShotMarker 会读取所选训练视频的拍摄时间和片段内容，用于生成训练集锦。";

@@ -14,18 +14,24 @@ nonisolated protocol AppLogging {
 }
 
 nonisolated final class AppLogger: AppLogging, @unchecked Sendable {
-    static let shared = AppLogger(store: AppLogStore.shared)
+    static let shared = AppLogger(
+        store: AppLogStore.shared,
+        errorReporter: GlitchTipErrorReporter.shared,
+    )
 
     private let store: AppLogStore
+    private let errorReporter: AppErrorReporting
     private let makeID: @Sendable () -> UUID
     private let now: @Sendable () -> Date
 
     init(
         store: AppLogStore,
+        errorReporter: AppErrorReporting = NoopAppErrorReporter(),
         makeID: @Sendable @escaping () -> UUID = UUID.init,
         now: @Sendable @escaping () -> Date = Date.init,
     ) {
         self.store = store
+        self.errorReporter = errorReporter
         self.makeID = makeID
         self.now = now
     }
@@ -71,6 +77,10 @@ nonisolated final class AppLogger: AppLogging, @unchecked Sendable {
             error: error,
         )
         let store = store
+
+        if level == .error {
+            errorReporter.report(event)
+        }
 
         Task {
             await store.append(event)

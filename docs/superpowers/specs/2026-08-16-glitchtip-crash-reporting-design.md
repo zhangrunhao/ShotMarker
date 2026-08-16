@@ -17,7 +17,7 @@
 
 ## 方案选择
 
-采用 GlitchTip 官方建议的 Sentry Cocoa SDK，通过 Swift Package Manager 只链接到 `ShotMarker` iPhone target。相比自行实现 Sentry Envelope HTTP 协议，该方案能可靠捕获原生崩溃、处理离线缓存，并保持与 GlitchTip 的协议兼容。
+采用 GlitchTip 官方建议的 Sentry Cocoa SDK，并通过 Sentry 官方 `sentry-apple-binaries` Swift Package 只链接预编译的 `Sentry-Static` 产品到 `ShotMarker` iPhone target。相比自行实现 Sentry Envelope HTTP 协议，该方案能可靠捕获原生崩溃、处理离线缓存，并保持与 GlitchTip 的协议兼容；预编译包也能减少首次依赖解析和本地编译时间。
 
 ## 组件设计
 
@@ -74,7 +74,7 @@ DSN 是客户端公开地址，可以随 App 分发；GlitchTip Auth Token 绝�
 
 ## 配置与发布
 
-- 在 iPhone target 的 Debug/Release 构建配置中提供 `GLITCHTIP_DSN`，并映射到生成的 Info.plist。
+- 在 iPhone target 的 Debug/Release 构建配置中提供 `GLITCHTIP_DSN`；`Config/ShotMarker-Info.plist` 作为生成流程的基础 plist，把该值合并进最终 App 的 Info.plist。
 - Project URL 为 `https://glitchtip.zhangrh.shop/h5/issues?project=4`；实际 SDK 端点以项目设置中复制的 DSN 为准。
 - Release 已使用 `dwarf-with-dsym`。每个 Archive 都会产生新的 dSYM，后续需使用 `glitchtip-cli debug-files upload` 上传对应归档的 dSYM。
 - dSYM 上传需要 Auth Token；Token 仅保存在本机环境变量或 CI Secret 中，由发布者或 CI 在每次发布时运行。

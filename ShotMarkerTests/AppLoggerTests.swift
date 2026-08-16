@@ -81,6 +81,38 @@ final class AppLoggerTests: XCTestCase {
         XCTAssertEqual(event.context["trainingSessionId"], "session-1")
     }
 
+    func testErrorWritesLocallyAndReportsRemotely() async throws {
+        let store = AppLogStore(directoryURL: temporaryDirectory)
+        let reporter = SpyAppErrorReporter()
+        let logger = AppLogger(store: store, errorReporter: reporter)
+        let error = NSError(domain: "ShotMarkerTests", code: 42)
+
+        logger.error(
+            "video.export.failed",
+            category: .video,
+            message: "视频导出失败",
+            error: error,
+            context: ["jobID": "private-job-id"],
+        )
+
+        let localEvents = await eventuallyReadEvents(from: store, expectedCount: 1)
+        let localEvent = try XCTUnwrap(localEvents.first)
+        let remoteEvent = try XCTUnwrap(reporter.events.first)
+        XCTAssertEqual(remoteEvent, localEvent)
+    }
+
+    func testNonErrorLevelsDoNotReportRemotely() {
+        let store = AppLogStore(directoryURL: temporaryDirectory)
+        let reporter = SpyAppErrorReporter()
+        let logger = AppLogger(store: store, errorReporter: reporter)
+
+        logger.debug("debug", category: .app, message: "debug")
+        logger.info("info", category: .app, message: "info")
+        logger.warning("warning", category: .app, message: "warning")
+
+        XCTAssertTrue(reporter.events.isEmpty)
+    }
+
     private func eventuallyReadEvents(from store: AppLogStore, expectedCount: Int) async -> [AppLogEvent] {
         for _ in 0..<50 {
             let events = await store.readAll()
@@ -93,5 +125,22 @@ final class AppLoggerTests: XCTestCase {
 
         XCTFail("Expected at least \(expectedCount) app log events")
         return await store.readAll()
+    }
+}
+
+private final class SpyAppErrorReporter: AppErrorReporting, @unchecked Sendable {
+    private let lock = NSLock()
+    private var reportedEvents: [AppLogEvent] = []
+
+    var events: [AppLogEvent] {
+        lock.withLock {
+            reportedEvents
+        }
+    }
+
+    func report(_ event: AppLogEvent) {
+        lock.withLock {
+            reportedEvents.append(event)
+        }
     }
 }

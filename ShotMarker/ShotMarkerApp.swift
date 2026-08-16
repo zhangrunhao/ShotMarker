@@ -19,6 +19,10 @@ struct ShotMarkerApp: App {
 
     @MainActor
     init() {
+        #if os(iOS)
+            GlitchTipCrashReporter.start()
+        #endif
+
         #if DEBUG
             let store = TrainingSessionStore(seedSessions: TrainingSession.previewSessions)
         #else

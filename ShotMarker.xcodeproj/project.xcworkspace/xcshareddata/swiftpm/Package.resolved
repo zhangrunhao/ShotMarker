@@ -1,0 +1,15 @@
+{
+  "originHash" : "e430563e856c4d989e5ab31cf9f14ef1ab4c886abd6c74385054afd3d3e6e40c",
+  "pins" : [
+    {
+      "identity" : "sentry-apple-binaries",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/getsentry/sentry-apple-binaries.git",
+      "state" : {
+        "revision" : "adf9c59de1901c69ebed5d27dbec6ef27310ebc6",
+        "version" : "9.26.0"
+      }
+    }
+  ],
+  "version" : 3
+}
