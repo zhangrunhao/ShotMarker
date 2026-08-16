@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+#if os(iOS)
+    import UIKit
+#endif
 
 @main
 struct ShotMarkerApp: App {
@@ -30,16 +33,40 @@ struct ShotMarkerApp: App {
         #endif
         let logStore = AppLogStore.shared
         let logger = AppLogger.shared
+        #if DEBUG
+            let isDebugBuild = true
+        #else
+            let isDebugBuild = false
+        #endif
+        #if os(iOS)
+            let isPhone = UIDevice.current.userInterfaceIdiom == .phone
+        #else
+            let isPhone = false
+        #endif
+
+        let analytics: AnalyticsTracking
+        if AnalyticsRuntimePolicy.shouldSend(
+            isDebugBuild: isDebugBuild,
+            isPhone: isPhone,
+        ) {
+            analytics = AnalyticsClient.live()
+        } else {
+            analytics = NoopAnalyticsTracker()
+        }
         let syncService = PhoneWatchSyncService(
             importer: TrainingSessionImporter(store: store),
             logger: logger,
+            analytics: analytics,
         )
         let logExportService = AppLogExportService(
             store: logStore,
             diagnosticsSnapshotProvider: syncService.diagnosticsSnapshot,
         )
         #if os(iOS)
-            let highlightJobManager = HighlightJobManager.live(logger: logger)
+            let highlightJobManager = HighlightJobManager.live(
+                logger: logger,
+                analytics: analytics,
+            )
             _highlightJobManager = StateObject(wrappedValue: highlightJobManager)
             highlightJobManager.load()
         #endif
@@ -53,6 +80,7 @@ struct ShotMarkerApp: App {
             category: .app,
             message: "应用启动",
         )
+        analytics.track(.appLaunch)
         syncService.start()
     }
 
