@@ -230,6 +230,39 @@ final class HighlightJobManagerTests: XCTestCase {
         XCTAssertTrue(analytics.events.isEmpty)
     }
 
+    func testPhotoLibrarySaveDoesNotTrackWhenFinalJobPersistenceFails() async throws {
+        let fileStore = HighlightJobFileStore(baseDirectoryURL: temporaryDirectory)
+        let jobID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000040001"))
+        let outputURL = temporaryDirectory.appendingPathComponent("output.mov")
+        try Data([1]).write(to: outputURL)
+        let outputRelativePath = try fileStore.moveOutputVideo(at: outputURL, jobID: jobID)
+        var completedJob = try makeJob(id: jobID, status: .completed)
+        completedJob.outputVideoPath = outputRelativePath
+        let store = FailingSaveHighlightJobStore(
+            jobs: [completedJob],
+            failingSaveCall: 3,
+        )
+        let analytics = SpyAnalyticsTracker()
+        var didSaveVideo = false
+        let manager = HighlightJobManager(
+            store: store,
+            fileStore: fileStore,
+            runnerFactory: { _ in .immediateCompleted },
+            saveVideoToPhotoLibrary: { _ in
+                didSaveVideo = true
+            },
+            analytics: analytics,
+        )
+        manager.load()
+
+        await manager.saveToPhotoLibrary(jobID: jobID)
+
+        XCTAssertTrue(didSaveVideo)
+        XCTAssertEqual(store.saveCallCount, 3)
+        XCTAssertNil(try store.loadJobs().first?.photoLibrarySavedAt)
+        XCTAssertTrue(analytics.events.isEmpty)
+    }
+
     private func makeSession() throws -> TrainingSession {
         TrainingSession(
             id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000040100")),
@@ -315,5 +348,36 @@ private extension HighlightJobRunner {
 }
 
 private enum HighlightJobRunnerTestError: Error {
+    case failed
+}
+
+private final class FailingSaveHighlightJobStore: HighlightJobStoreProtocol {
+    private var jobs: [HighlightJob]
+    private let failingSaveCall: Int
+    private(set) var saveCallCount = 0
+
+    init(jobs: [HighlightJob], failingSaveCall: Int) {
+        self.jobs = jobs
+        self.failingSaveCall = failingSaveCall
+    }
+
+    func loadJobs() throws -> [HighlightJob] {
+        jobs
+    }
+
+    func loadJobsForLaunchRecovery() throws -> [HighlightJob] {
+        jobs
+    }
+
+    func saveJobs(_ jobs: [HighlightJob]) throws {
+        saveCallCount += 1
+        if saveCallCount == failingSaveCall {
+            throw FailingSaveHighlightJobStoreError.failed
+        }
+        self.jobs = jobs
+    }
+}
+
+private enum FailingSaveHighlightJobStoreError: Error {
     case failed
 }

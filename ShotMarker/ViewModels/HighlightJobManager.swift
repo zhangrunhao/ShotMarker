@@ -243,7 +243,9 @@ final class HighlightJobManager: ObservableObject {
             jobs[updatedIndex].photoLibrarySavedAt = Date()
             jobs[updatedIndex].photoLibrarySaveErrorMessage = nil
             jobs[updatedIndex].updatedAt = Date()
-            persist()
+            guard persist() else {
+                return
+            }
             analytics.track(.highlightSaveSucceeded)
             logger.info(
                 "highlight.job.photo_library_save.succeeded",
@@ -342,8 +344,14 @@ final class HighlightJobManager: ObservableObject {
         persist()
     }
 
-    private func persist() {
-        try? store.saveJobs(jobs)
+    @discardableResult
+    private func persist() -> Bool {
+        do {
+            try store.saveJobs(jobs)
+            return true
+        } catch {
+            return false
+        }
     }
 
     private func addPhotoLibrarySavingJobID(_ jobID: UUID) {
