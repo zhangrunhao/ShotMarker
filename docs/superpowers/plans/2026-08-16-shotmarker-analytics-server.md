@@ -1,5 +1,8 @@
 # ShotMarker Analytics Server Implementation Plan
 
+> 状态：已完成；其中客户端 `time`、`params`、schema v1 与旧 summary API 已被
+> `zhangrh.shop` 的四字段单事件趋势设计取代。本计划仅保留为历史实施记录，不重新执行。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extend the existing `zhangrh.shop` first-party Track pipeline so it accepts and aggregates ShotMarker events, and publish an accurate ShotMarker privacy disclosure without changing the current single-JSONL storage model.

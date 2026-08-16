@@ -2,13 +2,14 @@
 
 日期：2026-08-16
 
-状态：已确认
+状态：已确认；传输与服务端部分已由四字段趋势设计更新
 
 涉及项目：`ShotMarker`、`zhangrh.shop`
 
-修订说明：2026-08-16 按 `zhangrh.shop` 当前生效的单一 JSONL 存储决策，删除旧的
-“约 98 天自动轮转”假设。当前没有固定自动过期时间；`events.jsonl` 达到 `32 MiB` 时
-重新评估存储，并在 Backend 的 `64 MiB` 解码上限前完成调整。
+修订说明：四个事件语义、12 位安装 ID、Release-only 运行策略、无重试行为和 Privacy
+Manifest 结论继续有效。客户端传输字段、Nginx 四字段模型、单文件读取边界和趋势查询改由
+`zhangrh.shop/docs/superpowers/specs/2026-08-16-track-four-field-trend-redesign-design.md`
+定义；旧的客户端时间、空 `params`、schema v1 和 `/api/track/summary` 说明已被取代。
 
 ## 1. 背景
 
@@ -22,8 +23,8 @@ ShotMarker 当前是本地优先的 iPhone 与 Apple Watch 应用。训练记录
 2. Nginx 返回 `204`，并把事件写入独立的 `events.jsonl`。
 3. Nginx 持续追加单一 `events.jsonl`，当前不自动轮转或删除；文件达到 `32 MiB` 时
    重新评估存储方案。
-4. Backend 只读聚合日志，通过 `/api/track/summary` 返回项目、事件、日期和设备数汇总。
-5. 汇总接口不返回原始设备标识。
+4. Backend 只读聚合日志，通过 `/api/track/trend` 返回一个必选事件的逐日 PV/UV。
+5. 趋势接口不返回原始设备标识。
 
 本设计让 ShotMarker 复用这条链路，只观察最小核心漏斗，不引入账号、数据库、第三方
 分析 SDK、离线队列或远程诊断日志。
@@ -37,7 +38,7 @@ ShotMarker 当前是本地优先的 iPhone 与 Apple Watch 应用。训练记录
 5. 使用独立的 `AnalyticsTracking` 客户端，不复用或包装 `AppLogger`。
 6. 每次事件即时发送；不缓存、不批量、不重试，失败直接丢弃。
 7. 只有 iPhone 端发送事件；Apple Watch 不直接访问网络埋点接口。
-8. 所有事件使用空参数对象，不上传训练、视频、错误或诊断上下文。
+8. 所有业务语义都包含在四个固定事件名中，不上传参数、训练、视频、错误或诊断上下文。
 9. Debug 与单元测试默认不上报；TestFlight 和 App Store 的 Release 构建上报。
 10. App Store 隐私披露采用保守口径：设备 ID 和产品交互用于分析、与设备关联、不用于
     Tracking。
@@ -75,7 +76,7 @@ ShotMarker iPhone 业务成功节点
 AnalyticsClient
   ├── InstallationIDStore：读取或生成随机安装 ID
   ├── 固定 project=shotmarker
-  ├── 固定 params={}
+  ├── 选择四个固定 event 之一
   └── 临时 URLSession 即时发送
         │
         │ GET https://zhangrh.shop/track?...
@@ -85,10 +86,10 @@ zhangrh.shop Nginx
   └── 追加写 events.jsonl
         │
         ▼
-zhangrh.shop Backend 只读聚合
+zhangrh.shop Backend 只读趋势计算
         │
         ▼
-GET /api/track/summary?days=30&project=shotmarker
+GET /api/track/trend?project=shotmarker&event=app_launch&days=30
 ```
 
 职责边界：
@@ -150,11 +151,9 @@ protocol AnalyticsTracking: Sendable {
 
 ```text
 GET https://zhangrh.shop/track
-  ?time=<客户端 Unix 毫秒时间戳>
-  &project=shotmarker
-  &device_id=<12 位随机安装 ID>
+  ?project=shotmarker
   &event=<AnalyticsEvent.rawValue>
-  &params={}
+  &device_id=<12 位随机安装 ID>
 ```
 
 使用 `URLComponents` 和 `URLQueryItem` 编码查询参数，不手工拼接或转义 URL。请求使用
@@ -241,61 +240,42 @@ manager 会先收到状态回调，再处理 runner 的最终返回值，可能�
 
 ### 9.1 采集协议与存储
 
-沿用现有 `/track` Nginx location 和 JSONL schema v1，不新增 API：
-
-- `schema_version`：固定为 `1`。
-- `request_id`：Nginx 生成。
-- `received_at`：Nginx 生成，作为查询日期范围的可信时间。
-- `client_time`：ShotMarker 发送的毫秒时间戳，只用于诊断，不用于日期过滤。
-- `project`：固定为 `shotmarker`。
-- `device_id`：随机安装 ID。
-- `event`：四个固定事件之一。
-- `params_encoded`：编码后的空 JSON 对象。
+服务端完整契约以四字段趋势设计为准。Nginx 从请求读取 `project`、`event`、`device_id`，
+生成 ISO 8601 `time`，并把严格四字段 JSON 行追加到 `events.jsonl`。Nginx 返回 `204`，但不
+校验业务参数；Backend 在查询时排除不符合项目、事件、时间或 12 位设备标识规则的记录。
 
 Nginx 埋点记录不包含 IP、User-Agent、Referer、Cookie、Authorization 或完整请求 URL。
 网络服务处理请求时会临时看到来源网络地址，但不把它写入独立的埋点 JSONL。
 
 日志继续使用宿主机持久目录中的单一 `events.jsonl`。生产环境当前不为 Track 配置专用
-logrotate，也不自动删除历史事件；已有历史 gzip 保留并继续可读。当前文件达到
-`32 MiB` 时重新评估轮转、归档或数据库方案，并在 Backend 的 `64 MiB` 总解码上限前
-完成调整。服务端不建立 ShotMarker 专用数据库或表。
+logrotate，也不自动删除历史事件；Backend 只读取当前文件，不读取轮转文件或 gzip。当前
+文件达到 `32 MiB` 时重新评估存储，超过 `64 MiB` 时趋势接口返回
+`track_log_too_large`。服务端不建立 ShotMarker 专用数据库或表。
 
-### 9.2 项目白名单
+### 9.2 事件目录
 
-`zhangrh.shop` 当前只接受 `hub` 和 `cardgame`。实现需要在以下两处加入
-`shotmarker`：
+Backend 接受 `project=shotmarker`，但不维护事件白名单。Analytics 静态配置并展示四个事件：
 
-- `backend/projects/track-query.js` 的记录解析项目集合。
-- `backend/projects/track.js` 的查询参数项目集合与对应错误文案。
+- `app_launch`（默认事件）
+- `training_sync_succeeded`
+- `highlight_generate_succeeded`
+- `highlight_save_succeeded`
 
-不顺带抽取新的共享配置模块；两处小型白名单保持与现有结构一致，并用测试防止遗漏。
+新增或修改事件时，必须在同一批工作中更新客户端枚举、客户端测试、公开埋点文档和
+Analytics 静态配置。
 
 ### 9.3 查询结果
 
-使用现有接口：
+趋势查询必须明确选择一个事件：
 
 ```text
-GET /api/track/summary?days=30&project=shotmarker
+GET /api/track/trend?project=shotmarker&event=app_launch&days=30
 ```
 
-响应继续包含：
-
-- `totals.events`：查询范围内的有效事件数。
-- `totals.devices`：查询范围内出现过任一事件的独立安装数。
-- `event_breakdown`：每个事件的事件数和独立安装数。
-- `daily`：每天的事件数和独立安装数。
-- `diagnostics`：读取、拒绝、重复和范围过滤统计。
-
-接口不返回原始安装 ID、原始参数或逐条事件。
-
-首版的漏斗是近似漏斗。例如，可以用同一时间范围内
-`highlight_generate_succeeded.devices / app_launch.devices` 观察趋势，但这不是严格转化率：
-
-- 分母可能包含在查询期之前已经完成早期节点的老安装。
-- 接口不校验同一安装是否按顺序经过全部节点。
-- 接口不按首次安装日期建立 cohort。
-
-本设计不修改聚合响应来计算漏斗交集或顺序。
+响应严格只有长度等于 `days` 的连续 `daily[{date,pv,uv}]`；PV 是当日记录数，UV 是当日按
+安装 ID 去重的数量，无记录日期和全无记录范围都返回零值。接口不返回 totals、breakdown、
+diagnostics、原始安装 ID 或逐条事件。因此当前页面只用于观察单个事件随时间的变化，不
+计算跨事件漏斗、严格顺序转化或 cohort。
 
 ## 10. 隐私设计
 
@@ -303,14 +283,12 @@ GET /api/track/summary?days=30&project=shotmarker
 
 ShotMarker 只主动发送：
 
-- 客户端事件时间。
 - 固定项目名 `shotmarker`。
 - 随机安装 ID。
 - 四个事件之一。
-- 空参数对象。
 
-服务端另外生成请求 ID 和接收时间。随机安装 ID 不与账号、姓名、联系方式、训练记录、
-视频、健康数据、其他 App 数据或 `zhangrh.shop` 浏览器设备 ID 合并。
+服务端只另外生成接收时间。随机安装 ID 不与账号、姓名、联系方式、训练记录、视频、健康
+数据、其他 App 数据或 `zhangrh.shop` 浏览器设备 ID 合并。
 
 ### 10.2 Apple 隐私声明
 
@@ -353,7 +331,7 @@ App Store Connect 在包含该功能的新版本上线前同步声明：
   轮转、归档、删除或数据库方案。
 - 卸载 App 会移除设备上的安装 ID；已经上报的事件不会因卸载立即删除，后续随服务器
   存储维护处理。
-- 埋点汇总接口不公开原始安装 ID。
+- 埋点趋势接口不公开原始安装 ID。
 
 现有“当前版本不使用第三方分析 SDK”可以保留，但必须补充“一方产品分析”说明，不能让
 用户误解为 App 完全不发送使用数据。
@@ -374,11 +352,10 @@ App Store Connect 在包含该功能的新版本上线前同步声明：
 
 - endpoint 固定为 `https://zhangrh.shop/track`。
 - HTTP method 为 `GET`。
-- `time` 是注入时钟产生的 Unix 毫秒值。
 - `project` 等于 `shotmarker`。
 - `device_id` 等于注入的安装 ID。
 - `event` 等于对应 enum raw value。
-- `params` 解码后严格等于 `{}`。
+- 查询参数严格只有 `project`、`event`、`device_id`。
 - 特殊字符由 `URLQueryItem` 正确编码。
 - 网络失败和非 `204` 响应不会抛到调用方或触发重试。
 
@@ -402,13 +379,12 @@ App Store Connect 在包含该功能的新版本上线前同步声明：
 
 ### 11.2 zhangrh.shop 测试
 
-- JSONL 解析器接受 `project=shotmarker`。
-- `project=shotmarker` 查询过滤正确。
-- ShotMarker 事件按事件数和安装 ID 去重统计设备数。
-- `hub`、`cardgame` 的现有行为不变。
+- 四字段 JSONL 解析器接受合法的 `project=shotmarker` 记录并拒绝额外或旧字段。
+- `project=shotmarker` 与必选事件的趋势过滤正确。
+- ShotMarker 事件按日计算 PV，并按安装 ID 去重计算 UV。
+- 无记录日期和全无记录范围返回完整连续零值数组。
 - 未知项目仍被解析器拒绝，查询路由仍返回稳定的 `invalid_project`。
-- 路由错误文案列出全部三个合法项目。
-- 公开埋点文档包含 ShotMarker 协议和四个事件。
+- 公开埋点文档包含三参数客户端协议、四字段服务端模型和四个事件。
 - ShotMarker 隐私页面包含随机安装 ID、一方分析、当前无固定自动过期时间、存储维护
   边界和非 Tracking 说明。
 
@@ -423,13 +399,15 @@ App Store Connect 在包含该功能的新版本上线前同步声明：
 - `zhangrh.shop` Frontend 测试与 ShotMarker 隐私内容测试。
 
 线上不发送额外的 `smoke_test` 事件。服务端发布后，通过 TestFlight 安装产生真实
-`app_launch`，再查询 1 天 ShotMarker 汇总确认链路。该开发者安装作为正常安装计入统计。
+`app_launch`，再查询 1 天 ShotMarker 单事件趋势确认链路。该开发者安装作为正常安装计入
+统计。
 
 ## 12. 上线顺序
 
-1. 在 `zhangrh.shop` 完成项目白名单、测试、埋点文档和 ShotMarker 隐私政策更新。
+1. 在 `zhangrh.shop` 完成四字段读取、趋势 API、Analytics 静态事件目录、测试、埋点文档和
+   ShotMarker 隐私政策更新。
 2. 发布 `zhangrh.shop` Backend 与静态站点，确认新隐私政策可访问。
-3. 查询 `project=shotmarker` 的空或现有汇总，确认服务端已经接受新项目。
+3. 查询 `project=shotmarker&event=app_launch` 的空或现有趋势，确认服务端已经接受新项目。
 4. 在 ShotMarker 中加入客户端、调用点、测试和 `PrivacyInfo.xcprivacy`。
 5. 在包含埋点的新版本上线前，更新并发布 App Store Connect 隐私回答。
 6. 上传 Release/TestFlight 构建，通过真实启动和汇总查询验证链路。
@@ -445,8 +423,8 @@ App Store Connect 在包含该功能的新版本上线前同步声明：
 - 同一安装在卸载前稳定复用一个 12 位随机安装 ID。
 - 上报内容不包含训练、打点、视频、任务、错误或诊断数据。
 - 埋点请求失败不改变任何用户可见状态和业务结果。
-- `project=shotmarker` 能通过现有汇总接口查询事件数与独立安装数。
-- 汇总结果不暴露原始安装 ID。
+- `project=shotmarker` 的四个事件能通过趋势接口查询逐日 PV/UV。
+- 趋势结果不暴露原始安装 ID。
 - `hub` 和 `cardgame` 的采集与查询行为保持不变。
 - ShotMarker 主 App 隐私清单、App Store Connect 和公开隐私政策使用一致声明。
 - ShotMarker 与 zhangrh.shop 的相关自动化测试和 Release build 通过。
@@ -456,7 +434,7 @@ App Store Connect 在包含该功能的新版本上线前同步声明：
 - 即时、无重试的发送方式会丢失部分事件，但不会增加持久化和恢复复杂度。
 - 事件可能因重复业务操作或 Watch 重发而重复，但独立安装数仍可用于趋势观察。
 - 随机安装 ID 只能代表一次安装，不能代表真实用户或卸载前后的同一设备。
-- 当前汇总只能形成近似漏斗，不能回答严格顺序转化或 cohort 留存。
+- 当前单事件趋势不能回答跨事件漏斗、严格顺序转化或 cohort 留存。
 - 当前单一 JSONL 没有固定自动过期时间，容量检查依赖低频人工运维；达到 `32 MiB` 时
   必须在 `64 MiB` 查询上限前重新设计存储。
 - 默认开启且没有开关能保持产品与实现简单，但必须用清晰、保守的隐私披露补偿信息不对称。

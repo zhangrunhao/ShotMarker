@@ -4,9 +4,9 @@
 
 - 最后更新时间：2026-08-16
 - 基准分支：`main`
-- 基准客户端提交：`af44535 fix: 取消集锦任务后不再上报成功`
-- 基准服务端提交：`6e1e646 test: 修正 Analytics 测试夹具类型`
-- 基准工作区：更新本文档前无未提交改动
+- 基准客户端提交：`d7a0cd1 refactor: 简化ShotMarker埋点请求`
+- 基准服务端提交：`b31c393 docs: 添加四字段埋点重构方案`
+- 基准工作区：客户端代码提交后，仅有本次状态与历史文档更新
 - 当前工程版本：iPhone App `1.1 (build 1)`；Watch App `1.1 (build 1)`
 - 文档用途：项目所有者与后续 Codex 共用的当前项目状态唯一来源
 
@@ -16,7 +16,14 @@
 
 ShotMarker 的 iPhone 与 Apple Watch 核心训练链路已经具备：Watch 端训练打点，训练记录同步到 iPhone，iPhone 端选择视频并生成、播放和保存集锦。
 
-当前阶段是下一次发布前的真机与商店验收：GlitchTip 崩溃/错误上报、ShotMarker 最小埋点客户端、Privacy Manifest、`zhangrh.shop` 的 ShotMarker 汇总查询、线上隐私政策和 Analytics 页面都已完成。2026-08-16 已在生产环境使用 1 个受控合成 `app_launch` 验证 HTTPS 204、JSONL 单条落盘、ShotMarker 聚合和 Analytics 展示；真实 Release/TestFlight 客户端上报仍未验证。
+当前阶段是埋点四字段链路重构与下一次发布前验收。ShotMarker 源码已经把请求收敛为
+`project`、`event`、`device_id` 三个参数，并通过本地完整测试、Release Simulator 构建和
+Privacy Manifest 产物检查。`zhangrh.shop` 的四字段 Nginx 写入、单事件趋势 API 和新版
+Analytics 正在另一仓库实现；本次尚未部署或重新检查生产环境，真实 Release/TestFlight
+客户端三参数上报也仍未验证。
+
+2026-08-16 早些时候完成的 1 个受控合成 `app_launch` 生产验收属于旧 schema v1/summary
+链路的历史证据，只证明当时的生产状态，不代表新的四字段/trend 链路已经上线。
 
 仓库历史表明版本 `1.1.0` 曾完成 TestFlight 发布，但当前 App Store、TestFlight 或线上版本状态在本次任务中未重新验证，不作为当前结论。
 
@@ -59,12 +66,14 @@ ShotMarker 的 iPhone 与 Apple Watch 核心训练链路已经具备：Watch 端
 ### 3.5 最小产品埋点
 
 - 已定义四个固定事件：`app_launch`、`training_sync_succeeded`、`highlight_generate_succeeded`、`highlight_save_succeeded`。
-- 埋点客户端向 `https://zhangrh.shop/track` 发送固定 HTTPS GET schema，不重试、不阻塞业务流程。
+- 埋点客户端向 `https://zhangrh.shop/track` 发送固定 HTTPS GET 请求，不重试、不阻塞业务流程。
 - 每次安装使用本地生成并持久化的 12 位随机安装标识。
 - 真实埋点仅在 iPhone Release 构建启用；Debug、Watch 和其他设备形态使用 no-op 实现。
-- 上报只包含客户端时间、固定项目名、安装标识、固定事件名和空参数对象，不包含训练、打点、视频、HealthKit、日志或错误数据。
+- 上报查询参数严格只有固定项目名、固定事件名和安装标识；客户端不再发送时间或参数对象，
+  不包含训练、打点、视频、HealthKit、日志或错误数据。
 - 训练同步在成功导入后、ACK 前上报；集锦生成仅在最终完成且任务未取消时上报；相册保存仅在照片写入与成功状态持久化都完成后上报。
-- `zhangrh.shop` 汇总查询已支持 `project=shotmarker`，公开响应只返回聚合结果、查询元数据和诊断计数，不返回原始安装标识或服务器请求标识。
+- 新服务端设计要求 Nginx 生成 `time`，Backend 按必选 ShotMarker 事件返回逐日 PV/UV，且不
+  返回原始安装标识；代码实现和生产验证不在本次 ShotMarker 客户端提交中冒充完成。
 
 ### 3.6 Privacy Manifest
 
@@ -75,9 +84,12 @@ ShotMarker 的 iPhone 与 Apple Watch 核心训练链路已经具备：Watch 端
 
 ## 4. 正在进行的工作
 
-### 4.1 埋点生产链路
+### 4.1 埋点四字段链路
 
-ShotMarker 客户端、四个调用点、运行策略、Privacy Manifest，以及 `zhangrh.shop` 的查询兼容、协议文档、隐私政策和 Analytics 页面均已完成并部署。生产受控请求已验证数据落盘、聚合响应脱敏和页面展示；仍需使用真实 iPhone Release/TestFlight 构建验证客户端的实际上报。生产 JSONL 中保留了本次 1 条受控合成事件。
+ShotMarker 客户端、四个调用点、运行策略和 Privacy Manifest 已完成；客户端三参数请求在
+本地精确测试中通过。`zhangrh.shop` 的四字段读取、趋势 API、Analytics 页面、文档和生产
+切换仍需按新设计完成并验证。旧生产受控请求及其 JSONL 记录属于历史 schema v1 证据；本次
+未读取或修改线上数据，也未验证真实 iPhone Release/TestFlight 请求。
 
 ### 4.2 隐私与商店声明
 
@@ -98,7 +110,8 @@ ShotMarker 客户端、四个调用点、运行策略、Privacy Manifest，以�
 
 ## 5. 测试与构建状态
 
-最近一次验证日期：2026-08-16；客户端验证基准：`af44535`；服务端完整检查基准：`6e1e646`，其中 ShotMarker 埋点披露最新提交为 `0141b4d`。
+最近一次验证日期：2026-08-16；客户端验证基准：`d7a0cd1`；四字段服务端尚未在本次状态
+更新中完成本地或生产验证。
 
 ### 5.1 全量 iPhone 测试
 
@@ -110,11 +123,12 @@ ShotMarker 客户端、四个调用点、运行策略、Privacy Manifest，以�
 - 跳过：0
 - 结果：`** TEST SUCCEEDED **`
 
-该结果覆盖现有训练记录、同步、视频处理、集锦任务、本地日志、GlitchTip、埋点和 Privacy Manifest 测试。它不代表真实 iPhone/Apple Watch 硬件验收。
+该结果覆盖现有训练记录、同步、视频处理、集锦任务、本地日志、GlitchTip、三参数埋点和
+Privacy Manifest 测试。它不代表真实 iPhone/Apple Watch 硬件验收。
 
 ### 5.2 Release 构建
 
-执行全新 DerivedData 的 `generic/platform=iOS Simulator` Release 构建：
+对 `d7a0cd1` 执行全新 DerivedData 的 `generic/platform=iOS Simulator` Release 构建：
 
 - 结果：`** BUILD SUCCEEDED **`
 - `ShotMarker.app`：已生成
@@ -123,7 +137,7 @@ ShotMarker 客户端、四个调用点、运行策略、Privacy Manifest，以�
 
 本次模拟器 dSYM 只是本地构建验证产物，不应代替未来正式 Archive 对应的 dSYM。
 
-### 5.3 `zhangrh.shop` 完整检查
+### 5.3 `zhangrh.shop` 历史完整检查
 
 在 `zhangrh.shop` 执行 `npm run check`：
 
@@ -133,9 +147,9 @@ ShotMarker 客户端、四个调用点、运行策略、Privacy Manifest，以�
 - Frontend lint 与 typecheck：通过。
 - Hub、Cardgame、ShotMarker 和 Analytics 构建：通过。
 
-该结果证明仓库代码与构建通过；生产部署与线上验收证据单独记录如下。
+该结果只覆盖旧 schema v1/summary 实现，不能作为四字段/trend 重构的验证证据。
 
-### 5.4 `zhangrh.shop` 生产验收
+### 5.4 `zhangrh.shop` 历史生产验收
 
 2026-08-16 对生产环境执行的验证结果：
 
@@ -146,19 +160,22 @@ ShotMarker 客户端、四个调用点、运行策略、Privacy Manifest，以�
 - `https://zhangrh.shop/shotmarker/privacy` 返回 HTTP 200，线上资源包含 2026-08-16 隐私政策、第一方产品分析说明、schema v1 字段和四个事件名。
 - Analytics 线上页面已验证 Hub/Cardgame/ShotMarker 项目、`1/7/30/90` 日范围中的代表组合、手动刷新和 390×844 视口；页面数据与 API 一致，390 px 宽度无水平溢出。
 
-上述结果是验收时点快照；生产聚合数字会随新事件变化。本文档不保存受控测试的原始安装标识或请求标识。
+上述结果是旧链路的验收时点快照；本次没有重新检查生产环境。本文档不保存受控测试的原始
+安装标识或请求标识。
 
 ### 5.5 尚未执行的验证
 
 - 最新代码的真实 iPhone 与 Apple Watch 联调。
 - TestFlight Release 构建的真实埋点上报。
+- `zhangrh.shop` 四字段/trend 代码的完整检查、部署与生产切换。
 - 不连接调试器的真机受控崩溃。
 - 正式 Archive dSYM 上传和崩溃堆栈符号化。
 - GlitchTip 邮件或 Webhook 告警。
 
 ## 6. 风险与待确认事项
 
-- 埋点服务端、汇总查询、隐私政策与 Analytics 已于 2026-08-16 在生产受控验收；这是时点性外部状态，仍不代表真实 Release/TestFlight 客户端已上报。
+- 旧埋点服务端、summary 查询、隐私政策与 Analytics 曾在 2026-08-16 完成生产受控验收；
+  新四字段/trend 链路尚无本次任务的生产证据。
 - GlitchTip 已验证错误事件接收，但尚未用正式 Release 真机崩溃验证原生崩溃缓存、下次启动发送和符号化。
 - 正式发布若不上传匹配 dSYM，原生崩溃堆栈可能只有地址而缺少函数名与源码位置。
 - 公开隐私政策的线上页面已验证；App Store Connect 数据声明仍需在包含 GlitchTip 和埋点的版本发布前更新。
@@ -168,20 +185,22 @@ ShotMarker 客户端、四个调用点、运行策略、Privacy Manifest，以�
 
 ## 7. 下一步优先级
 
-1. 核对 App Store Connect 的 Crash Data、Other Diagnostic Data、Device ID 和 Product Interaction 声明。
-2. 使用真实 iPhone 与 Apple Watch 验证训练、同步、集锦、埋点和 GlitchTip。
-3. 确定发布候选提交并生成正式 Xcode Archive，上传对应 dSYM，再上传 TestFlight。
-4. 从 TestFlight 安装后验证真实埋点、受控崩溃、符号化和告警。
+1. 完成并验证 `zhangrh.shop` 四字段写入、趋势 API、Analytics 和文档，再单独授权生产切换。
+2. 核对 App Store Connect 的 Crash Data、Other Diagnostic Data、Device ID 和 Product Interaction 声明。
+3. 使用真实 iPhone 与 Apple Watch 验证训练、同步、集锦、埋点和 GlitchTip。
+4. 确定发布候选提交并生成正式 Xcode Archive，上传对应 dSYM，再上传 TestFlight。
+5. 从 TestFlight 安装后验证真实埋点、受控崩溃、符号化和告警。
 
 ## 8. 发布前检查项
 
 - [x] GlitchTip SDK、DSN 和 `logger.error` 上报接入
 - [x] GlitchTip 接收验证事件和业务错误事件
 - [x] 四个最小埋点事件与 Release-iPhone-only 策略
+- [x] ShotMarker 三参数请求与本地完整测试、Release Simulator 构建
 - [x] App Privacy Manifest 与对应单元测试
-- [x] `zhangrh.shop` ShotMarker 查询兼容、协议文档与隐私政策源文件
+- [ ] `zhangrh.shop` 四字段写入、单事件趋势、Analytics 与新协议文档
 - [x] 当前代码全量测试与模拟器 Release 构建
-- [x] 埋点服务端部署及生产汇总查询验收
+- [ ] 四字段埋点服务端部署及生产趋势查询验收
 - [x] 线上公开隐私政策页面验收
 - [x] Analytics 线上页面、项目/时间过滤与移动端布局验收
 - [ ] App Store Connect 数据声明核对
@@ -194,6 +213,8 @@ ShotMarker 客户端、四个调用点、运行策略、Privacy Manifest，以�
 
 ## 9. 最近进展
 
+- 2026-08-16：`d7a0cd1` 将 ShotMarker 请求收敛为 `project`、`event`、`device_id` 三个参数；
+  164/164 测试、Release Simulator 构建、Privacy Manifest 源文件/产物和 dSYM 检查通过。
 - 2026-08-16：以 `6e1e646` 发布 `zhangrh.shop` Backend 和 ShotMarker 隐私页，用 1 个受控 `app_launch` 完成 204、JSONL、聚合脱敏和 Analytics 线上端到端验收。
 - 2026-08-16：`af44535` 修复非协作 runner 在任务取消后误报集锦生成成功的问题；客户端全量测试增至 164 项。
 - 2026-08-16：`651f991`、`6342ca4`、`7ff124b` 补强相册状态持久化、安装标识并发/格式和训练同步顺序契约。

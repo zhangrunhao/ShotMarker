@@ -1,5 +1,8 @@
 # ShotMarker Analytics Client Implementation Plan
 
+> 状态：已完成；其中客户端 `time`、`params`、schema v1 与旧 summary API 已被
+> `zhangrh.shop` 的四字段单事件趋势设计取代。本计划仅保留为历史实施记录，不重新执行。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add the smallest first-party analytics client to ShotMarker so iPhone Release builds report four fixed success events with a random per-installation identifier, while Debug, tests, iPad, and Apple Watch remain no-op.
