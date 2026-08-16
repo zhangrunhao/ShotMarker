@@ -307,6 +307,7 @@ final class HighlightJobManager: ObservableObject {
                 let finalJob = try await runner.run(job: job) { updatedJob in
                     self.update(updatedJob)
                 }
+                try Task.checkCancellation()
                 self.update(finalJob)
                 if finalJob.status == .completed {
                     analytics.track(.highlightGenerateSucceeded)

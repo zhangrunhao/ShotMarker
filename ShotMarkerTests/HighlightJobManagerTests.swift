@@ -102,6 +102,52 @@ final class HighlightJobManagerTests: XCTestCase {
         XCTAssertTrue(try store.loadJobs().isEmpty)
     }
 
+    func testCancelSuppressesCompletedResultFromNonCooperativeRunner() async throws {
+        let gate = NonCooperativeRunnerGate()
+        let taskSettled = expectation(description: "cancelled generation task settled")
+        taskSettled.assertForOverFulfill = true
+        let settlementProbe = TaskSettlementProbe(expectation: taskSettled)
+        let store = SettlementHighlightJobStore()
+        let analytics = SettlementAnalyticsTracker(settlementProbe: settlementProbe)
+        let manager = HighlightJobManager(
+            store: store,
+            fileStore: HighlightJobFileStore(baseDirectoryURL: temporaryDirectory),
+            runnerFactory: { _ in
+                HighlightJobRunner(
+                    makeHighlightClip: { _, _, _ in
+                        URL(fileURLWithPath: "/tmp/unused.mov")
+                    },
+                    runOverride: { job, onChange in
+                        var running = job
+                        running.status = .running
+                        onChange(running)
+                        await gate.suspendUntilReleased()
+
+                        var completed = running
+                        completed.status = .completed
+                        return completed
+                    },
+                )
+            },
+            analytics: analytics,
+        )
+        let job = try await manager.createJob(
+            session: makeSession(),
+            selectedVideos: [makeSelectedVideo()],
+            clipSettings: ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4),
+        )
+        await gate.waitUntilStarted()
+
+        manager.cancel(jobID: job.id)
+        store.signalOnNextSave(settlementProbe.signal)
+        await gate.release()
+        await fulfillment(of: [taskSettled], timeout: 1)
+
+        XCTAssertTrue(manager.jobs.isEmpty)
+        XCTAssertTrue(try store.loadJobs().isEmpty)
+        XCTAssertTrue(analytics.events.isEmpty)
+    }
+
     func testRestartInterruptedJobRunsSameJob() async throws {
         let interruptedJob = try makeJob(status: .interrupted)
         let store = InMemoryHighlightJobStore(jobs: [interruptedJob])
@@ -380,4 +426,115 @@ private final class FailingSaveHighlightJobStore: HighlightJobStoreProtocol {
 
 private enum FailingSaveHighlightJobStoreError: Error {
     case failed
+}
+
+private actor NonCooperativeRunnerGate {
+    private var didStart = false
+    private var didRelease = false
+    private var startContinuations: [CheckedContinuation<Void, Never>] = []
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    func waitUntilStarted() async {
+        guard !didStart else {
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            startContinuations.append(continuation)
+        }
+    }
+
+    func suspendUntilReleased() async {
+        didStart = true
+        let continuations = startContinuations
+        startContinuations.removeAll()
+        continuations.forEach { $0.resume() }
+
+        guard !didRelease else {
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            if didRelease {
+                continuation.resume()
+            } else {
+                releaseContinuation = continuation
+            }
+        }
+    }
+
+    func release() {
+        didRelease = true
+        let continuation = releaseContinuation
+        releaseContinuation = nil
+        continuation?.resume()
+    }
+}
+
+private final class SettlementHighlightJobStore: HighlightJobStoreProtocol {
+    private var jobs: [HighlightJob] = []
+    private var onNextSave: (() -> Void)?
+
+    func loadJobs() throws -> [HighlightJob] {
+        jobs
+    }
+
+    func loadJobsForLaunchRecovery() throws -> [HighlightJob] {
+        jobs
+    }
+
+    func saveJobs(_ jobs: [HighlightJob]) throws {
+        self.jobs = jobs
+        let onNextSave = onNextSave
+        self.onNextSave = nil
+        onNextSave?()
+    }
+
+    func signalOnNextSave(_ action: @escaping () -> Void) {
+        onNextSave = action
+    }
+}
+
+nonisolated private final class TaskSettlementProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private let expectation: XCTestExpectation
+    private var didSignal = false
+
+    init(expectation: XCTestExpectation) {
+        self.expectation = expectation
+    }
+
+    func signal() {
+        let shouldSignal = lock.withLock {
+            guard !didSignal else {
+                return false
+            }
+            didSignal = true
+            return true
+        }
+        if shouldSignal {
+            expectation.fulfill()
+        }
+    }
+}
+
+nonisolated private final class SettlementAnalyticsTracker: AnalyticsTracking, @unchecked Sendable {
+    private let lock = NSLock()
+    private let settlementProbe: TaskSettlementProbe
+    private var storedEvents: [AnalyticsEvent] = []
+
+    init(settlementProbe: TaskSettlementProbe) {
+        self.settlementProbe = settlementProbe
+    }
+
+    var events: [AnalyticsEvent] {
+        lock.withLock { storedEvents }
+    }
+
+    func track(_ event: AnalyticsEvent) {
+        lock.withLock {
+            storedEvents.append(event)
+        }
+        settlementProbe.signal()
+    }
 }
