@@ -703,7 +703,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				GLITCHTIP_DSN = "";
+				GLITCHTIP_DSN = "https://2e48a3b0682a4d4e9eeab13c653b0238@glitchtip.zhangrh.shop/4";
 				INFOPLIST_FILE = "Config/ShotMarker-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ShotMarker;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将生成的训练集锦保存到相册。";
@@ -753,7 +753,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				GLITCHTIP_DSN = "";
+				GLITCHTIP_DSN = "https://2e48a3b0682a4d4e9eeab13c653b0238@glitchtip.zhangrh.shop/4";
 				INFOPLIST_FILE = "Config/ShotMarker-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ShotMarker;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将生成的训练集锦保存到相册。";
