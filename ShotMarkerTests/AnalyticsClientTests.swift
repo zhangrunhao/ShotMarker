@@ -3,10 +3,9 @@ import Foundation
 import XCTest
 
 final class AnalyticsClientTests: XCTestCase {
-    func testMakeRequestUsesTheFixedShotMarkerSchema() throws {
+    func testMakeRequestUsesTheThreeParameterShotMarkerProtocol() throws {
         let client = AnalyticsClient(
             installationIDProvider: StubInstallationIDProvider(value: "AbCd1234Ef56"),
-            now: { Date(timeIntervalSince1970: 20_000) },
             sendRequest: { _ in },
         )
 
@@ -30,11 +29,9 @@ final class AnalyticsClientTests: XCTestCase {
         XCTAssertEqual(
             query,
             [
-                "time": "20000000",
                 "project": "shotmarker",
                 "device_id": "AbCd1234Ef56",
                 "event": "highlight_save_succeeded",
-                "params": "{}",
             ],
         )
     }
@@ -43,7 +40,6 @@ final class AnalyticsClientTests: XCTestCase {
         let recorder = AnalyticsRequestRecorder()
         let client = AnalyticsClient(
             installationIDProvider: StubInstallationIDProvider(value: "AbCd1234Ef56"),
-            now: { Date(timeIntervalSince1970: 20_000) },
             sendRequest: { request in
                 await recorder.record(request)
             },

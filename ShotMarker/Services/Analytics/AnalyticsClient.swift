@@ -7,18 +7,15 @@ nonisolated final class AnalyticsClient: AnalyticsTracking, @unchecked Sendable 
 
     private let endpoint: URL
     private let installationIDProvider: InstallationIDProviding
-    private let now: @Sendable () -> Date
     private let sendRequest: RequestSender
 
     init(
         endpoint: URL = AnalyticsClient.productionEndpoint,
         installationIDProvider: InstallationIDProviding = InstallationIDStore.shared,
-        now: @Sendable @escaping () -> Date = Date.init,
         sendRequest: @escaping RequestSender,
     ) {
         self.endpoint = endpoint
         self.installationIDProvider = installationIDProvider
-        self.now = now
         self.sendRequest = sendRequest
     }
 
@@ -41,13 +38,10 @@ nonisolated final class AnalyticsClient: AnalyticsTracking, @unchecked Sendable 
             return nil
         }
 
-        let milliseconds = Int64((now().timeIntervalSince1970 * 1_000).rounded(.down))
         components.queryItems = [
-            URLQueryItem(name: "time", value: String(milliseconds)),
             URLQueryItem(name: "project", value: "shotmarker"),
-            URLQueryItem(name: "device_id", value: installationIDProvider.installationID()),
             URLQueryItem(name: "event", value: event.rawValue),
-            URLQueryItem(name: "params", value: "{}"),
+            URLQueryItem(name: "device_id", value: installationIDProvider.installationID()),
         ]
 
         guard let url = components.url else {
