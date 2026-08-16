@@ -84,7 +84,8 @@ final class AppLoggerTests: XCTestCase {
     func testErrorWritesLocallyAndReportsRemotely() async throws {
         let store = AppLogStore(directoryURL: temporaryDirectory)
         let reporter = SpyAppErrorReporter()
-        let logger = AppLogger(store: store, errorReporter: reporter)
+        let timestamp = Date(timeIntervalSince1970: 1_778_400_000)
+        let logger = AppLogger(store: store, errorReporter: reporter, now: { timestamp })
         let error = NSError(domain: "ShotMarkerTests", code: 42)
 
         logger.error(
