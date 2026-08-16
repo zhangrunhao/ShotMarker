@@ -41,6 +41,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
     private let session: PhoneWatchConnectivitySessionProtocol
     private let notificationCenter: NotificationCenter
     private let logger: AppLogging
+    private let analytics: AnalyticsTracking
     private let now: () -> Date
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
@@ -58,12 +59,14 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
         session: PhoneWatchConnectivitySessionProtocol? = nil,
         notificationCenter: NotificationCenter = .default,
         logger: AppLogging = AppLogger.shared,
+        analytics: AnalyticsTracking = NoopAnalyticsTracker(),
         now: @escaping () -> Date = Date.init,
     ) {
         self.importer = importer
         self.session = session ?? PhoneWatchConnectivitySessionAdapter()
         self.notificationCenter = notificationCenter
         self.logger = logger
+        self.analytics = analytics
         self.now = now
     }
 
@@ -178,6 +181,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
             message: "导入手表训练记录成功",
             context: trainingContext(for: payload.id),
         )
+        analytics.track(.trainingSyncSucceeded)
         notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
 
         do {

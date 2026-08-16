@@ -73,6 +73,7 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
     func testCompletedTrainingSessionUserInfoImportsPostsNotificationAndTransfersAck() throws {
         let payload = try makePayload()
         let importer = SpyTrainingSessionImporter()
+        let analytics = SpyAnalyticsTracker()
         let session = FakePhoneWatchConnectivitySession(isSupported: true)
         let notificationCenter = NotificationCenter()
         let notificationExpectation = expectation(description: "training sessions did change")
@@ -90,6 +91,7 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
             importer: importer,
             session: session,
             notificationCenter: notificationCenter,
+            analytics: analytics,
             now: { Date(timeIntervalSince1970: 20000) },
         )
 
@@ -97,6 +99,7 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
         wait(for: [notificationExpectation], timeout: 1)
         XCTAssertEqual(importer.importedPayloads, [payload])
+        XCTAssertEqual(analytics.events, [.trainingSyncSucceeded])
         XCTAssertEqual(session.transferredUserInfos.count, 1)
         let ackUserInfo = try XCTUnwrap(session.transferredUserInfos.first)
         XCTAssertEqual(
@@ -116,8 +119,13 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
     func testDuplicateCompletedTrainingSessionUserInfoImportsAndAcksEachArrival() throws {
         let payload = try makePayload()
         let importer = SpyTrainingSessionImporter()
+        let analytics = SpyAnalyticsTracker()
         let session = FakePhoneWatchConnectivitySession(isSupported: true)
-        let service = PhoneWatchSyncService(importer: importer, session: session)
+        let service = PhoneWatchSyncService(
+            importer: importer,
+            session: session,
+            analytics: analytics,
+        )
         let userInfo = try makeCompletedTrainingSessionUserInfo(payload: payload)
 
         service.handleReceivedUserInfo(userInfo)
@@ -125,6 +133,10 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
         XCTAssertEqual(importer.importedPayloads, [payload, payload])
         XCTAssertEqual(session.transferredUserInfos.count, 2)
+        XCTAssertEqual(
+            analytics.events,
+            [.trainingSyncSucceeded, .trainingSyncSucceeded],
+        )
     }
 
     func testCompletedTrainingSessionUserInfoLogsPayloadImportAndAck() throws {
@@ -190,8 +202,13 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
     func testInvalidPayloadDoesNotImportOrAck() {
         let importer = SpyTrainingSessionImporter()
+        let analytics = SpyAnalyticsTracker()
         let session = FakePhoneWatchConnectivitySession(isSupported: true)
-        let service = PhoneWatchSyncService(importer: importer, session: session)
+        let service = PhoneWatchSyncService(
+            importer: importer,
+            session: session,
+            analytics: analytics,
+        )
 
         service.handleReceivedUserInfo([
             PhoneWatchSyncService.userInfoTypeKey: PhoneWatchSyncService.completedTrainingSessionUserInfoType,
@@ -200,6 +217,7 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
         XCTAssertEqual(importer.importedPayloads, [])
         XCTAssertEqual(session.transferredUserInfos.count, 0)
+        XCTAssertTrue(analytics.events.isEmpty)
     }
 
     func testInvalidPayloadLogsDecodeFailure() {
@@ -224,12 +242,14 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
     func testImportFailureDoesNotPostNotificationOrAck() throws {
         let importer = SpyTrainingSessionImporter(error: SyncImportError.failed)
+        let analytics = SpyAnalyticsTracker()
         let session = FakePhoneWatchConnectivitySession(isSupported: true)
         let notificationCenter = NotificationCenter()
         let service = PhoneWatchSyncService(
             importer: importer,
             session: session,
             notificationCenter: notificationCenter,
+            analytics: analytics,
         )
         let payload = try makePayload()
 
@@ -237,6 +257,26 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
         XCTAssertEqual(importer.importedPayloads, [payload])
         XCTAssertEqual(session.transferredUserInfos.count, 0)
+        XCTAssertTrue(analytics.events.isEmpty)
+    }
+
+    func testSuccessfulImportTracksEvenWhenAckTransferFails() throws {
+        let payload = try makePayload()
+        let analytics = SpyAnalyticsTracker()
+        let session = FakePhoneWatchConnectivitySession(isSupported: true)
+        session.transferUserInfoError = SyncAckError.failed
+        let service = PhoneWatchSyncService(
+            importer: SpyTrainingSessionImporter(),
+            session: session,
+            analytics: analytics,
+        )
+
+        service.handleReceivedUserInfo(
+            try makeCompletedTrainingSessionUserInfo(payload: payload),
+        )
+
+        XCTAssertEqual(analytics.events, [.trainingSyncSucceeded])
+        XCTAssertTrue(session.transferredUserInfos.isEmpty)
     }
 
     func testImportFailureLogsError() throws {
