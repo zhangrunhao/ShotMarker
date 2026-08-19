@@ -1,0 +1,42 @@
+# ShotMarker 发布状态
+
+- 最后复核：2026-08-19
+- 当前版本：1.1（Build 1）
+- Bundle ID：com.heji.ShotMarker
+- Watch Bundle ID：com.heji.ShotMarker.watchkitapp
+
+## 构建与平台
+
+- iOS 部署下限：26.4。
+- watchOS 部署下限：26.2。
+- 产品发布与验证范围为 iPhone + Apple Watch；主 App 工程仍保留未验收的 iPad 和 visionOS destinations，不再配置 macOS destination。
+- 自动签名已配置。
+- Release 使用 DWARF with dSYM。
+- iPhone target 链接 Sentry 9.26.0；Watch target 不链接。
+- 当前工作区的 Release Simulator 构建于 2026-08-19 通过。
+
+## 审核与用户披露事实
+
+- 核心使用不需要登录、账号或演示账户。
+- ShotMarker 不向自建服务器上传训练记录、打点、源视频或生成视频；系统照片库及 iCloud 是否保存或同步视频由用户设置决定。
+- App 需要照片读取/添加权限；Watch 使用 HealthKit workout session。
+- Release iPhone 会联网发送产品 Analytics 和 GlitchTip 错误/崩溃信息，因此审核说明和隐私披露不得声称“完全不联网”或“所有数据都不离开设备”。
+- Analytics 只发送 project、event、device_id；不发送训练记录、视频、文件名、照片、语音、用户身份或自由文本。完整契约见 [产品埋点](analytics.md)。
+- GlitchTip 不配置默认 PII 或用户身份，也不上传训练记录、视频、截图和本地日志文件。
+
+## 外部状态
+
+- Git 历史表明 1.1.0 曾在 2026-06-16 完成 TestFlight 发布。
+- ShotMarker Analytics 四字段服务端链路和公开隐私页面最后一次生产验收日期为 2026-08-16；字段与保留边界见 [产品埋点](analytics.md)。
+- 上述结果是带日期的历史事实；当前 App Store、TestFlight、Analytics 和 GlitchTip 线上状态在本次治理中未重新验证。
+
+## 发布前待验收
+
+- 使用正式 Archive 或 TestFlight Build 验证四个 Analytics 事件。
+- 触发真机崩溃并确认事件、符号化和 dSYM 对应关系。
+- 验证 GlitchTip 告警通知。
+- 复核 App Store Connect 隐私问卷与 PrivacyInfo.xcprivacy 一致。
+- 使用与当前行为一致的 App Review Note，明确 Watch、HealthKit、照片权限和远端观测边界。
+- 重新确认当前 TestFlight 与 App Store 可用状态。
+
+正式验收结果应记录验证日期、Build、设备/系统和外部环境，并同步更新 [项目状态](status.md) 与 [质量状态](quality.md)。
