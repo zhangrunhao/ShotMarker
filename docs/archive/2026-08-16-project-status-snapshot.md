@@ -20,11 +20,10 @@ ShotMarker 的 iPhone 与 Apple Watch 核心训练链路已经具备：Watch 端
 `project`、`event`、`device_id` 三个参数，并通过本地完整测试、Release Simulator 构建和
 Privacy Manifest 产物检查。`zhangrh.shop` 的网页三参数发送、四字段 Backend reader、单事件
 趋势 API、新版 Analytics 和公开文档也已完成，本地 `npm run check` 通过；Nginx/Compose
-生产切换、不可恢复删旧数据和线上验证已于 2026-08-16 完成。真实 Release/TestFlight 客户端
-三参数上报仍未验证。
+生产切换和线上验证已于 2026-08-16 完成。真实 Release/TestFlight 客户端三参数上报仍未验证。
 
-2026-08-16 早些时候完成的 1 个受控合成 `app_launch` 生产验收属于旧 schema v1/summary
-链路的历史证据；旧数据已在同日晚间的四字段切换中永久删除且没有备份，不再代表当前数据。
+2026-08-16 早些时候完成的受控合成 `app_launch` 生产验收属于旧 schema v1/summary
+链路的历史证据；该链路已被同日晚间的四字段方案取代，不再代表当前实现。
 
 仓库历史表明版本 `1.1.0` 曾完成 TestFlight 发布，但当前 App Store、TestFlight 或线上版本状态在本次任务中未重新验证，不作为当前结论。
 
@@ -61,7 +60,7 @@ Privacy Manifest 产物检查。`zhangrh.shop` 的网页三参数发送、四字
 - 远端事件只包含允许的消息、分类、错误名称及 domain/code，不发送训练记录、视频、路径、用户身份或默认 PII。
 - Debug 与 Release 分别标记 `development` 和 `production`。
 - 性能追踪、Profiling、Session Replay、自动 Session Tracking 和自动 Breadcrumb 已关闭。
-- 2026-08-16，项目所有者已在 GlitchTip Project 4 中确认看到“ShotMarker GlitchTip 接入验证”和多条真实业务错误事件。
+- 2026-08-16，项目所有者已在 GlitchTip 的 ShotMarker 对应项目中确认看到“ShotMarker GlitchTip 接入验证”和多条真实业务错误事件。
 - Watch App 尚未接入 GlitchTip，真机原生崩溃和符号化仍属于发布前验收项。
 
 ### 3.5 最小产品埋点
@@ -157,13 +156,10 @@ Privacy Manifest 测试。它不代表真实 iPhone/Apple Watch 硬件验收。
 
 2026-08-16 对 revision `a98c038` 执行生产切换与线上验证：
 
-- 21:55:50 停止整个 Compose 项目，复核 Track 真实路径、第一层文件类型、无符号链接和 worker 数字 UID/GID 后，永久删除旧 `events.jsonl` 与两个历史 gzip；数据没有复制、压缩、移动或备份，删除不可恢复。
-- 创建新的 `0640 uid=101 gid=0` `events.jsonl`，部署四字段 Nginx 配置、Hub/Cardgame/ShotMarker/Analytics HTML 与 OSS 资源和新版 Backend；21:59:54 恢复入口，停服约 4 分 4 秒。
-- 生效 Nginx 配置通过 `nginx -t`；Nginx 与 Backend 均为 running、0 重启、无 OOM，Cardgame health 返回 HTTP 200，浏览器人机对战显示 WebSocket 已连接并可进入第 1 回合后正常退出。
-- 正常浏览器访问产生 Hub 五个页面事件、`cardgame_page_load` 和 `ai_battle_click`。22:10 验收快照共 7 条、769 字节，全部严格只有 `project`、`event`、`time`、`device_id` 且格式有效；本文档没有读取或保存原始设备标识。
-- 上述 7 个事件的 30 天趋势均与 JSONL 聚合一致；ShotMarker `app_launch` 返回连续 30 天全零。响应严格只有 `daily[{date,pv,uv}]`，旧 `/api/track/summary` 返回 404。
-- Analytics 生产页验证默认 Hub/30 天/`home_page_load`/PV、三个项目事件目录、PV/UV 切换不新增请求、390×844 无水平溢出，控制台 0 错误、0 警告。
-- 新版 `https://zhangrh.shop/shotmarker/privacy` 返回 HTTP 200，并在真实浏览器中显示三参数客户端和四字段服务端说明。
+- 四字段 Track 写入、单事件趋势 API、Analytics 页面和新版 ShotMarker 隐私页完成生产验收。
+- 生产记录严格只有 `project`、`event`、`time`、`device_id`，趋势响应只返回逐日 PV/UV；公开验收没有保存原始安装标识。
+- Hub、Cardgame、Backend 和移动端 Analytics 代表场景验证通过。
+- 主机级切换、文件权限、数据处置和配置证据由独立私有台账维护，不在公开归档中重复。
 
 该结果确认服务端四字段/trend 链路已上线，不代表真实 iPhone Release/TestFlight 已上报事件。
 
@@ -171,15 +167,9 @@ Privacy Manifest 测试。它不代表真实 iPhone/Apple Watch 硬件验收。
 
 2026-08-16 对生产环境执行的验证结果：
 
-- Backend 以 `6e1e646` 发布并重建；Cardgame 健康检查与 ShotMarker 过滤查询均返回 HTTP 200。
-- 使用 1 个随机合成安装标识发送 `app_launch`，HTTPS `/track` 返回 204，`events.jsonl` 从 7 条/1819 字节变为 8 条/2057 字节，且恰好新增 1 条匹配记录。
-- 8 条 JSONL 均为合法 schema v1；新记录包含严格的 8 个字段、32 位十六进制服务器请求标识，参数解码后精确为空对象。
-- 受控事件写入后，ShotMarker 1 日聚合为 1 个事件、1 个设备和 1 个 `app_launch`；响应中不含安装标识、服务器请求标识或原始参数。
-- `https://zhangrh.shop/shotmarker/privacy` 返回 HTTP 200，线上资源包含 2026-08-16 隐私政策、第一方产品分析说明、schema v1 字段和四个事件名。
-- Analytics 线上页面已验证 Hub/Cardgame/ShotMarker 项目、`1/7/30/90` 日范围中的代表组合、手动刷新和 390×844 视口；页面数据与 API 一致，390 px 宽度无水平溢出。
-
-上述结果是旧链路的历史时点快照；对应旧 JSONL 和 gzip 已在四字段切换中永久删除。本文档
-不保存受控测试的原始安装标识或请求标识。
+- 旧 schema 使用一个随机合成安装标识完成写入、查询、聚合脱敏和公开隐私页验证；公开文档没有保存原始安装标识或请求标识。
+- 该结果只作为旧链路的历史时点证据，随后已被四字段链路替代。
+- 具体生产操作与数据处置过程由独立私有台账维护。
 
 ### 5.6 尚未执行的验证
 
@@ -229,9 +219,8 @@ Privacy Manifest 测试。它不代表真实 iPhone/Apple Watch 硬件验收。
 
 ## 9. 最近进展
 
-- 2026-08-16：`zhangrh.shop` 以 `a98c038` 完成四字段生产切换；永久删除未备份的旧 Track
-  数据，约 4 分 4 秒后恢复服务，并通过严格 JSONL、trend API、Hub/Cardgame、Cardgame
-  health/WebSocket、Analytics 移动布局和新版隐私页验收。
+- 2026-08-16：`zhangrh.shop` 以 `a98c038` 完成四字段生产切换与公开契约验收，覆盖严格
+  JSONL、trend API、Hub/Cardgame、Analytics 移动布局和新版隐私页。
 - 2026-08-16：`zhangrh.shop` 以 `a98c038` 完成网页三参数、Hub/Cardgame 新事件、四字段
   reader、trend API、Analytics 和公开文档；`npm run check` 的 9/151/20 项测试、lint、
   typecheck 与四个前端构建全部通过。
