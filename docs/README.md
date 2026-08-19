@@ -1,6 +1,6 @@
 # ShotMarker 文档入口
 
-这里是 ShotMarker 文档的唯一入口。当前代码和当次验证优先于任何文档。
+这里是 ShotMarker 文档的唯一入口。判断实现事实时，当前代码、测试、构建和当次验证优先；判断已经生效的决定、契约和政策时，以 `current` 中的明确记录为准。
 
 ## 当前事实
 
@@ -11,7 +11,7 @@
 - [质量状态](current/quality.md)：测试、构建、静态检查和未覆盖范围
 - [发布状态](current/release.md)：版本、披露要求和外部状态
 
-current 只保存简洁、仍然有效且有证据支持的事实和决定，不保存开发流水账。
+current 只保存简洁、仍然有效且有证据支持的事实和决定，不保存开发流水账。实现事实与有效决定必须明确区分；两者冲突时，同时记录决定和已经核验的实现差距。每份 current 文档不超过 300 行，并使用稳定、无日期、简短清晰的名称。
 
 ShotMarker 对外网站、支持页和 how-to 由 `zhangrh.shop` 仓库维护，不在本仓库保存副本。
 
@@ -19,7 +19,7 @@ ShotMarker 对外网站、支持页和 how-to 由 `zhangrh.shop` 仓库维护，
 
 如果本机存在 `docs/private.local/`，它是独立私有 Git 仓库；ShotMarker 专属入口为 `docs/private.local/shotmarker/`。该私有台账只保存 App Store Connect、TestFlight、正式 Archive、真机、线上 Analytics 和 GlitchTip 项目等私有外部事实。
 
-公开文档必须在私有仓库不可用时仍然完整。密码、私钥、Token、AccessKey、Apple API Key、数据库凭据和 `.env` 实际值不进入任何文档仓库。
+公开文档必须在私有仓库不可用时仍然完整。跨仓库的每项当前事实只有一个权威来源，其他仓库只保留必要摘要或链接。密码、私钥、Token、AccessKey、Apple API Key、数据库凭据和 `.env` 实际值不进入任何文档仓库。
 
 ## 正在进行的变更
 
@@ -36,25 +36,24 @@ YYYY-MM-DD-topic-plan.md
 
 archive 保存已经结束的设计、计划、讨论、排查、发布验证和旧文档。它不是当前事实来源。
 
-归档文件使用：
+归档文件放入与文件日期一致的月份目录：
 
 ~~~text
-YYYY-MM-DD-topic.md
-YYYY-MM-DD-topic-spec.md
-YYYY-MM-DD-topic-plan.md
+archive/YYYY-MM/YYYY-MM-DD-topic.md
+archive/YYYY-MM/YYYY-MM-DD-topic-spec.md
+archive/YYYY-MM/YYYY-MM-DD-topic-plan.md
 ~~~
 
-不为只有一至两个 Markdown 的主题创建子目录。
+月份目录只在需要归档时创建，并且必须与其中每个文件名的日期前七位一致。archive 不再按 topic 或记录类型建立更深层目录。
 
 ## 维护流程
 
 ~~~text
 提出变更
-→ 在 changes 编写 spec
-→ 在 changes 编写 plan
+→ 如任务产生 spec、plan 等材料，将其保存在 changes
 → 实施与验证
 → 更新受影响的 current 文档
-→ 将完成的 spec 和 plan 移入 archive
+→ 将已有变更材料移入对应的 archive/YYYY-MM
 ~~~
 
-外部服务、App Store、TestFlight 等变化状态如果没有在当前任务重新验证，必须保留最后验证日期或标为未确认。
+归档前必须先更新 current。外部服务、App Store、TestFlight 等变化状态如果没有在当前任务重新验证，必须保留最后验证日期或标为未确认。

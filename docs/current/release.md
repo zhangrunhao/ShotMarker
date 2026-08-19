@@ -1,9 +1,13 @@
 # ShotMarker 发布状态
 
 - 最后复核：2026-08-19
-- 当前版本：1.2（Build 1）
+- 工程版本：1.2（Build 1）
 - Bundle ID：com.heji.ShotMarker
 - Watch Bundle ID：com.heji.ShotMarker.watchkitapp
+
+## 当前结论
+
+仓库当前配置为 1.2（Build 1）；签名 Archive 与 Organizer Validate 最近于 2026-08-19 通过，但这不证明当前 TestFlight 或 App Store 可用状态。
 
 ## 构建与平台
 
@@ -15,24 +19,26 @@
 - iPhone target 从官方 `sentry-cocoa` 以源码产品 `SentrySPM` 链接 Sentry 9.26.0；Watch target 不链接。
 - 当前工作区的 Release Simulator 构建于 2026-08-19 通过。
 - 2026-08-19 已生成自动签名的正式 iOS Archive 1.2（Build 1）；主 App 与 Watch App 的二进制 UUID 均有匹配 dSYM，Archive 不再嵌入独立 `Sentry.framework`。
-- 同日 Xcode Organizer Validate 成功，没有 warning/error 或 `Upload Symbols Failed`。Xcode 为验证提交自动管理的 Build Number 是 2；本地 Archive 元数据仍是 Build 1。
+- 同日 Xcode Organizer Validate 成功，没有 warning/error 或 `Upload Symbols Failed`；该次验证未执行上传。
 
-## 审核与用户披露事实
+## 当前审核事实
 
 - 核心使用不需要登录、账号或演示账户。
-- ShotMarker 不向自建服务器上传训练记录、打点、源视频或生成视频；系统照片库及 iCloud 是否保存或同步视频由用户设置决定。
 - App 需要照片读取/添加权限；Watch 使用 HealthKit workout session。
+
+## 有效用户披露要求
+
+- ShotMarker 不向自建服务器上传训练记录、打点、源视频或生成视频；系统照片库及 iCloud 是否保存或同步视频由用户设置决定。
 - Release iPhone 会联网发送产品 Analytics 和 GlitchTip 错误/崩溃信息，因此审核说明和隐私披露不得声称“完全不联网”或“所有数据都不离开设备”。
 - Analytics 只发送 project、event、device_id；不发送训练记录、视频、文件名、照片、语音、用户身份或自由文本。完整契约见 [产品埋点](analytics.md)。
 - GlitchTip 不配置默认 PII 或用户身份，也不上传训练记录、视频、截图和本地日志文件。
 
 ## 外部状态
 
-- Xcode Organizer 于 2026-08-19 显示：本任务开始前已有一条 1.2（Build 1）的 `Uploaded to Apple` 归档记录；本任务新建的 1.2（Build 1）归档状态仅为 `Validation succeeded`。
-- 本任务没有点击 `Distribute App` 或执行上传，因此没有由本任务新增的 TestFlight Build；TestFlight 当前可安装状态未通过网页独立复核。
-- Git 历史表明 1.1.0 曾在 2026-06-16 完成 TestFlight 发布。
+- 签名 Archive 与 Organizer Validate 的最近验证日期为 2026-08-19；该次验证没有执行上传。完整外部证据由私有台账维护。
+- 截至 2026-08-19，App Store Connect 与 TestFlight 当前可用状态尚未通过网页独立复核。
 - ShotMarker Analytics 四字段服务端链路和公开隐私页面最后一次生产验收日期为 2026-08-16；字段与保留边界见 [产品埋点](analytics.md)。
-- 上述结果是带日期的事实；除本次 Organizer Validate 外，当前 App Store、TestFlight、Analytics 和 GlitchTip 线上状态未重新验证。
+- 截至 2026-08-19，Analytics 和 GlitchTip 的线上状态尚未在 2026-08-16 的生产验收后重新验证。
 
 ## 发布前待验收
 

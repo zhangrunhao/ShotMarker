@@ -1,7 +1,11 @@
 # ShotMarker 技术架构
 
 - 最后复核：2026-08-19
-- 代码基线：main 工作区（基准提交 9d6938f）
+- 代码基线：main / 42c249a
+
+## 当前结论
+
+ShotMarker 当前由 iPhone App、Apple Watch App、两组测试 target 和共享同步载荷组成；训练、同步、集锦、日志与远端观测均按下述本地优先边界实现。
 
 ## 运行单元
 
@@ -63,7 +67,7 @@ WatchTrainingSyncOutbox
 - GlitchTip 不启用性能追踪、Profiling、Session Replay 或自动 Session Tracking。
 - Analytics 只在 Release iPhone 启用；事件语义、请求、存储和隐私边界见 [产品埋点](analytics.md)。
 
-## 隐私边界
+## 有效隐私边界
 
 - PrivacyInfo.xcprivacy 声明 Device ID、Product Interaction、UserDefaults 和文件时间戳用途。
 - Tracking 为 false。
