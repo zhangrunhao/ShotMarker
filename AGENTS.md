@@ -22,3 +22,12 @@
 - Do not create per-topic directories for one or two Markdown files in `docs/changes/` or `docs/archive/`.
 - Record only evidence-backed test, build, release, and external-service results.
 - Never present changing external state as current unless it was checked in the current task; otherwise include the last verified date or mark it unverified.
+
+## Public and Private Boundaries
+
+- Keep public product behavior, code architecture, tests, build results, data contracts, and privacy boundaries in this repository.
+- When `docs/private.local/` is available, treat `docs/private.local/shotmarker/` as the private source for App Store Connect, TestFlight, signed Archive, real-device, Analytics production, and GlitchTip project verification facts.
+- Public documentation must remain complete without the private repository.
+- `docs/private.local/` is an independent Git repository. Check, commit, and push it separately from this public repository.
+- Synchronize the private repository before editing; never overwrite a dirty private working copy.
+- Never store passwords, private keys, tokens, access keys, database credentials, Apple API keys, actual `.env` values, raw user identifiers, tester emails, or device UDIDs in either documentation repository.

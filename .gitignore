@@ -8,3 +8,6 @@ xcuserdata/
 DerivedData/
 build/
 .build/
+
+# Independent private documentation repository
+docs/private.local/

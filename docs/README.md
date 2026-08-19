@@ -15,6 +15,12 @@ current 只保存简洁、仍然有效且有证据支持的事实和决定，不
 
 ShotMarker 对外网站、支持页和 how-to 由 `zhangrh.shop` 仓库维护，不在本仓库保存副本。
 
+## 私有事实边界
+
+如果本机存在 `docs/private.local/`，它是独立私有 Git 仓库；ShotMarker 专属入口为 `docs/private.local/shotmarker/`。该私有台账只保存 App Store Connect、TestFlight、正式 Archive、真机、线上 Analytics 和 GlitchTip 项目等私有外部事实。
+
+公开文档必须在私有仓库不可用时仍然完整。密码、私钥、Token、AccessKey、Apple API Key、数据库凭据和 `.env` 实际值不进入任何文档仓库。
+
 ## 正在进行的变更
 
 - [iOS 语音口令打点与技术统计](changes/2026-07-29-ios-voice-command-marking-spec.md)：设计已确认，尚未实现
