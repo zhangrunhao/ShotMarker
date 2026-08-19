@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		FF6000012FA5E00000B04685 /* ShotMarkerWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = FF2000022FA5000000B04685 /* ShotMarkerWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		FF7000032FA6000000B04685 /* Sentry-Static in Frameworks */ = {isa = PBXBuildFile; productRef = FF7000022FA6000000B04685 /* Sentry-Static */; };
+		FF7000032FA6000000B04685 /* SentrySPM in Frameworks */ = {isa = PBXBuildFile; productRef = FF7000022FA6000000B04685 /* SentrySPM */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -110,7 +110,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FF7000032FA6000000B04685 /* Sentry-Static in Frameworks */,
+				FF7000032FA6000000B04685 /* SentrySPM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -232,7 +232,7 @@
 			);
 			name = ShotMarker;
 			packageProductDependencies = (
-				FF7000022FA6000000B04685 /* Sentry-Static */,
+				FF7000022FA6000000B04685 /* SentrySPM */,
 			);
 			productName = ShotMarker;
 			productReference = FF5C7E9F2FA46C7E00B04685 /* ShotMarker.app */;
@@ -273,11 +273,11 @@
 			);
 			mainGroup = FF5C7E962FA46C7E00B04685;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				FF7000012FA6000000B04685 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FF5C7EA02FA46C7E00B04685 /* Products */;
-			packageReferences = (
-				FF7000012FA6000000B04685 /* XCRemoteSwiftPackageReference "sentry-apple-binaries" */,
-			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -369,25 +369,6 @@
 		};
 /* End PBXTargetDependency section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		FF7000012FA6000000B04685 /* XCRemoteSwiftPackageReference "sentry-apple-binaries" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/getsentry/sentry-apple-binaries.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 9.26.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		FF7000022FA6000000B04685 /* Sentry-Static */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = FF7000012FA6000000B04685 /* XCRemoteSwiftPackageReference "sentry-apple-binaries" */;
-			productName = "Sentry-Static";
-		};
-/* End XCSwiftPackageProductDependency section */
-
 /* Begin XCBuildConfiguration section */
 		FF1000082FA4800000B04685 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -463,7 +444,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.heji.ShotMarker.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -495,7 +476,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.heji.ShotMarker.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -717,19 +698,20 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.heji.ShotMarker;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.4;
 			};
 			name = Debug;
@@ -762,19 +744,20 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.heji.ShotMarker;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.4;
 			};
 			name = Release;
@@ -828,6 +811,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		FF7000012FA6000000B04685 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.26.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FF7000022FA6000000B04685 /* SentrySPM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FF7000012FA6000000B04685 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = SentrySPM;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = FF5C7E972FA46C7E00B04685 /* Project object */;
 }

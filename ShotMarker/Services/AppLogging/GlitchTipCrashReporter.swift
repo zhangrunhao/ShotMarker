@@ -1,5 +1,5 @@
 import Foundation
-import Sentry
+import SentrySwift
 
 nonisolated protocol AppErrorReporting: Sendable {
     func report(_ event: AppLogEvent)

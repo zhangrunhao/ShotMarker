@@ -1,17 +1,17 @@
 # ShotMarker 技术架构
 
 - 最后复核：2026-08-19
-- 代码基线：main / 9d6938f
+- 代码基线：main 工作区（基准提交 9d6938f）
 
 ## 运行单元
 
-- ShotMarker：SwiftUI 主 App；已验证产品范围为 iPhone，工程仍保留未验收的 iPad 和 visionOS destinations。
+- ShotMarker：SwiftUI 主 App；已验证产品范围为 iPhone，工程仍保留未验收的 iPad destination。
 - ShotMarkerWatchApp：Apple Watch App，SwiftUI、HealthKit、WatchConnectivity。
 - ShotMarkerTests：iPhone 单元与服务测试。
 - ShotMarkerWatchAppTests：Watch 同步、outbox 和运行时测试。
 - Shared：手机与手表共用的训练同步载荷。
 
-工程使用 Xcode 26.6 和 Swift 6.3.3 工具链；工程语言模式为 Swift 5。部署下限为 iOS 26.4、watchOS 26.2 和 visionOS 26.4；不再配置 macOS destination。
+工程使用 Xcode 26.6 和 Swift 6.3.3 工具链；工程语言模式为 Swift 5。部署下限为 iOS 26.4 和 watchOS 26.2；主 App 当前只声明 iOS/iOS Simulator 平台，不配置 macOS、Mac Catalyst 或 visionOS destination。
 
 ## 数据模型与持久化
 
@@ -57,7 +57,8 @@ WatchTrainingSyncOutbox
 
 ## 远端观测
 
-- iPhone target 在 Debug 和 Release 中通过 Sentry 9.26.0 对接 GlitchTip。
+- iPhone target 在 Debug 和 Release 中通过 Sentry 9.26.0 对接 GlitchTip；SwiftPM 从官方 `sentry-cocoa` 解析源码产品 `SentrySPM`，业务适配层导入 `SentrySwift`。
+- `SentrySPM` 只链接到 ShotMarker 主 target，Watch target 不依赖 Sentry。
 - AppLogger.error 同时写入本地并发送精简错误事件；其他日志级别只保存在本地。
 - GlitchTip 不启用性能追踪、Profiling、Session Replay 或自动 Session Tracking。
 - Analytics 只在 Release iPhone 启用；事件语义、请求、存储和隐私边界见 [产品埋点](analytics.md)。

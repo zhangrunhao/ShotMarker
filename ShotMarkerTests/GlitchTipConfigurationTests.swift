@@ -1,5 +1,5 @@
 @testable import ShotMarker
-import Sentry
+import SentrySwift
 import XCTest
 
 final class GlitchTipConfigurationTests: XCTestCase {
