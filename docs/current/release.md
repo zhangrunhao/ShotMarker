@@ -1,13 +1,13 @@
 # ShotMarker 发布状态
 
-- 最后复核：2026-08-19
+- 最后复核：2026-08-20
 - 工程版本：1.2（Build 1）
 - Bundle ID：com.heji.ShotMarker
 - Watch Bundle ID：com.heji.ShotMarker.watchkitapp
 
 ## 当前结论
 
-仓库当前配置为 1.2（Build 1）；签名 Archive 与 Organizer Validate 最近于 2026-08-19 通过，但这不证明当前 TestFlight 或 App Store 可用状态。
+仓库当前配置为 1.2（Build 1）；签名 Archive 与 Organizer Validate 最近于 2026-08-19 通过。2026-08-20 已通过 App Store Connect 网页复核并更新 iPhone 商店截图，但这不证明当前 TestFlight、审核或 App Store 可用状态。
 
 ## 构建与平台
 
@@ -36,7 +36,8 @@
 ## 外部状态
 
 - 签名 Archive 与 Organizer Validate 的最近验证日期为 2026-08-19；该次验证没有执行上传。完整外部证据由私有台账维护。
-- 截至 2026-08-19，App Store Connect 与 TestFlight 当前可用状态尚未通过网页独立复核。
+- 2026-08-20 已通过 App Store Connect iPhone Media Manager 网页复核：6.9 英寸和 6.5 英寸各配置 4 张当前版本截图，顺序均为训练记录、集锦设置、集锦就绪和集锦完成。
+- 截至 2026-08-20，当前 TestFlight、审核和 App Store 可用状态仍未通过网页独立复核。
 - ShotMarker Analytics 四字段服务端链路和公开隐私页面最后一次生产验收日期为 2026-08-16；字段与保留边界见 [产品埋点](analytics.md)。
 - 截至 2026-08-19，Analytics 和 GlitchTip 的线上状态尚未在 2026-08-16 的生产验收后重新验证。
 
@@ -47,6 +48,6 @@
 - 验证 GlitchTip 告警通知。
 - 复核 App Store Connect 隐私问卷与 PrivacyInfo.xcprivacy 一致。
 - 使用与当前行为一致的 App Review Note，明确 Watch、HealthKit、照片权限和远端观测边界。
-- 重新确认当前 TestFlight 与 App Store 可用状态。
+- 重新确认当前 TestFlight、审核与 App Store 可用状态。
 
 正式验收结果应记录验证日期、Build、设备/系统和外部环境，并同步更新 [项目状态](status.md) 与 [质量状态](quality.md)。
