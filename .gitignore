@@ -9,5 +9,8 @@ DerivedData/
 build/
 .build/
 
+# Local Git worktrees
+.worktrees/
+
 # Independent private documentation repository
 docs/private.local/
