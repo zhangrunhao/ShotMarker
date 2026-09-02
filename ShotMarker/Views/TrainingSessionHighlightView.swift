@@ -61,6 +61,7 @@
                 clipSettingsSection
                 videoPickerSection
                 selectedVideoItemsSection
+                markerLabelSettingsSection
                 coverageAndGenerationSections
             }
             .navigationTitle("生成集锦")
@@ -248,6 +249,20 @@
                         }
                     }
                     .padding(.vertical, 4)
+                }
+            }
+        }
+
+        @ViewBuilder
+        private var markerLabelSettingsSection: some View {
+            if let firstSelectedItem = selectedVideoItems.first {
+                Section("片段序数") {
+                    MarkerLabelSettingsView(
+                        thumbnailData: firstSelectedItem.thumbnailData,
+                        previewLabel: plan.segments.first?.markerLabel ?? "1/1",
+                        isDisabled: isCreatingHighlightJob,
+                        style: $clipSettings.markerLabelStyle,
+                    )
                 }
             }
         }
