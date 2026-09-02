@@ -755,10 +755,20 @@
             }
 
             do {
+                let reviewDraft = HighlightClipReviewPlanner.makeDraft(
+                    for: session,
+                    videos: selectedVideos,
+                    clipSettings: clipSettings,
+                )
+                let confirmedSegments = try HighlightClipReviewPlanner.makeSummary(
+                    items: reviewDraft.items,
+                    videos: selectedVideos,
+                ).finalSegments
                 _ = try await highlightJobManager.createJob(
                     session: session,
                     selectedVideos: selectedVideos,
                     clipSettings: clipSettings,
+                    confirmedSegments: confirmedSegments,
                 )
                 cancelPreparationTasks()
                 cleanupTemporaryVideos()

@@ -97,37 +97,61 @@ final class HighlightJobManager: ObservableObject {
         session: TrainingSession,
         selectedVideos: [SelectedTrainingVideo],
         clipSettings: ClipSettings,
+        confirmedSegments: [ConfirmedHighlightSegment],
     ) async throws -> HighlightJob {
+        let validatedSegments = try HighlightClipReviewPlanner.validateConfirmedSegments(
+            confirmedSegments,
+            videos: selectedVideos,
+            validMarkerIDs: Set(session.events.map(\.id)),
+        )
+        let referencedVideoIDs = Set(validatedSegments.map(\.videoID))
+        let retainedVideos = selectedVideos.filter { referencedVideoIDs.contains($0.id) }
         let now = Date()
         let jobID = UUID()
-        let jobVideos = try selectedVideos.map { video in
-            try makeJobVideo(from: video, jobID: jobID)
-        }
-        let job = HighlightJob(
-            id: jobID,
-            trainingSession: session,
-            selectedVideos: jobVideos,
-            clipSettings: clipSettings.normalized,
-            status: .queued,
-            progress: .zero,
-            outputVideoPath: nil,
-            photoLibrarySavedAt: nil,
-            photoLibrarySaveErrorMessage: nil,
-            errorMessage: nil,
-            createdAt: now,
-            updatedAt: now,
-        )
 
-        jobs.insert(job, at: 0)
-        persist()
-        logger.info(
-            "highlight.job.queued",
-            category: .video,
-            message: "集锦任务已加入队列",
-            context: ["jobID": job.id.uuidString],
-        )
-        startNextQueuedJobIfPossible()
-        return job
+        do {
+            let jobVideos = try retainedVideos.map { video in
+                try makeJobVideo(from: video, jobID: jobID)
+            }
+            let job = HighlightJob(
+                id: jobID,
+                trainingSession: session,
+                selectedVideos: jobVideos,
+                clipSettings: clipSettings.normalized,
+                clipPlanVersion: 1,
+                confirmedSegments: validatedSegments,
+                status: .queued,
+                progress: .zero,
+                outputVideoPath: nil,
+                photoLibrarySavedAt: nil,
+                photoLibrarySaveErrorMessage: nil,
+                errorMessage: nil,
+                createdAt: now,
+                updatedAt: now,
+            )
+
+            jobs.insert(job, at: 0)
+            persist()
+            logger.info(
+                "highlight.job.queued",
+                category: .video,
+                message: "集锦任务已加入队列",
+                context: [
+                    "segmentCount": "\(validatedSegments.count)",
+                    "videoCount": "\(retainedVideos.count)",
+                    "markerCount": "\(validatedSegments.reduce(0) { $0 + $1.markerIDs.count })",
+                    "totalDurationSeconds": String(
+                        format: "%.1f",
+                        validatedSegments.reduce(0) { $0 + $1.duration },
+                    ),
+                ],
+            )
+            startNextQueuedJobIfPossible()
+            return job
+        } catch {
+            try? fileStore.removeAllFiles(for: jobID)
+            throw error
+        }
     }
 
     func cancel(jobID: UUID) {
