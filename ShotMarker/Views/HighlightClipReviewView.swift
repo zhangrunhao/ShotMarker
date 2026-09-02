@@ -22,36 +22,34 @@ struct HighlightClipReviewView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 18, pinnedViews: [.sectionHeaders]) {
-                    Section {
-                        LazyVGrid(columns: columns, spacing: 14) {
-                            ForEach(viewModel.items) { item in
-                                thumbnailLoadingCard(for: item)
-                            }
+        ScrollView {
+            LazyVStack(spacing: 18, pinnedViews: [.sectionHeaders]) {
+                Section {
+                    LazyVGrid(columns: columns, spacing: 14) {
+                        ForEach(viewModel.items) { item in
+                            thumbnailLoadingCard(for: item)
                         }
-                        .padding(.horizontal)
-                    } header: {
-                        summaryHeader
                     }
-
-                    confirmationArea
-                        .padding(.horizontal)
-                        .padding(.bottom)
+                    .padding(.horizontal)
+                } header: {
+                    summaryHeader
                 }
+
+                confirmationArea
+                    .padding(.horizontal)
+                    .padding(.bottom)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle("审核集锦片段")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(item: $editorDestination) { destination in
-                HighlightClipEditorView(
-                    viewModel: viewModel,
-                    itemID: destination.id,
-                    playbackController: destination.playbackController,
-                    loadsMedia: loadsMedia,
-                )
-            }
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+        .navigationTitle("审核集锦片段")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $editorDestination) { destination in
+            HighlightClipEditorView(
+                viewModel: viewModel,
+                itemID: destination.id,
+                playbackController: destination.playbackController,
+                loadsMedia: loadsMedia,
+            )
         }
         .onChange(of: editorDestination?.id) { previousID, currentID in
             guard let previousID, currentID == nil else {
@@ -548,27 +546,33 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
     }
 
     #Preview("审核状态") {
-        HighlightClipReviewView(
-            viewModel: HighlightClipReviewPreviewFixtures.galleryViewModel(),
-            makePlaybackController: HighlightClipReviewPreviewFixtures.playbackController,
-            loadsMedia: false,
-        )
+        NavigationStack {
+            HighlightClipReviewView(
+                viewModel: HighlightClipReviewPreviewFixtures.galleryViewModel(),
+                makePlaybackController: HighlightClipReviewPreviewFixtures.playbackController,
+                loadsMedia: false,
+            )
+        }
     }
 
     #Preview("不可用占位") {
-        HighlightClipReviewView(
-            viewModel: HighlightClipReviewPreviewFixtures.galleryViewModel(unavailable: true),
-            makePlaybackController: HighlightClipReviewPreviewFixtures.playbackController,
-            loadsMedia: false,
-        )
+        NavigationStack {
+            HighlightClipReviewView(
+                viewModel: HighlightClipReviewPreviewFixtures.galleryViewModel(unavailable: true),
+                makePlaybackController: HighlightClipReviewPreviewFixtures.playbackController,
+                loadsMedia: false,
+            )
+        }
     }
 
     #Preview("最大动态字体") {
-        HighlightClipReviewView(
-            viewModel: HighlightClipReviewPreviewFixtures.galleryViewModel(),
-            makePlaybackController: HighlightClipReviewPreviewFixtures.playbackController,
-            loadsMedia: false,
-        )
-        .environment(\.dynamicTypeSize, .accessibility5)
+        NavigationStack {
+            HighlightClipReviewView(
+                viewModel: HighlightClipReviewPreviewFixtures.galleryViewModel(),
+                makePlaybackController: HighlightClipReviewPreviewFixtures.playbackController,
+                loadsMedia: false,
+            )
+            .environment(\.dynamicTypeSize, .accessibility5)
+        }
     }
 #endif
