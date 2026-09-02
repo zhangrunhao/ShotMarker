@@ -25,6 +25,7 @@ ShotMarker 对外网站、支持页和 how-to 由 `zhangrh.shop` 仓库维护，
 
 ## 正在进行的变更
 
+- [集锦片段审核与范围调整](changes/2026-09-02-highlight-clip-review-spec.md)：设计已确认，尚未实现
 - [iOS 语音口令打点与技术统计](changes/2026-07-29-ios-voice-command-marking-spec.md)：设计已确认，尚未实现
 
 changes 使用扁平文件：

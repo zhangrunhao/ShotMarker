@@ -21,6 +21,8 @@ ShotMarker 的 iPhone、Apple Watch、训练同步、视频准备、可预览并
 
 ## 已确认但未实现
 
+[集锦片段审核与范围调整](../changes/2026-09-02-highlight-clip-review-spec.md) 已完成设计确认；当前代码仍直接按全局前后时长规划并创建任务，没有审核图集、逐片段范围编辑或精确片段任务快照。
+
 [iOS 语音口令打点与技术统计](../changes/2026-07-29-ios-voice-command-marking-spec.md) 已完成设计确认，但当前代码没有语音识别、语音事件或球员统计能力。
 
 ## 主要风险
