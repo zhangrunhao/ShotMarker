@@ -16,6 +16,9 @@ final class HighlightClipReviewViewModel: ObservableObject {
     @Published private(set) var items: [HighlightClipReviewItem]
     @Published private(set) var summary: HighlightClipReviewSummary
     @Published private(set) var thumbnailStates: [UUID: HighlightClipThumbnailState]
+    @Published private(set) var filmstripFramesByItemID: [UUID: [Data?]] = [:]
+    @Published private(set) var filmstripWindowsByItemID: [UUID: HighlightClipTimelineWindow] = [:]
+    @Published private(set) var filmstripLoadingItemIDs: Set<UUID> = []
     @Published private(set) var unavailableItemIDs: Set<UUID> = []
     @Published private(set) var itemErrorMessages: [UUID: String] = [:]
     @Published private(set) var planningErrorMessage: String?
@@ -31,6 +34,8 @@ final class HighlightClipReviewViewModel: ObservableObject {
     private let submitSegments: SubmitSegments
     private var thumbnailTasks: [UUID: Task<Void, Never>] = [:]
     private var thumbnailTargetSizes: [UUID: CGSize] = [:]
+    private var filmstripTasks: [UUID: Task<Void, Never>] = [:]
+    private var filmstripRequestIDs: [UUID: UUID] = [:]
 
     init(
         draft: HighlightClipReviewDraft,
@@ -130,12 +135,111 @@ final class HighlightClipReviewViewModel: ObservableObject {
         scheduleThumbnailRefreshIfNeeded(itemID: itemID)
     }
 
+    func adjustStart(itemID: UUID, by delta: TimeInterval) throws {
+        guard let item = items.first(where: { $0.id == itemID }) else {
+            throw HighlightClipReviewPlanningError.missingMarkers
+        }
+        try apply(.setStart(item.start + delta), itemID: itemID)
+    }
+
+    func adjustEnd(itemID: UUID, by delta: TimeInterval) throws {
+        guard let item = items.first(where: { $0.id == itemID }) else {
+            throw HighlightClipReviewPlanningError.missingMarkers
+        }
+        try apply(.setEnd(item.range.end + delta), itemID: itemID)
+    }
+
+    func moveRange(itemID: UUID, by delta: TimeInterval) throws {
+        try apply(.moveBy(delta), itemID: itemID)
+    }
+
+    func handleTimelineAction(
+        _ action: HighlightClipTimelineAction,
+        itemID: UUID,
+        playbackController: HighlightClipPlaybackController,
+    ) async throws {
+        switch action {
+        case .setStart(let start):
+            try apply(.setStart(start), itemID: itemID)
+            let range = try range(for: itemID)
+            playbackController.updateRange(range)
+            await playbackController.previewStart(of: range)
+        case .setEnd(let end):
+            try apply(.setEnd(end), itemID: itemID)
+            let range = try range(for: itemID)
+            playbackController.updateRange(range)
+            await playbackController.previewEnd(of: range)
+        case .moveBy(let delta):
+            try apply(.moveBy(delta), itemID: itemID)
+            let range = try range(for: itemID)
+            playbackController.updateRange(range)
+            await playbackController.previewStart(of: range)
+        case .preview(let time):
+            guard let item = items.first(where: { $0.id == itemID }),
+                  let video = videos.first(where: { $0.id == item.videoID })
+            else {
+                throw HighlightClipReviewPlanningError.sourceVideoMissing
+            }
+            let previewTime = min(max(time, 0), video.duration)
+            await playbackController.preview(at: previewTime)
+        }
+    }
+
     func loadThumbnail(itemID: UUID, targetSize: CGSize) async {
         guard let task = startThumbnailLoad(itemID: itemID, targetSize: targetSize) else {
             return
         }
 
-        await task.value
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    func loadFilmstrip(
+        itemID: UUID,
+        window: HighlightClipTimelineWindow,
+        count: Int,
+        targetSize: CGSize,
+    ) async {
+        guard let item = items.first(where: { $0.id == itemID }),
+              let video = videos.first(where: { $0.id == item.videoID })
+        else {
+            return
+        }
+
+        cancelFilmstripLoading(itemID: itemID)
+        let requestID = UUID()
+        filmstripRequestIDs[itemID] = requestID
+        filmstripLoadingItemIDs.insert(itemID)
+        let task = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            await performFilmstripLoad(
+                itemID: itemID,
+                video: video,
+                window: window,
+                count: count,
+                targetSize: targetSize,
+                requestID: requestID,
+            )
+        }
+        filmstripTasks[itemID] = task
+
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    func cancelFilmstripLoading(itemID: UUID) {
+        filmstripTasks[itemID]?.cancel()
+        filmstripTasks[itemID] = nil
+        filmstripRequestIDs[itemID] = nil
+        filmstripLoadingItemIDs.remove(itemID)
     }
 
     func markSourceUnavailable(itemID: UUID) {
@@ -207,6 +311,10 @@ final class HighlightClipReviewViewModel: ObservableObject {
     func cancelMediaLoading() {
         thumbnailTasks.values.forEach { $0.cancel() }
         thumbnailTasks.removeAll()
+        filmstripTasks.values.forEach { $0.cancel() }
+        filmstripTasks.removeAll()
+        filmstripRequestIDs.removeAll()
+        filmstripLoadingItemIDs.removeAll()
         mediaProvider.removeAllCachedResources()
     }
 
@@ -297,6 +405,63 @@ final class HighlightClipReviewViewModel: ObservableObject {
                 thumbnailStates[item.id] = .placeholder
             }
         }
+    }
+
+    private func performFilmstripLoad(
+        itemID: UUID,
+        video: SelectedTrainingVideo,
+        window: HighlightClipTimelineWindow,
+        count: Int,
+        targetSize: CGSize,
+        requestID: UUID,
+    ) async {
+        defer {
+            if filmstripRequestIDs[itemID] == requestID {
+                filmstripTasks[itemID] = nil
+                filmstripRequestIDs[itemID] = nil
+                filmstripLoadingItemIDs.remove(itemID)
+            }
+        }
+
+        do {
+            let frames = try await mediaProvider.filmstripFrames(
+                for: video,
+                timeRange: HighlightClipRange(
+                    start: window.start,
+                    duration: window.duration,
+                ),
+                count: count,
+                targetSize: targetSize,
+            )
+            try Task.checkCancellation()
+            guard filmstripRequestIDs[itemID] == requestID else {
+                return
+            }
+            filmstripFramesByItemID[itemID] = frames
+            filmstripWindowsByItemID[itemID] = window
+            if unavailableItemIDs.remove(itemID) != nil {
+                itemErrorMessages[itemID] = nil
+            }
+        } catch is CancellationError {
+            return
+        } catch let error as HighlightClipReviewMediaError {
+            guard filmstripRequestIDs[itemID] == requestID else {
+                return
+            }
+            if error == .sourceUnavailable {
+                unavailableItemIDs.insert(itemID)
+                itemErrorMessages[itemID] = Self.userFacingMessage(for: error)
+            }
+        } catch {
+            return
+        }
+    }
+
+    private func range(for itemID: UUID) throws -> HighlightClipRange {
+        guard let item = items.first(where: { $0.id == itemID }) else {
+            throw HighlightClipReviewPlanningError.missingMarkers
+        }
+        return item.range
     }
 
     private static func makeFingerprint(

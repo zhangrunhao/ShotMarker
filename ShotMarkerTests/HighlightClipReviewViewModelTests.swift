@@ -237,21 +237,138 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testStartEndAndMoveFineTuneUseExactlyHalfSecond() throws {
+        let startViewModel = makeViewModel()
+        let startID = startViewModel.items[0].id
+        try startViewModel.apply(.replace(start: 5, duration: 4), itemID: startID)
+        try startViewModel.adjustStart(itemID: startID, by: -0.5)
+        XCTAssertEqual(startViewModel.items[0].range, .init(start: 4.5, duration: 4.5))
+
+        let endViewModel = makeViewModel()
+        let endID = endViewModel.items[0].id
+        try endViewModel.apply(.replace(start: 5, duration: 4), itemID: endID)
+        try endViewModel.adjustEnd(itemID: endID, by: 0.5)
+        XCTAssertEqual(endViewModel.items[0].range, .init(start: 5, duration: 4.5))
+
+        let moveViewModel = makeViewModel()
+        let moveID = moveViewModel.items[0].id
+        try moveViewModel.apply(.replace(start: 5, duration: 4), itemID: moveID)
+        try moveViewModel.moveRange(itemID: moveID, by: 0.5)
+        XCTAssertEqual(moveViewModel.items[0].range, .init(start: 5.5, duration: 4))
+    }
+
+    @MainActor
+    func testPlayheadPreviewDoesNotMutateRange() async throws {
+        let viewModel = makeViewModel()
+        let itemID = viewModel.items[0].id
+        try viewModel.apply(.replace(start: 5, duration: 4), itemID: itemID)
+        let originalItem = viewModel.items[0]
+        let engine = ReviewTimelineSpyPlaybackEngine()
+        let playbackController = HighlightClipPlaybackController(
+            engine: engine,
+            loadAsset: { _ in AVURLAsset(url: URL(fileURLWithPath: "/tmp/video.mov")) },
+        )
+        await playbackController.load(video: makeVideo(), range: originalItem.range)
+        engine.resetSeekHistory()
+
+        try await viewModel.handleTimelineAction(
+            .preview(6.5),
+            itemID: itemID,
+            playbackController: playbackController,
+        )
+
+        XCTAssertEqual(viewModel.items[0], originalItem)
+        XCTAssertEqual(engine.seekedTimes, [6.5])
+    }
+
+    @MainActor
+    func testFilmstripRefreshCancelsPreviousWindowRequest() async {
+        let firstStarted = expectation(description: "first filmstrip request started")
+        let firstCancelled = expectation(description: "first filmstrip request cancelled")
+        var didCancelFirstRequest = false
+        let mediaProvider = HighlightClipReviewMediaProvider(
+            cacheLimit: 8,
+            loadAsset: { _ in AVURLAsset(url: URL(fileURLWithPath: "/tmp/video.mov")) },
+            generateFrame: { _, request in
+                if request.time < 20 {
+                    firstStarted.fulfill()
+                    do {
+                        try await Task.sleep(nanoseconds: 5_000_000_000)
+                    } catch {
+                        didCancelFirstRequest = true
+                        firstCancelled.fulfill()
+                        throw error
+                    }
+                    return Data([1])
+                }
+                return Data([2])
+            },
+        )
+        let viewModel = makeViewModel(mediaProvider: mediaProvider)
+        let itemID = viewModel.items[0].id
+        let firstWindow = HighlightClipTimelineWindow(start: 0, duration: 20)
+        let secondWindow = HighlightClipTimelineWindow(start: 20, duration: 20)
+        let firstLoad = Task {
+            await viewModel.loadFilmstrip(
+                itemID: itemID,
+                window: firstWindow,
+                count: 1,
+                targetSize: .init(width: 160, height: 90),
+            )
+        }
+        await fulfillment(of: [firstStarted], timeout: 1)
+
+        await viewModel.loadFilmstrip(
+            itemID: itemID,
+            window: secondWindow,
+            count: 1,
+            targetSize: .init(width: 160, height: 90),
+        )
+        await fulfillment(of: [firstCancelled], timeout: 1)
+        await firstLoad.value
+
+        XCTAssertTrue(didCancelFirstRequest)
+        XCTAssertEqual(viewModel.filmstripFramesByItemID[itemID], [Data([2])])
+        XCTAssertEqual(viewModel.filmstripWindowsByItemID[itemID], secondWindow)
+    }
+
+    @MainActor
+    func testUnavailableIncludedCardCanBeExcludedAndThenOtherCardsSubmit() async {
+        var submitted: [ConfirmedHighlightSegment] = []
+        let viewModel = makeViewModel(itemCount: 2) { segments in
+            submitted = segments
+        }
+        let unavailableID = viewModel.items[0].id
+        let remainingID = viewModel.items[1].id
+        viewModel.markSourceUnavailable(itemID: unavailableID)
+        XCTAssertFalse(viewModel.canConfirm)
+
+        viewModel.setIncluded(false, itemID: unavailableID)
+        XCTAssertTrue(viewModel.canConfirm)
+        await viewModel.submit()
+
+        XCTAssertEqual(submitted.count, 1)
+        XCTAssertEqual(submitted[0].id, remainingID)
+    }
+
+    @MainActor
     private func makeViewModel(
         itemCount: Int = 1,
         frameResults: [Result<Data, TestError>] = [.success(Data([1]))],
+        mediaProvider injectedMediaProvider: HighlightClipReviewMediaProvider? = nil,
         submitSegments: @escaping ([ConfirmedHighlightSegment]) async throws -> Void = { _ in },
     ) -> HighlightClipReviewViewModel {
         var nextFrameIndex = 0
         let video = makeVideo()
-        let mediaProvider = HighlightClipReviewMediaProvider(
-            cacheLimit: 8,
-            loadAsset: { _ in AVURLAsset(url: URL(fileURLWithPath: "/tmp/video.mov")) },
-            generateFrame: { _, _ in
-                defer { nextFrameIndex += 1 }
-                return try frameResults[min(nextFrameIndex, frameResults.count - 1)].get()
-            },
-        )
+        let mediaProvider = injectedMediaProvider
+            ?? HighlightClipReviewMediaProvider(
+                cacheLimit: 8,
+                loadAsset: { _ in AVURLAsset(url: URL(fileURLWithPath: "/tmp/video.mov")) },
+                generateFrame: { _, _ in
+                    defer { nextFrameIndex += 1 }
+                    return try frameResults[min(nextFrameIndex, frameResults.count - 1)].get()
+                },
+            )
         let items = (0 ..< itemCount).map { index in
             let number = index + 1
             let markerID = UUID(
@@ -296,6 +413,38 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
             recordedStartAt: Date(timeIntervalSince1970: 100),
             duration: 60,
         )
+    }
+}
+
+@MainActor
+private final class ReviewTimelineSpyPlaybackEngine: HighlightClipPlaybackEngine {
+    let player = AVPlayer()
+    private(set) var seekedTimes: [TimeInterval] = []
+
+    func replaceCurrentItem(with _: AVAsset) {}
+    func clearCurrentItem() {}
+    func play() {}
+    func pause() {}
+
+    func seek(to seconds: TimeInterval) async {
+        seekedTimes.append(seconds)
+    }
+
+    func addPeriodicTimeObserver(_: @escaping (TimeInterval) -> Void) -> Any {
+        UUID()
+    }
+
+    func addBoundaryTimeObserver(
+        at _: TimeInterval,
+        _: @escaping () -> Void,
+    ) -> Any {
+        UUID()
+    }
+
+    func removeTimeObserver(_: Any) {}
+
+    func resetSeekHistory() {
+        seekedTimes.removeAll()
     }
 }
 
