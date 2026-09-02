@@ -32,6 +32,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
     private let originalItems: [HighlightClipReviewItem]
     private let inputFingerprint: HighlightClipReviewInputFingerprint
     private let submitSegments: SubmitSegments
+    private let onSubmissionSucceeded: () -> Void
     private var thumbnailTasks: [UUID: Task<Void, Never>] = [:]
     private var thumbnailTargetSizes: [UUID: CGSize] = [:]
     private var filmstripTasks: [UUID: Task<Void, Never>] = [:]
@@ -43,12 +44,14 @@ final class HighlightClipReviewViewModel: ObservableObject {
         clipSettings: ClipSettings,
         mediaProvider: HighlightClipReviewMediaProvider,
         submitSegments: @escaping SubmitSegments,
+        onSubmissionSucceeded: @escaping () -> Void = {},
     ) {
         items = draft.items
         originalItems = draft.items
         self.videos = videos
         self.mediaProvider = mediaProvider
         self.submitSegments = submitSegments
+        self.onSubmissionSucceeded = onSubmissionSucceeded
         inputFingerprint = Self.makeFingerprint(videos: videos, clipSettings: clipSettings)
 
         let includedMarkerCount = draft.items
@@ -296,6 +299,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
 
         do {
             try await submitSegments(segments)
+            onSubmissionSucceeded()
         } catch {
             submissionErrorMessage = Self.userFacingMessage(for: error)
         }

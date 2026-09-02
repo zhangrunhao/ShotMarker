@@ -208,6 +208,68 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testReturningFromEditorAndSettingsKeepsSameDraftValues() throws {
+        let viewModel = makeViewModel(itemCount: 2)
+        let firstID = viewModel.items[0].id
+        let secondID = viewModel.items[1].id
+        try viewModel.apply(.replace(start: 6, duration: 3), itemID: firstID)
+        viewModel.setIncluded(false, itemID: secondID)
+        let expectedItems = viewModel.items
+
+        viewModel.openEditor(itemID: firstID)
+        viewModel.closeEditor()
+        XCTAssertFalse(viewModel.requiresInvalidation(
+            videos: [makeVideo()],
+            clipSettings: ClipSettings(
+                secondsBeforeMarker: ClipSettings.default.secondsBeforeMarker,
+                secondsAfterMarker: ClipSettings.default.secondsAfterMarker,
+                markerLabelStyle: MarkerLabelStyle(
+                    fontSizeRatio: 0.2,
+                    normalizedCenterX: 0.75,
+                    normalizedCenterY: 0.25,
+                    textOpacity: 0.8,
+                    backgroundOpacity: 0.4,
+                ),
+            ),
+        ))
+        viewModel.openEditor(itemID: firstID)
+
+        XCTAssertEqual(viewModel.items, expectedItems)
+        XCTAssertEqual(viewModel.editingItemID, firstID)
+    }
+
+    @MainActor
+    func testFingerprintTreatsVideoOrderAsPlanningInput() {
+        let firstVideo = makeVideo(id: "first")
+        let secondVideo = SelectedTrainingVideo(
+            id: "second",
+            recordedStartAt: firstVideo.recordedStartAt,
+            duration: firstVideo.duration,
+        )
+        let mediaProvider = HighlightClipReviewMediaProvider(
+            cacheLimit: 0,
+            loadAsset: { _ in AVURLAsset(url: URL(fileURLWithPath: "/tmp/video.mov")) },
+            generateFrame: { _, _ in Data() },
+        )
+        let viewModel = HighlightClipReviewViewModel(
+            draft: HighlightClipReviewDraft(
+                selectedVideoCount: 2,
+                totalMarkerCount: 0,
+                items: [],
+            ),
+            videos: [firstVideo, secondVideo],
+            clipSettings: .default,
+            mediaProvider: mediaProvider,
+            submitSegments: { _ in },
+        )
+
+        XCTAssertTrue(viewModel.requiresInvalidation(
+            videos: [secondVideo, firstVideo],
+            clipSettings: .default,
+        ))
+    }
+
+    @MainActor
     func testConfirmedSegmentsReturnsTheAlreadyDisplayedSummaryArray() throws {
         let viewModel = makeViewModel(itemCount: 2)
         viewModel.setIncluded(false, itemID: viewModel.items[1].id)
