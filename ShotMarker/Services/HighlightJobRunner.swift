@@ -4,6 +4,7 @@ import Foundation
 struct HighlightJobRunner {
     typealias MakeHighlightClip = (
         [HighlightClipSegment],
+        MarkerLabelStyle,
         @MainActor @escaping (HighlightClipGenerationProgress) -> Void,
         @escaping (HighlightClipAssetRequest) async throws -> AVAsset
     ) async throws -> URL
@@ -74,6 +75,7 @@ struct HighlightJobRunner {
             try Task.checkCancellation()
             let temporaryOutputURL = try await makeHighlightClip(
                 plan.segments,
+                job.clipSettings.markerLabelStyle,
                 { progress in
                     job.progress = HighlightJobProgress(
                         completedMarkerCount: progress.completedMarkerCount,

@@ -42,26 +42,37 @@ struct HighlightClipAssetRequest: Equatable {
     }
 }
 
-struct HighlightClipMarkerLabelOverlayStyle {
-    let fontSizeRatio: CGFloat
-    let minimumFontSize: CGFloat
-    let maximumFontSize: CGFloat
-    let backgroundAlpha: CGFloat
-    let horizontalPaddingRatio: CGFloat
-    let verticalPaddingRatio: CGFloat
+nonisolated struct HighlightClipMarkerLabelOverlayMetrics: Equatable {
+    let fontSize: CGFloat
+    let textOpacity: CGFloat
+    let backgroundOpacity: CGFloat
+    let horizontalPadding: CGFloat
+    let verticalPadding: CGFloat
+    let cornerRadius: CGFloat
 
-    static let `default` = HighlightClipMarkerLabelOverlayStyle(
-        fontSizeRatio: 0.1,
-        minimumFontSize: 48,
-        maximumFontSize: 132,
-        backgroundAlpha: 1,
-        horizontalPaddingRatio: 0.55,
-        verticalPaddingRatio: 0.28,
-    )
+    static func make(
+        renderSize: CGSize,
+        style: MarkerLabelStyle,
+    ) throws -> HighlightClipMarkerLabelOverlayMetrics {
+        guard renderSize.width.isFinite,
+              renderSize.height.isFinite,
+              renderSize.width > 0,
+              renderSize.height > 0
+        else {
+            throw VideoClipEditingError.missingVideoTrack
+        }
 
-    func fontSize(for renderSize: CGSize) -> CGFloat {
-        let shortestSide = min(abs(renderSize.width), abs(renderSize.height))
-        return min(max(shortestSide * fontSizeRatio, minimumFontSize), maximumFontSize)
+        let normalized = style.normalized
+        let fontSize = min(renderSize.width, renderSize.height)
+            * CGFloat(normalized.fontSizeRatio)
+        return HighlightClipMarkerLabelOverlayMetrics(
+            fontSize: fontSize,
+            textOpacity: CGFloat(normalized.textOpacity),
+            backgroundOpacity: CGFloat(normalized.backgroundOpacity),
+            horizontalPadding: fontSize * 0.55,
+            verticalPadding: fontSize * 0.28,
+            cornerRadius: fontSize * 0.25,
+        )
     }
 }
 
@@ -98,12 +109,15 @@ struct VideoClipEditingService {
 
     func makeHighlightClip(
         from segments: [HighlightClipSegment],
+        markerLabelStyle: MarkerLabelStyle,
         progressHandler: (@MainActor (HighlightClipGenerationProgress) -> Void)? = nil,
         _ assetProvider: (HighlightClipAssetRequest) async throws -> AVAsset,
     ) async throws -> URL {
         do {
+            let normalizedMarkerLabelStyle = markerLabelStyle.normalized
             return try await exportClip(
                 from: segments,
+                markerLabelStyle: normalizedMarkerLabelStyle,
                 progressHandler: progressHandler,
                 assetProvider: assetProvider,
             )
@@ -200,6 +214,7 @@ struct VideoClipEditingService {
 
     private func exportClip(
         from segments: [HighlightClipSegment],
+        markerLabelStyle: MarkerLabelStyle,
         progressHandler: (@MainActor (HighlightClipGenerationProgress) -> Void)?,
         assetProvider: (HighlightClipAssetRequest) async throws -> AVAsset,
     ) async throws -> URL {
@@ -308,6 +323,7 @@ struct VideoClipEditingService {
             videoComposition: try await Self.markerLabelVideoComposition(
                 for: composition,
                 overlayRanges: overlayRanges,
+                style: markerLabelStyle,
             ),
             progressTotalMarkerCount: totalMarkerCount,
             progressHandler: progressHandler,
@@ -479,20 +495,28 @@ struct VideoClipEditingService {
     private static func markerLabelVideoComposition(
         for asset: AVAsset,
         overlayRanges: [HighlightClipOverlayRange],
+        style: MarkerLabelStyle,
     ) async throws -> AVVideoComposition? {
         #if canImport(UIKit)
             guard !overlayRanges.isEmpty else {
                 return nil
             }
 
+            let normalizedStyle = style.normalized
+            guard normalizedStyle.textOpacity > 0 || normalizedStyle.backgroundOpacity > 0 else {
+                return nil
+            }
+
             let renderSize = try await markerLabelRenderSize(for: asset)
-            let style = HighlightClipMarkerLabelOverlayStyle.default
+            let metrics = try HighlightClipMarkerLabelOverlayMetrics.make(
+                renderSize: renderSize,
+                style: normalizedStyle,
+            )
             let overlayImagesByLabel = Dictionary(
                 uniqueKeysWithValues: Set(overlayRanges.map(\.label)).compactMap { label in
                     makeMarkerLabelOverlayImage(
                         text: label,
-                        renderSize: renderSize,
-                        style: style,
+                        metrics: metrics,
                     ).map { (label, $0) }
                 },
             )
@@ -509,17 +533,20 @@ struct VideoClipEditingService {
                 }
 
                 let sourceImage = parameters.sourceImage
-                let extent = sourceImage.extent
-                let margin = max(min(extent.width, extent.height) * 0.04, 24)
+                let origin = markerLabelCoreImageOrigin(
+                    style: normalizedStyle,
+                    overlaySize: overlayImage.extent.size,
+                    imageExtent: sourceImage.extent,
+                )
                 let translatedOverlay = overlayImage.transformed(
                     by: CGAffineTransform(
-                        translationX: extent.minX + margin,
-                        y: extent.maxY - overlayImage.extent.height - margin,
+                        translationX: origin.x - overlayImage.extent.minX,
+                        y: origin.y - overlayImage.extent.minY,
                     ),
                 )
                 let outputImage = translatedOverlay
                     .composited(over: sourceImage)
-                    .cropped(to: extent)
+                    .cropped(to: sourceImage.extent)
 
                 return AVCIImageFilteringResult(resultImage: outputImage)
             }
@@ -528,47 +555,77 @@ struct VideoClipEditingService {
         #endif
     }
 
+    nonisolated static func markerLabelCoreImageOrigin(
+        style: MarkerLabelStyle,
+        overlaySize: CGSize,
+        imageExtent: CGRect,
+    ) -> CGPoint {
+        let normalized = style.normalized
+        return MarkerLabelLayout.coreImageOrigin(
+            for: CGPoint(
+                x: CGFloat(normalized.normalizedCenterX),
+                y: CGFloat(normalized.normalizedCenterY),
+            ),
+            labelSize: overlaySize,
+            in: imageExtent,
+        )
+    }
+
     #if canImport(UIKit)
         private static func markerLabelRenderSize(for asset: AVAsset) async throws -> CGSize {
             let videoTracks = try await asset.loadTracks(withMediaType: .video)
             guard let videoTrack = videoTracks.first else {
-                return CGSize(width: 1080, height: 1920)
+                throw VideoClipEditingError.missingVideoTrack
             }
 
             let naturalSize = try await videoTrack.load(.naturalSize)
-            return CGSize(width: abs(naturalSize.width), height: abs(naturalSize.height))
+            let preferredTransform = try await videoTrack.load(.preferredTransform)
+            let transformedRect = CGRect(origin: .zero, size: naturalSize)
+                .applying(preferredTransform)
+            let renderSize = CGSize(
+                width: abs(transformedRect.width),
+                height: abs(transformedRect.height),
+            )
+            guard renderSize.width.isFinite,
+                  renderSize.height.isFinite,
+                  renderSize.width > 0,
+                  renderSize.height > 0
+            else {
+                throw VideoClipEditingError.missingVideoTrack
+            }
+
+            return renderSize
         }
 
         private static func makeMarkerLabelOverlayImage(
             text: String,
-            renderSize: CGSize,
-            style: HighlightClipMarkerLabelOverlayStyle,
+            metrics: HighlightClipMarkerLabelOverlayMetrics,
         ) -> CIImage? {
-            let fontSize = style.fontSize(for: renderSize)
-            let font = UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .black)
+            let font = UIFont.monospacedDigitSystemFont(ofSize: metrics.fontSize, weight: .black)
             let paragraphStyle = NSMutableParagraphStyle()
             paragraphStyle.alignment = .center
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: font,
-                .foregroundColor: UIColor.white,
+                .foregroundColor: UIColor.white.withAlphaComponent(metrics.textOpacity),
                 .paragraphStyle: paragraphStyle,
             ]
             let textSize = text.size(withAttributes: attributes)
-            let horizontalPadding = fontSize * style.horizontalPaddingRatio
-            let verticalPadding = fontSize * style.verticalPaddingRatio
             let imageSize = CGSize(
-                width: ceil(textSize.width + horizontalPadding * 2),
-                height: ceil(textSize.height + verticalPadding * 2),
+                width: ceil(textSize.width + metrics.horizontalPadding * 2),
+                height: ceil(textSize.height + metrics.verticalPadding * 2),
             )
             let format = UIGraphicsImageRendererFormat()
             format.opaque = false
             format.scale = 1
             let image = UIGraphicsImageRenderer(size: imageSize, format: format).image { _ in
                 let bounds = CGRect(origin: .zero, size: imageSize)
-                UIColor.black.withAlphaComponent(style.backgroundAlpha).setFill()
-                UIBezierPath(roundedRect: bounds, cornerRadius: fontSize * 0.25).fill()
+                UIColor.black.withAlphaComponent(metrics.backgroundOpacity).setFill()
+                UIBezierPath(roundedRect: bounds, cornerRadius: metrics.cornerRadius).fill()
 
-                let textRect = bounds.insetBy(dx: horizontalPadding, dy: verticalPadding)
+                let textRect = bounds.insetBy(
+                    dx: metrics.horizontalPadding,
+                    dy: metrics.verticalPadding,
+                )
                 text.draw(in: textRect, withAttributes: attributes)
             }
 

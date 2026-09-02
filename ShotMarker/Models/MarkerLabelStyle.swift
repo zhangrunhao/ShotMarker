@@ -1,6 +1,6 @@
 import Foundation
 
-struct MarkerLabelStyle: Codable, Equatable {
+nonisolated struct MarkerLabelStyle: Codable, Equatable {
     var fontSizeRatio: Double
     var normalizedCenterX: Double
     var normalizedCenterY: Double

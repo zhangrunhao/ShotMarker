@@ -1,0 +1,43 @@
+[
+  {
+    "id": "00000000-0000-0000-0000-000000010000",
+    "trainingSession": {
+      "id": "00000000-0000-0000-0000-000000010100",
+      "startedAt": 0,
+      "endedAt": 600,
+      "events": [
+        {
+          "id": "00000000-0000-0000-0000-000000010101",
+          "markedAt": 120
+        }
+      ]
+    },
+    "selectedVideos": [
+      {
+        "id": "photo-asset-id",
+        "recordedStartAt": 0,
+        "duration": 900,
+        "source": {
+          "photoLibraryAsset": {
+            "localIdentifier": "photo-asset-id"
+          }
+        }
+      }
+    ],
+    "clipSettings": {
+      "secondsBeforeMarker": 7,
+      "secondsAfterMarker": 3
+    },
+    "status": "interrupted",
+    "progress": {
+      "completedMarkerCount": 0,
+      "totalMarkerCount": 1
+    },
+    "outputVideoPath": null,
+    "photoLibrarySavedAt": null,
+    "photoLibrarySaveErrorMessage": null,
+    "errorMessage": null,
+    "createdAt": 1000,
+    "updatedAt": 1000
+  }
+]

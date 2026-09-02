@@ -63,6 +63,45 @@ final class HighlightJobManagerTests: XCTestCase {
         XCTAssertEqual(analytics.events, [.highlightGenerateSucceeded])
     }
 
+    func testCreateJobKeepsCapturedStyleAfterDefaultsChange() async throws {
+        let suiteName = "ShotMarker.HighlightJobManagerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settingsStore = ClipSettingsStore(userDefaults: defaults)
+        let capturedStyle = MarkerLabelStyle(
+            fontSizeRatio: 0.14,
+            normalizedCenterX: 0.8,
+            normalizedCenterY: 0.3,
+            textOpacity: 0.7,
+            backgroundOpacity: 0.2,
+        )
+        let manager = HighlightJobManager(
+            store: InMemoryHighlightJobStore(),
+            fileStore: HighlightJobFileStore(baseDirectoryURL: temporaryDirectory),
+            runnerFactory: { _ in .immediateCompleted },
+        )
+
+        let job = try await manager.createJob(
+            session: makeSession(),
+            selectedVideos: [makeSelectedVideo()],
+            clipSettings: ClipSettings(
+                secondsBeforeMarker: 9,
+                secondsAfterMarker: 4,
+                markerLabelStyle: capturedStyle,
+            ),
+        )
+        settingsStore.save(
+            ClipSettings(
+                secondsBeforeMarker: 9,
+                secondsAfterMarker: 4,
+                markerLabelStyle: .default,
+            ),
+        )
+
+        XCTAssertEqual(job.clipSettings.markerLabelStyle, capturedStyle)
+        XCTAssertEqual(manager.jobs.first?.clipSettings.markerLabelStyle, capturedStyle)
+    }
+
     func testFailedHighlightGenerationDoesNotTrackSuccess() async throws {
         let analytics = SpyAnalyticsTracker()
         let manager = HighlightJobManager(
@@ -114,7 +153,7 @@ final class HighlightJobManagerTests: XCTestCase {
             fileStore: HighlightJobFileStore(baseDirectoryURL: temporaryDirectory),
             runnerFactory: { _ in
                 HighlightJobRunner(
-                    makeHighlightClip: { _, _, _ in
+                    makeHighlightClip: { _, _, _, _ in
                         URL(fileURLWithPath: "/tmp/unused.mov")
                     },
                     runOverride: { job, onChange in
@@ -163,6 +202,32 @@ final class HighlightJobManagerTests: XCTestCase {
 
         XCTAssertEqual(manager.jobs.first?.id, interruptedJob.id)
         XCTAssertEqual(manager.jobs.first?.status, .completed)
+    }
+
+    func testRestartUsesPersistedMarkerStyle() async throws {
+        let style = MarkerLabelStyle(
+            fontSizeRatio: 0.16,
+            normalizedCenterX: 0.25,
+            normalizedCenterY: 0.75,
+            textOpacity: 0.55,
+            backgroundOpacity: 0.45,
+        )
+        let interruptedJob = try makeJob(status: .interrupted, markerLabelStyle: style)
+        var runnerStyle: MarkerLabelStyle?
+        let manager = HighlightJobManager(
+            store: InMemoryHighlightJobStore(jobs: [interruptedJob]),
+            fileStore: HighlightJobFileStore(baseDirectoryURL: temporaryDirectory),
+            runnerFactory: { job in
+                runnerStyle = job.clipSettings.markerLabelStyle
+                return .immediateCompleted
+            },
+        )
+        manager.load()
+
+        await manager.restart(jobID: interruptedJob.id)
+        await Task.yield()
+
+        XCTAssertEqual(runnerStyle, style)
     }
 
     func testClearCompletedJobRemovesFilesAndRecord() throws {
@@ -330,6 +395,7 @@ final class HighlightJobManagerTests: XCTestCase {
     private func makeJob(
         id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000040001")!,
         status: HighlightJobStatus,
+        markerLabelStyle: MarkerLabelStyle = .default,
     ) throws -> HighlightJob {
         HighlightJob(
             id: id,
@@ -342,7 +408,11 @@ final class HighlightJobManagerTests: XCTestCase {
                     source: .photoLibraryAsset(localIdentifier: "photo-asset-id"),
                 ),
             ],
-            clipSettings: ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4),
+            clipSettings: ClipSettings(
+                secondsBeforeMarker: 9,
+                secondsAfterMarker: 4,
+                markerLabelStyle: markerLabelStyle,
+            ),
             status: status,
             progress: .zero,
             outputVideoPath: nil,
@@ -365,7 +435,7 @@ private extension HighlightJobVideoSource {
 
 private extension HighlightJobRunner {
     static let immediateCompleted = HighlightJobRunner(
-        makeHighlightClip: { _, _, _ in URL(fileURLWithPath: "/tmp/unused.mov") },
+        makeHighlightClip: { _, _, _, _ in URL(fileURLWithPath: "/tmp/unused.mov") },
         runOverride: { job, onChange in
             var completed = job
             completed.status = .completed
@@ -375,7 +445,7 @@ private extension HighlightJobRunner {
     )
 
     static let suspended = HighlightJobRunner(
-        makeHighlightClip: { _, _, _ in URL(fileURLWithPath: "/tmp/unused.mov") },
+        makeHighlightClip: { _, _, _, _ in URL(fileURLWithPath: "/tmp/unused.mov") },
         runOverride: { job, onChange in
             var running = job
             running.status = .running
@@ -386,7 +456,7 @@ private extension HighlightJobRunner {
     )
 
     static let immediateFailed = HighlightJobRunner(
-        makeHighlightClip: { _, _, _ in URL(fileURLWithPath: "/tmp/unused.mov") },
+        makeHighlightClip: { _, _, _, _ in URL(fileURLWithPath: "/tmp/unused.mov") },
         runOverride: { _, _ in
             throw HighlightJobRunnerTestError.failed
         },

@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-enum MarkerLabelLayout {
+nonisolated enum MarkerLabelLayout {
     static func aspectFitRect(contentSize: CGSize, in bounds: CGRect) -> CGRect {
         guard isValid(contentSize), isValid(bounds.size) else {
             return bounds

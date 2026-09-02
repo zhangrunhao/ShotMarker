@@ -21,11 +21,20 @@ final class HighlightJobRunnerTests: XCTestCase {
         let fileStore = HighlightJobFileStore(baseDirectoryURL: temporaryDirectory)
         let exportedURL = temporaryDirectory.appendingPathComponent("export.mov")
         try Data([1, 2, 3]).write(to: exportedURL)
-        let job = try makeJob(status: .queued)
+        let markerLabelStyle = MarkerLabelStyle(
+            fontSizeRatio: 0.14,
+            normalizedCenterX: 0.7,
+            normalizedCenterY: 0.35,
+            textOpacity: 0.8,
+            backgroundOpacity: 0.25,
+        )
+        let job = try makeJob(status: .queued, markerLabelStyle: markerLabelStyle)
         var observedStatuses: [HighlightJobStatus] = []
+        var receivedStyle: MarkerLabelStyle?
         let runner = HighlightJobRunner(
             fileStore: fileStore,
-            makeHighlightClip: { _, progressHandler, _ in
+            makeHighlightClip: { _, markerLabelStyle, progressHandler, _ in
+                receivedStyle = markerLabelStyle
                 progressHandler(HighlightClipGenerationProgress(completedMarkerCount: 0, totalMarkerCount: 1))
                 progressHandler(HighlightClipGenerationProgress(completedMarkerCount: 1, totalMarkerCount: 1))
                 return exportedURL
@@ -43,6 +52,7 @@ final class HighlightJobRunnerTests: XCTestCase {
         XCTAssertEqual(completedJob.progress, HighlightJobProgress(completedMarkerCount: 1, totalMarkerCount: 1))
         XCTAssertNotNil(completedJob.outputVideoPath)
         XCTAssertEqual(observedStatuses, [.running, .running, .running, .completed])
+        XCTAssertEqual(receivedStyle, job.clipSettings.markerLabelStyle)
     }
 
     @MainActor
@@ -60,7 +70,7 @@ final class HighlightJobRunnerTests: XCTestCase {
         )
         let runner = HighlightJobRunner(
             fileStore: HighlightJobFileStore(baseDirectoryURL: temporaryDirectory),
-            makeHighlightClip: { _, _, _ in
+            makeHighlightClip: { _, _, _, _ in
                 XCTFail("Should not export without matching markers")
                 return URL(fileURLWithPath: "/tmp/unused.mov")
             },
@@ -79,6 +89,7 @@ final class HighlightJobRunnerTests: XCTestCase {
     private func makeJob(
         status: HighlightJobStatus,
         selectedVideos: [HighlightJobVideo]? = nil,
+        markerLabelStyle: MarkerLabelStyle = .default,
     ) throws -> HighlightJob {
         let marker = ShotMarkerEvent(
             id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000030101")),
@@ -100,7 +111,11 @@ final class HighlightJobRunnerTests: XCTestCase {
                     source: .photoLibraryAsset(localIdentifier: "video"),
                 ),
             ],
-            clipSettings: ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4),
+            clipSettings: ClipSettings(
+                secondsBeforeMarker: 9,
+                secondsAfterMarker: 4,
+                markerLabelStyle: markerLabelStyle,
+            ),
             status: status,
             progress: .zero,
             outputVideoPath: nil,

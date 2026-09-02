@@ -24,11 +24,31 @@ final class HighlightJobStoreTests: XCTestCase {
     func testSaveAndLoadRoundTripsJobs() throws {
         let fileURL = temporaryDirectory.appendingPathComponent("highlight-jobs.json")
         let store = HighlightJobStore(fileURL: fileURL)
-        let job = try makeJob(status: .completed)
+        let markerLabelStyle = MarkerLabelStyle(
+            fontSizeRatio: 0.13,
+            normalizedCenterX: 0.7,
+            normalizedCenterY: 0.25,
+            textOpacity: 0.85,
+            backgroundOpacity: 0.4,
+        )
+        let job = try makeJob(status: .completed, markerLabelStyle: markerLabelStyle)
 
         try store.saveJobs([job])
 
         XCTAssertEqual(try store.loadJobs(), [job])
+        XCTAssertEqual(try store.loadJobs().first?.clipSettings.markerLabelStyle, markerLabelStyle)
+    }
+
+    func testLoadVersion12JobAddsDefaultNestedMarkerStyle() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/HighlightJob-1.2.json")
+        let jobs = try HighlightJobStore(fileURL: fixtureURL).loadJobs()
+        let job = try XCTUnwrap(jobs.first)
+
+        XCTAssertEqual(job.clipSettings.secondsBeforeMarker, 7)
+        XCTAssertEqual(job.clipSettings.secondsAfterMarker, 3)
+        XCTAssertEqual(job.clipSettings.markerLabelStyle, .default)
     }
 
     func testLoadMarksLaunchInterruptedStatusesAsInterrupted() throws {
@@ -83,6 +103,7 @@ final class HighlightJobStoreTests: XCTestCase {
     private func makeJob(
         id: String = "00000000-0000-0000-0000-000000010000",
         status: HighlightJobStatus,
+        markerLabelStyle: MarkerLabelStyle = .default,
     ) throws -> HighlightJob {
         HighlightJob(
             id: try XCTUnwrap(UUID(uuidString: id)),
@@ -105,7 +126,11 @@ final class HighlightJobStoreTests: XCTestCase {
                     source: .photoLibraryAsset(localIdentifier: "photo-asset-id"),
                 ),
             ],
-            clipSettings: ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4),
+            clipSettings: ClipSettings(
+                secondsBeforeMarker: 9,
+                secondsAfterMarker: 4,
+                markerLabelStyle: markerLabelStyle,
+            ),
             status: status,
             progress: HighlightJobProgress(completedMarkerCount: 1, totalMarkerCount: 3),
             outputVideoPath: status == .completed ? "HighlightJobs/Outputs/job/highlight.mov" : nil,

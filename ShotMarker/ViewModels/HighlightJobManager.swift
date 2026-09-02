@@ -51,9 +51,10 @@ final class HighlightJobManager: ObservableObject {
                 runnerFactory: { _ in
                     HighlightJobRunner(
                         fileStore: fileStore,
-                        makeHighlightClip: { segments, progressHandler, assetProvider in
+                        makeHighlightClip: { segments, markerLabelStyle, progressHandler, assetProvider in
                             try await editingService.makeHighlightClip(
                                 from: segments,
+                                markerLabelStyle: markerLabelStyle,
                                 progressHandler: progressHandler,
                                 assetProvider,
                             )
@@ -106,7 +107,7 @@ final class HighlightJobManager: ObservableObject {
             id: jobID,
             trainingSession: session,
             selectedVideos: jobVideos,
-            clipSettings: clipSettings,
+            clipSettings: clipSettings.normalized,
             status: .queued,
             progress: .zero,
             outputVideoPath: nil,

@@ -61,7 +61,10 @@ final class VideoClipEditingServiceTests: XCTestCase {
         ]
 
         var requestedVideoIDs: [String] = []
-        let outputURL = try await VideoClipEditingService().makeHighlightClip(from: segments) { request in
+        let outputURL = try await VideoClipEditingService().makeHighlightClip(
+            from: segments,
+            markerLabelStyle: .default,
+        ) { request in
             requestedVideoIDs.append(request.videoID)
             return AVURLAsset(url: sourceURL)
         }
@@ -90,7 +93,7 @@ final class VideoClipEditingServiceTests: XCTestCase {
         ]
 
         let outputURL = try await VideoClipEditingService(logger: logger)
-            .makeHighlightClip(from: segments) { _ in
+            .makeHighlightClip(from: segments, markerLabelStyle: .default) { _ in
                 AVURLAsset(url: sourceURL)
             }
 
@@ -133,7 +136,10 @@ final class VideoClipEditingServiceTests: XCTestCase {
         ]
 
         var assetRequests: [HighlightClipAssetRequest] = []
-        _ = try await VideoClipEditingService().makeHighlightClip(from: segments) { request in
+        _ = try await VideoClipEditingService().makeHighlightClip(
+            from: segments,
+            markerLabelStyle: .default,
+        ) { request in
             assetRequests.append(request)
             return AVURLAsset(url: sourceURL)
         }
@@ -202,6 +208,7 @@ final class VideoClipEditingServiceTests: XCTestCase {
         var progressUpdates: [HighlightClipGenerationProgress] = []
         let outputURL = try await VideoClipEditingService().makeHighlightClip(
             from: segments,
+            markerLabelStyle: .default,
             progressHandler: { progressUpdates.append($0) },
         ) { _ in
             AVURLAsset(url: sourceURL)
@@ -247,6 +254,7 @@ final class VideoClipEditingServiceTests: XCTestCase {
         var requestedVideoIDs: [String] = []
         let outputURL = try await VideoClipEditingService().makeHighlightClip(
             from: segments,
+            markerLabelStyle: .default,
             progressHandler: { progressUpdates.append($0) },
         ) { request in
             requestedVideoIDs.append(request.videoID)
@@ -288,7 +296,7 @@ final class VideoClipEditingServiceTests: XCTestCase {
         let service = VideoClipEditingService(logger: logger)
 
         do {
-            _ = try await service.makeHighlightClip(from: []) { _ in
+            _ = try await service.makeHighlightClip(from: [], markerLabelStyle: .default) { _ in
                 XCTFail("Should not request assets for empty segments")
                 return AVURLAsset(url: URL(fileURLWithPath: "/tmp/unused.mov"))
             }
@@ -330,7 +338,7 @@ final class VideoClipEditingServiceTests: XCTestCase {
         ]
 
         let task = Task {
-            try await service.makeHighlightClip(from: segments) { _ in
+            try await service.makeHighlightClip(from: segments, markerLabelStyle: .default) { _ in
                 AVURLAsset(url: sourceURL)
             }
         }
@@ -348,11 +356,103 @@ final class VideoClipEditingServiceTests: XCTestCase {
         }
     }
 
-    func testMarkerLabelOverlayStyleUsesLargeOpaqueLabel() {
-        let style = HighlightClipMarkerLabelOverlayStyle.default
+    func testMarkerLabelMetricsUseConfiguredRatioWithoutAbsoluteClamp() throws {
+        let style = MarkerLabelStyle(
+            fontSizeRatio: 0.12,
+            normalizedCenterX: 0.5,
+            normalizedCenterY: 0.5,
+            textOpacity: 0.8,
+            backgroundOpacity: 0.3,
+        )
 
-        XCTAssertGreaterThanOrEqual(style.fontSizeRatio, 0.1)
-        XCTAssertEqual(style.backgroundAlpha, 1)
+        let metrics = try HighlightClipMarkerLabelOverlayMetrics.make(
+            renderSize: CGSize(width: 1080, height: 1920),
+            style: style,
+        )
+
+        XCTAssertEqual(metrics.fontSize, 129.6, accuracy: 0.001)
+        XCTAssertEqual(metrics.textOpacity, 0.8, accuracy: 0.001)
+        XCTAssertEqual(metrics.backgroundOpacity, 0.3, accuracy: 0.001)
+    }
+
+    func testMarkerLabelMetricsRejectInvalidRenderSize() {
+        XCTAssertThrowsError(
+            try HighlightClipMarkerLabelOverlayMetrics.make(
+                renderSize: CGSize(width: CGFloat.nan, height: 1080),
+                style: .default,
+            ),
+        )
+        XCTAssertThrowsError(
+            try HighlightClipMarkerLabelOverlayMetrics.make(
+                renderSize: CGSize(width: 0, height: 1080),
+                style: .default,
+            ),
+        )
+    }
+
+    func testMakeHighlightClipWithFullyTransparentMarkerKeepsTimeline() async throws {
+        let sourceURL = temporaryDirectory.appendingPathComponent("transparent-marker.mov")
+        try await makeSilentVideo(at: sourceURL, duration: 4)
+        let logger = SpyAppLogger()
+        let segment = HighlightClipSegment(
+            markerID: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002701")),
+            videoID: "video",
+            markerAt: Date(timeIntervalSince1970: 1_000),
+            start: 1,
+            duration: 2,
+        )
+        let style = MarkerLabelStyle(
+            fontSizeRatio: 0.10,
+            normalizedCenterX: 0.5,
+            normalizedCenterY: 0.5,
+            textOpacity: 0,
+            backgroundOpacity: 0,
+        )
+
+        let outputURL = try await VideoClipEditingService(logger: logger).makeHighlightClip(
+            from: [segment],
+            markerLabelStyle: style,
+        ) { _ in
+            AVURLAsset(url: sourceURL)
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        let outputDuration = try await AVURLAsset(url: outputURL).load(.duration)
+        XCTAssertEqual(outputDuration.seconds, 2, accuracy: 0.2)
+        XCTAssertEqual(
+            logger.entry(named: "video.export.started")?.context["usesVideoComposition"],
+            "false",
+        )
+    }
+
+    func testMarkerLabelOriginUsesConfiguredTopLeftNormalizedPosition() {
+        let overlaySize = CGSize(width: 20, height: 10)
+        let extent = CGRect(x: 0, y: 0, width: 200, height: 100)
+        let first = VideoClipEditingService.markerLabelCoreImageOrigin(
+            style: MarkerLabelStyle(
+                fontSizeRatio: 0.10,
+                normalizedCenterX: 0.25,
+                normalizedCenterY: 0.25,
+                textOpacity: 1,
+                backgroundOpacity: 0.6,
+            ),
+            overlaySize: overlaySize,
+            imageExtent: extent,
+        )
+        let second = VideoClipEditingService.markerLabelCoreImageOrigin(
+            style: MarkerLabelStyle(
+                fontSizeRatio: 0.10,
+                normalizedCenterX: 0.75,
+                normalizedCenterY: 0.75,
+                textOpacity: 1,
+                backgroundOpacity: 0.6,
+            ),
+            overlaySize: overlaySize,
+            imageExtent: extent,
+        )
+
+        XCTAssertEqual(first, CGPoint(x: 40, y: 70))
+        XCTAssertEqual(second, CGPoint(x: 140, y: 20))
     }
 
     private func makeSilentVideo(at url: URL, duration: TimeInterval) async throws {
