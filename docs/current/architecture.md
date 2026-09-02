@@ -1,7 +1,7 @@
 # ShotMarker 技术架构
 
 - 最后复核：2026-09-02
-- 代码基线：main / a5ef08f
+- 代码基线：main / 8b33e93
 
 ## 当前结论
 
@@ -49,6 +49,7 @@ WatchTrainingSyncOutbox
 - iCloud 视频先准备为可读本地资源，再进入规划和导出。
 - VideoClipSegmentPlanner 将绝对打点映射到视频片段并合并相邻片段。
 - MarkerLabelLayout 统一预览与导出的 aspect-fit 画面、归一化中心点、按标签尺寸限制边界，以及 SwiftUI 左上原点到 Core Image 左下原点的转换。
+- TrainingSessionHighlightView 以初值为 false 的页面级状态控制片段序数 DisclosureGroup；展开状态不持久化，设置内容继续绑定从 ClipSettingsStore 加载并自动保存的 MarkerLabelStyle。
 - VideoClipEditingService 使用 AVMutableComposition 组合视频和可用音轨，按显式传入的 MarkerLabelStyle 绘制序数并输出 MOV；导出服务不读取 ClipSettingsStore。
 - HighlightJobManager 管理持久任务；HighlightJobRunner 串行执行，并把任务快照中的样式显式传给导出服务。
 - App 启动时把遗留的 queued、running 或 saving 任务标为 interrupted。
