@@ -10,15 +10,18 @@ struct HighlightClipReviewView: View {
 
     private let makePlaybackController: () -> HighlightClipPlaybackController
     private let loadsMedia: Bool
+    private let onRequestVideoReselection: () -> Void
 
     init(
         viewModel: HighlightClipReviewViewModel,
         makePlaybackController: @escaping () -> HighlightClipPlaybackController,
         loadsMedia: Bool = true,
+        onRequestVideoReselection: @escaping () -> Void = {},
     ) {
         self.viewModel = viewModel
         self.makePlaybackController = makePlaybackController
         self.loadsMedia = loadsMedia
+        self.onRequestVideoReselection = onRequestVideoReselection
     }
 
     var body: some View {
@@ -49,6 +52,7 @@ struct HighlightClipReviewView: View {
                 itemID: destination.id,
                 playbackController: destination.playbackController,
                 loadsMedia: loadsMedia,
+                onRequestVideoReselection: onRequestVideoReselection,
             )
         }
         .onChange(of: editorDestination?.id) { previousID, currentID in

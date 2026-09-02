@@ -12,6 +12,7 @@ struct HighlightClipEditorView: View {
     @State private var playbackLoadAttempt = 0
 
     private let loadsMedia: Bool
+    private let onRequestVideoReselection: () -> Void
     private let filmstripCount = 8
 
     init(
@@ -19,11 +20,13 @@ struct HighlightClipEditorView: View {
         itemID: UUID,
         playbackController: HighlightClipPlaybackController,
         loadsMedia: Bool = true,
+        onRequestVideoReselection: @escaping () -> Void = {},
     ) {
         self.viewModel = viewModel
         self.itemID = itemID
         self.playbackController = playbackController
         self.loadsMedia = loadsMedia
+        self.onRequestVideoReselection = onRequestVideoReselection
 
         let item = viewModel.items.first { $0.id == itemID }
         let video = item.flatMap { item in
@@ -150,6 +153,7 @@ struct HighlightClipEditorView: View {
 
                 Button("返回重新选择视频") {
                     dismiss()
+                    onRequestVideoReselection()
                 }
                 .buttonStyle(.bordered)
                 .tint(.white)
