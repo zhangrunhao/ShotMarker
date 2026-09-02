@@ -16,27 +16,24 @@ struct SelectedTrainingVideo: Identifiable, Equatable {
 }
 
 struct HighlightClipSegment: Equatable {
-    let markerID: UUID
+    let markerIDs: [UUID]
     let videoID: String
-    let markerAt: Date
     let start: TimeInterval
     let duration: TimeInterval
     let markerNumberRange: ClosedRange<Int>
     let markerTotalCount: Int
 
     init(
-        markerID: UUID,
+        markerIDs: [UUID],
         videoID: String,
-        markerAt: Date,
         start: TimeInterval,
         duration: TimeInterval,
         markerNumber: Int = 1,
         markerTotalCount: Int = 1,
     ) {
         self.init(
-            markerID: markerID,
+            markerIDs: markerIDs,
             videoID: videoID,
-            markerAt: markerAt,
             start: start,
             duration: duration,
             markerNumberRange: markerNumber...markerNumber,
@@ -45,17 +42,15 @@ struct HighlightClipSegment: Equatable {
     }
 
     init(
-        markerID: UUID,
+        markerIDs: [UUID],
         videoID: String,
-        markerAt: Date,
         start: TimeInterval,
         duration: TimeInterval,
         markerNumberRange: ClosedRange<Int>,
         markerTotalCount: Int,
     ) {
-        self.markerID = markerID
+        self.markerIDs = markerIDs
         self.videoID = videoID
-        self.markerAt = markerAt
         self.start = start
         self.duration = duration
         self.markerNumberRange = markerNumberRange
@@ -63,7 +58,7 @@ struct HighlightClipSegment: Equatable {
     }
 
     var coveredMarkerCount: Int {
-        markerNumberRange.upperBound - markerNumberRange.lowerBound + 1
+        markerIDs.count
     }
 
     var markerLabel: String {
@@ -196,9 +191,8 @@ enum VideoClipSegmentPlanner {
         }
 
         return HighlightClipSegment(
-            markerID: event.id,
+            markerIDs: [event.id],
             videoID: video.id,
-            markerAt: event.markedAt,
             start: clippedStartAt.timeIntervalSince(video.recordedStartAt),
             duration: duration,
         )
@@ -212,9 +206,8 @@ private extension HighlightClipSegment {
 
     func numbered(markerNumber: Int, markerTotalCount: Int) -> HighlightClipSegment {
         HighlightClipSegment(
-            markerID: markerID,
+            markerIDs: markerIDs,
             videoID: videoID,
-            markerAt: markerAt,
             start: start,
             duration: duration,
             markerNumber: markerNumber,
@@ -229,9 +222,8 @@ private extension HighlightClipSegment {
             ... max(markerNumberRange.upperBound, segment.markerNumberRange.upperBound)
 
         return HighlightClipSegment(
-            markerID: markerID,
+            markerIDs: markerIDs + segment.markerIDs,
             videoID: videoID,
-            markerAt: markerAt,
             start: mergedStart,
             duration: mergedEnd - mergedStart,
             markerNumberRange: mergedNumberRange,
