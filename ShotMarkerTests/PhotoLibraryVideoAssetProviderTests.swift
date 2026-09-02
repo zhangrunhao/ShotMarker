@@ -17,5 +17,18 @@
             XCTAssertFalse(options.isNetworkAccessAllowed)
             XCTAssertTrue(options.isSynchronous)
         }
+
+        func testMissingPhotoKitPosterFallsBackToLocalVideoWithoutNetworkAccess() async {
+            let fallbackData = Data([7, 8, 9])
+
+            let thumbnailData = await PhotoLibraryVideoAssetProvider.resolveThumbnailData(
+                photoLibraryData: nil,
+                localVideoData: { fallbackData },
+            )
+            let options = PhotoLibraryVideoAssetProvider.makeLocalThumbnailVideoRequestOptions()
+
+            XCTAssertEqual(thumbnailData, fallbackData)
+            XCTAssertFalse(options.isNetworkAccessAllowed)
+        }
     }
 #endif

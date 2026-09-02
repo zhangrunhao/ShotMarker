@@ -17,6 +17,24 @@
             return options
         }
 
+        static func makeLocalThumbnailVideoRequestOptions() -> PHVideoRequestOptions {
+            let options = PHVideoRequestOptions()
+            options.deliveryMode = .fastFormat
+            options.isNetworkAccessAllowed = false
+            return options
+        }
+
+        static func resolveThumbnailData(
+            photoLibraryData: Data?,
+            localVideoData: () async -> Data?,
+        ) async -> Data? {
+            guard photoLibraryData == nil else {
+                return photoLibraryData
+            }
+
+            return await localVideoData()
+        }
+
         func ensureReadAccess() async throws {
             let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
             switch status {
@@ -58,16 +76,77 @@
         func thumbnailData(from asset: PHAsset) async -> Data? {
             let options = Self.makeThumbnailRequestOptions()
 
-            var thumbnailData: Data?
+            var photoLibraryData: Data?
             PHImageManager.default().requestImage(
                 for: asset,
                 targetSize: Self.thumbnailTargetSize,
                 contentMode: Self.thumbnailContentMode,
                 options: options,
             ) { image, _ in
-                thumbnailData = image?.jpegData(compressionQuality: 0.72)
+                photoLibraryData = image?.jpegData(compressionQuality: 0.72)
             }
-            return thumbnailData
+
+            return await Self.resolveThumbnailData(photoLibraryData: photoLibraryData) {
+                await localVideoThumbnailData(from: asset)
+            }
+        }
+
+        private func localVideoThumbnailData(from asset: PHAsset) async -> Data? {
+            do {
+                let localAsset = try await localThumbnailAVAsset(for: asset)
+                let generator = AVAssetImageGenerator(asset: localAsset)
+                generator.appliesPreferredTrackTransform = true
+                generator.maximumSize = Self.thumbnailTargetSize
+                let image = try await cgImage(from: generator, at: .zero)
+                return UIImage(cgImage: image).jpegData(compressionQuality: 0.72)
+            } catch {
+                return nil
+            }
+        }
+
+        private func localThumbnailAVAsset(for asset: PHAsset) async throws -> AVAsset {
+            let options = Self.makeLocalThumbnailVideoRequestOptions()
+            return try await withCheckedThrowingContinuation { continuation in
+                PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
+                    if let error = info?[PHImageErrorKey] as? Error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+
+                    if let isCancelled = info?[PHImageCancelledKey] as? Bool, isCancelled {
+                        continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
+                        return
+                    }
+
+                    guard let avAsset else {
+                        continuation.resume(throwing: HighlightVideoSelectionError.videoNotReady)
+                        return
+                    }
+
+                    continuation.resume(returning: avAsset)
+                }
+            }
+        }
+
+        private func cgImage(
+            from generator: AVAssetImageGenerator,
+            at time: CMTime,
+        ) async throws -> CGImage {
+            try await withCheckedThrowingContinuation { continuation in
+                generator.generateCGImageAsynchronously(for: time) { image, _, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+
+                    guard let image else {
+                        continuation.resume(throwing: HighlightVideoSelectionError.videoLoadFailed)
+                        return
+                    }
+
+                    continuation.resume(returning: image)
+                }
+            }
         }
 
         func requestAVAsset(
