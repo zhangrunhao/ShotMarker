@@ -5,6 +5,8 @@ struct HighlightJob: Identifiable, Codable, Equatable {
     var trainingSession: TrainingSession
     var selectedVideos: [HighlightJobVideo]
     var clipSettings: ClipSettings
+    var clipPlanVersion: Int? = nil
+    var confirmedSegments: [ConfirmedHighlightSegment]? = nil
     var status: HighlightJobStatus
     var progress: HighlightJobProgress
     var outputVideoPath: String?
@@ -31,6 +33,8 @@ struct HighlightJob: Identifiable, Codable, Equatable {
         case trainingSession
         case selectedVideos
         case clipSettings
+        case clipPlanVersion
+        case confirmedSegments
         case status
         case progress
         case outputVideoPath
@@ -47,6 +51,8 @@ struct HighlightJob: Identifiable, Codable, Equatable {
         try container.encode(trainingSession, forKey: .trainingSession)
         try container.encode(selectedVideos, forKey: .selectedVideos)
         try container.encode(clipSettings, forKey: .clipSettings)
+        try container.encodeIfPresent(clipPlanVersion, forKey: .clipPlanVersion)
+        try container.encodeIfPresent(confirmedSegments, forKey: .confirmedSegments)
         try container.encode(status, forKey: .status)
         try container.encode(progress, forKey: .progress)
         try container.encode(outputVideoPath, forKey: .outputVideoPath)
@@ -55,6 +61,44 @@ struct HighlightJob: Identifiable, Codable, Equatable {
         try container.encode(errorMessage, forKey: .errorMessage)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
+    }
+}
+
+extension HighlightJob {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        trainingSession = try container.decode(TrainingSession.self, forKey: .trainingSession)
+        selectedVideos = try container.decode([HighlightJobVideo].self, forKey: .selectedVideos)
+        clipSettings = try container.decode(ClipSettings.self, forKey: .clipSettings)
+        clipPlanVersion = try container.decodeIfPresent(Int.self, forKey: .clipPlanVersion)
+
+        if !container.contains(.confirmedSegments) {
+            confirmedSegments = nil
+        } else if try container.decodeNil(forKey: .confirmedSegments) {
+            confirmedSegments = nil
+        } else {
+            do {
+                confirmedSegments = try container.decode(
+                    [ConfirmedHighlightSegment].self,
+                    forKey: .confirmedSegments,
+                )
+            } catch {
+                confirmedSegments = []
+            }
+        }
+
+        status = try container.decode(HighlightJobStatus.self, forKey: .status)
+        progress = try container.decode(HighlightJobProgress.self, forKey: .progress)
+        outputVideoPath = try container.decodeIfPresent(String.self, forKey: .outputVideoPath)
+        photoLibrarySavedAt = try container.decodeIfPresent(Date.self, forKey: .photoLibrarySavedAt)
+        photoLibrarySaveErrorMessage = try container.decodeIfPresent(
+            String.self,
+            forKey: .photoLibrarySaveErrorMessage,
+        )
+        errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
 }
 
