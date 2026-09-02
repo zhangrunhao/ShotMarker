@@ -5,6 +5,18 @@
     import UIKit
 
     nonisolated struct PhotoLibraryVideoAssetProvider {
+        static let thumbnailTargetSize = CGSize(width: 320, height: 320)
+        static let thumbnailContentMode: PHImageContentMode = .aspectFit
+
+        static func makeThumbnailRequestOptions() -> PHImageRequestOptions {
+            let options = PHImageRequestOptions()
+            options.deliveryMode = .fastFormat
+            options.resizeMode = .fast
+            options.isNetworkAccessAllowed = false
+            options.isSynchronous = true
+            return options
+        }
+
         func ensureReadAccess() async throws {
             let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
             switch status {
@@ -44,17 +56,13 @@
         }
 
         func thumbnailData(from asset: PHAsset) async -> Data? {
-            let options = PHImageRequestOptions()
-            options.deliveryMode = .fastFormat
-            options.resizeMode = .fast
-            options.isNetworkAccessAllowed = false
-            options.isSynchronous = true
+            let options = Self.makeThumbnailRequestOptions()
 
             var thumbnailData: Data?
             PHImageManager.default().requestImage(
                 for: asset,
-                targetSize: CGSize(width: 320, height: 180),
-                contentMode: .aspectFill,
+                targetSize: Self.thumbnailTargetSize,
+                contentMode: Self.thumbnailContentMode,
                 options: options,
             ) { image, _ in
                 thumbnailData = image?.jpegData(compressionQuality: 0.72)
