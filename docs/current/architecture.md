@@ -1,11 +1,11 @@
 # ShotMarker 技术架构
 
-- 最后复核：2026-08-19
-- 代码基线：main / 42c249a
+- 最后复核：2026-09-02
+- 代码基线：main / a5ef08f
 
 ## 当前结论
 
-ShotMarker 当前由 iPhone App、Apple Watch App、两组测试 target 和共享同步载荷组成；训练、同步、集锦、日志与远端观测均按下述本地优先边界实现。
+ShotMarker 当前由 iPhone App、Apple Watch App、两组测试 target 和共享同步载荷组成；训练、同步、带样式序数的集锦、日志与远端观测均按下述本地优先边界实现。
 
 ## 运行单元
 
@@ -24,7 +24,8 @@ ShotMarker 当前由 iPhone App、Apple Watch App、两组测试 target 和共�
 - 训练记录以 JSON 保存在 Application Support/ShotMarker/training-sessions.json。
 - 集锦任务以 JSON 保存在 Application Support/ShotMarker/highlight-jobs.json。
 - 集锦任务输入和输出文件保存在 App 沙盒中的稳定相对路径。
-- 剪辑设置、安装标识等小型配置使用 UserDefaults。
+- ClipSettings 保存片段前后时长和 MarkerLabelStyle；旧版缺少样式的设置及任务解码时补入默认样式，已有时长保持不变。
+- 剪辑设置、安装标识等小型配置使用 UserDefaults；HighlightJob 内嵌创建任务时规范化后的完整 ClipSettings 快照。
 
 ## Watch 同步
 
@@ -44,11 +45,12 @@ WatchTrainingSyncOutbox
 
 ## 视频与集锦任务
 
-- 视频选择和元数据校验由 Photos/AVFoundation 服务完成。
+- 视频选择和元数据校验由 Photos/AVFoundation 服务完成。照片库预览先请求禁止网络访问的完整画幅静态图；PhotoKit 没有返回海报时，再从本地可用视频资源提取首帧，不触发 iCloud 下载。
 - iCloud 视频先准备为可读本地资源，再进入规划和导出。
 - VideoClipSegmentPlanner 将绝对打点映射到视频片段并合并相邻片段。
-- VideoClipEditingService 使用 AVMutableComposition 组合视频和可用音轨，输出 MOV。
-- HighlightJobManager 管理持久任务；HighlightJobRunner 串行执行。
+- MarkerLabelLayout 统一预览与导出的 aspect-fit 画面、归一化中心点、按标签尺寸限制边界，以及 SwiftUI 左上原点到 Core Image 左下原点的转换。
+- VideoClipEditingService 使用 AVMutableComposition 组合视频和可用音轨，按显式传入的 MarkerLabelStyle 绘制序数并输出 MOV；导出服务不读取 ClipSettingsStore。
+- HighlightJobManager 管理持久任务；HighlightJobRunner 串行执行，并把任务快照中的样式显式传给导出服务。
 - App 启动时把遗留的 queued、running 或 saving 任务标为 interrupted。
 - 生成完成只产生本地可播放文件；VideoClipPhotoLibrarySaver 由用户手动触发。
 
@@ -71,5 +73,6 @@ WatchTrainingSyncOutbox
 
 - PrivacyInfo.xcprivacy 声明 Device ID、Product Interaction、UserDefaults 和文件时间戳用途。
 - Tracking 为 false。
+- 片段序数缩略图和样式不上传，也不产生新的 Analytics 事件。
 - GlitchTip 不配置用户身份，不上传训练记录、视频、截图或本地日志文件。
 - 客户端 DSN 可以随 App 分发；服务端管理令牌不得进入工程或 Git。

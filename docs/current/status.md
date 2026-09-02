@@ -1,18 +1,19 @@
 # ShotMarker 当前状态
 
-- 最后复核：2026-08-19
-- 代码基线：main / 42c249a
-- 工程版本：1.2（Build 1）
-- 当前阶段：正式 Archive 与 Validate 已通过，等待真机与上传链路验收
+- 最后复核：2026-09-02
+- 代码基线：main / a5ef08f
+- 工程版本：1.3（Build 3）
+- 当前阶段：1.3 Simulator 实现验证已完成，等待用户人工补验、正式 Archive 与上传链路验收
 
 ## 当前结论
 
-ShotMarker 的 iPhone、Apple Watch、训练同步、视频准备、集锦任务队列、本地日志、隐私清单、GlitchTip 和四类产品埋点均已进入代码。Sentry 9.26.0 已迁移到官方源码产品 `SentrySPM`，正式签名 Archive 与 Organizer Validate 已通过。当前主要工作是真机、TestFlight、崩溃符号化、线上埋点和商店披露验收。
+ShotMarker 的 iPhone、Apple Watch、训练同步、视频准备、可预览并固化到任务的片段序数样式、集锦任务队列、本地日志、隐私清单、GlitchTip 和四类产品埋点均已进入代码。1.3 的完整 Simulator 测试与 Release 构建已通过；最近正式签名 Archive 与 Organizer Validate 仍是 1.2（Build 1）。当前主要工作是片段序数的用户人工补验，以及正式 Archive、真机、TestFlight、崩溃符号化、线上埋点和商店披露验收。
 
 ## 已确认事实
 
-- 仓库当前定义 iPhone 与 Watch 测试共 194 项，最近一次完整通过日期为 2026-08-19。
-- Release Simulator 构建、正式签名 Archive、App/Watch dSYM UUID 对应和 Organizer Validate 最近一次通过日期为 2026-08-19。
+- 仓库当前定义 iPhone 与 Watch 测试共 219 项，最近一次完整通过日期为 2026-09-02。
+- 1.3（Build 3）Release Simulator 构建最近一次通过日期为 2026-09-02。
+- 正式签名 Archive、App/Watch dSYM UUID 对应和 Organizer Validate 最近一次通过日期仍为 2026-08-19，版本为 1.2（Build 1）。
 - 2026-08-19 验证的正式 Archive 为 1.2（Build 1），不再嵌入独立 `Sentry.framework`；该次验证没有执行 TestFlight 上传。
 - 集锦生成使用持久本地任务队列；生成完成后由用户手动保存到相册。
 - Release iPhone 会发送精简 Analytics 和 GlitchTip 数据；产品不是完全离线应用。
@@ -28,10 +29,11 @@ ShotMarker 的 iPhone、Apple Watch、训练同步、视频准备、集锦任务
 - 尚未完成当前代码基线的真机回归、TestFlight 安装和 App Store 状态确认。
 - 尚未完成真实 Release Analytics、真机崩溃符号化和 GlitchTip 告警验收。
 - Watch 端没有独立日志导出；现有导出主要包含 iPhone 侧同步诊断。
+- 片段序数样式的 VoiceOver 操作和独立横屏首项预览流程尚待用户人工验收；现有自动测试不替代这两项手动检查。
 
 ## 下一步
 
-使用 2026-08-19 正式 Archive 的后续上传 Build 或新的 TestFlight Build，在真机完成 Analytics、崩溃符号化、告警和隐私披露验收，并把带日期的结果更新到 [发布状态](release.md) 与 [质量状态](quality.md)。
+先由用户补验片段序数样式的 VoiceOver 与独立横屏流程；再为 1.3（Build 3）生成候选 Archive 或 TestFlight Build，在真机完成 Analytics、崩溃符号化、告警和隐私披露验收，并把带日期的结果更新到 [发布状态](release.md) 与 [质量状态](quality.md)。
 
 ## 详细入口
 
