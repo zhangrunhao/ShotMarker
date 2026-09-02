@@ -122,6 +122,18 @@ final class HighlightClipTimelineTests: XCTestCase {
         )
     }
 
+    func testMoveDragConvertsCumulativeTranslationsToIncrementalDeltas() {
+        var dragState = HighlightClipTimelineDragState()
+
+        XCTAssertEqual(dragState.incrementalTranslation(for: 10), 10)
+        XCTAssertEqual(dragState.incrementalTranslation(for: 20), 10)
+        XCTAssertEqual(dragState.incrementalTranslation(for: 35), 15)
+
+        dragState.reset()
+
+        XCTAssertEqual(dragState.incrementalTranslation(for: -8), -8)
+    }
+
     func testShiftedWindowFollowsRangeNearEitherEdgeAndStaysInsideVideo() {
         let original = HighlightClipTimelineWindow(start: 0, duration: 20)
         let shiftedRight = HighlightClipTimelineGeometry.shiftedWindow(

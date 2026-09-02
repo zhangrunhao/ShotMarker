@@ -12,8 +12,8 @@ struct HighlightClipTimelineView: View {
 
     @GestureState private var startGestureRange: HighlightClipRange?
     @GestureState private var endGestureRange: HighlightClipRange?
-    @GestureState private var moveGestureRange: HighlightClipRange?
     @GestureState private var playheadGestureTime: TimeInterval?
+    @State private var moveDragState = HighlightClipTimelineDragState()
 
     var body: some View {
         GeometryReader { proxy in
@@ -322,20 +322,21 @@ struct HighlightClipTimelineView: View {
 
     private func moveGesture(width: Double) -> some Gesture {
         DragGesture(minimumDistance: 0)
-            .updating($moveGestureRange) { _, initialRange, _ in
-                if initialRange == nil {
-                    initialRange = range
-                }
-            }
             .onChanged { value in
+                let incrementalTranslation = moveDragState.incrementalTranslation(
+                    for: Double(value.translation.width),
+                )
                 onAction(HighlightClipTimelineGeometry.action(
                     for: .moveRange,
-                    translationX: Double(value.translation.width),
-                    range: moveGestureRange ?? range,
+                    translationX: incrementalTranslation,
+                    range: range,
                     playhead: playhead,
                     window: window,
                     width: width,
                 ))
+            }
+            .onEnded { _ in
+                moveDragState.reset()
             }
     }
 

@@ -23,6 +23,24 @@ enum HighlightClipTimelineAction: Equatable {
     case preview(TimeInterval)
 }
 
+struct HighlightClipTimelineDragState: Equatable {
+    private var previousTranslationX: Double = 0
+
+    mutating func incrementalTranslation(for cumulativeTranslationX: Double) -> Double {
+        guard cumulativeTranslationX.isFinite else {
+            return 0
+        }
+
+        let incrementalTranslation = cumulativeTranslationX - previousTranslationX
+        previousTranslationX = cumulativeTranslationX
+        return incrementalTranslation.isFinite ? incrementalTranslation : 0
+    }
+
+    mutating func reset() {
+        previousTranslationX = 0
+    }
+}
+
 enum HighlightClipTimelineGeometry {
     static func makeWindow(
         range: HighlightClipRange,
