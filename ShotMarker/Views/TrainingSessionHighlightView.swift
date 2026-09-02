@@ -20,6 +20,7 @@
         @State private var isLoadingVideos = false
         @State private var isCreatingHighlightJob = false
         @State private var clipSettings = ClipSettingsStore.shared.load()
+        @State private var isMarkerLabelSettingsExpanded = false
         @State private var selectedVideoItems: [SelectedTrainingVideoSelectionItem] = []
         @State private var preparationConfirmationItemID: String?
         @State private var preparationTasks: [String: Task<Void, Never>] = [:]
@@ -257,12 +258,17 @@
         private var markerLabelSettingsSection: some View {
             if let firstSelectedItem = selectedVideoItems.first {
                 Section("片段序数") {
-                    MarkerLabelSettingsView(
-                        thumbnailData: firstSelectedItem.thumbnailData,
-                        previewLabel: plan.segments.first?.markerLabel ?? "1/1",
-                        isDisabled: isCreatingHighlightJob,
-                        style: $clipSettings.markerLabelStyle,
-                    )
+                    DisclosureGroup(
+                        "样式调整",
+                        isExpanded: $isMarkerLabelSettingsExpanded,
+                    ) {
+                        MarkerLabelSettingsView(
+                            thumbnailData: firstSelectedItem.thumbnailData,
+                            previewLabel: plan.segments.first?.markerLabel ?? "1/1",
+                            isDisabled: isCreatingHighlightJob,
+                            style: $clipSettings.markerLabelStyle,
+                        )
+                    }
                 }
             }
         }
