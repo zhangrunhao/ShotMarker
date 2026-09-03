@@ -1,13 +1,13 @@
 # ShotMarker 发布状态
 
-- 最后复核：2026-09-02
+- 最后复核：2026-09-03
 - 工程版本：1.3（Build 3）
 - Bundle ID：com.heji.ShotMarker
 - Watch Bundle ID：com.heji.ShotMarker.watchkitapp
 
 ## 当前结论
 
-仓库当前 iPhone App 与随包 Watch App 配置为 1.3（Build 3），Release Simulator 构建已于 2026-09-02 通过。签名 Archive 与 Organizer Validate 的最近证据仍属于 1.2（Build 1）和 2026-08-19；2026-08-20 的 App Store Connect 网页复核也不证明 1.3 的 TestFlight、审核或 App Store 可用状态。
+仓库当前 iPhone App 与随包 Watch App 配置为 1.3（Build 3），Release Simulator 构建已于 2026-09-03 通过。签名 Archive 与 Organizer Validate 的最近证据仍属于 1.2（Build 1）和 2026-08-19；2026-08-20 的 App Store Connect 网页复核也不证明 1.3 的 TestFlight、审核或 App Store 可用状态。
 
 ## 构建与平台
 
@@ -17,7 +17,7 @@
 - 自动签名已配置。
 - Release 使用 DWARF with dSYM。
 - iPhone target 从官方 `sentry-cocoa` 以源码产品 `SentrySPM` 链接 Sentry 9.26.0；Watch target 不链接。
-- 当前工作区的 1.3（Build 3）Release Simulator 构建于 2026-09-02 通过。
+- 当前功能代码基线 `50ebdb9` 的 1.3（Build 3）Release Simulator 构建于 2026-09-03 通过。
 - 2026-08-19 已生成自动签名的正式 iOS Archive 1.2（Build 1）；主 App 与 Watch App 的二进制 UUID 均有匹配 dSYM，Archive 不再嵌入独立 `Sentry.framework`。
 - 同日 Xcode Organizer Validate 成功，没有 warning/error 或 `Upload Symbols Failed`；该次验证未执行上传。
 - 尚未为 1.3（Build 3）执行正式签名 Archive、Organizer Validate 或上传。
