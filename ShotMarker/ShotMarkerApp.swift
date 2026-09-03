@@ -17,6 +17,7 @@ struct ShotMarkerApp: App {
     private let logger: AppLogging
     private let logExportService: AppLogExportService
     #if os(iOS)
+        private let reviewStore: any HighlightClipReviewStoring
         @StateObject private var highlightJobManager: HighlightJobManager
     #endif
 
@@ -67,7 +68,9 @@ struct ShotMarkerApp: App {
                 logger: logger,
                 analytics: analytics,
             )
+            let reviewStore = FileHighlightClipReviewStore()
             _highlightJobManager = StateObject(wrappedValue: highlightJobManager)
+            self.reviewStore = reviewStore
             highlightJobManager.load()
         #endif
 
@@ -105,6 +108,7 @@ struct ShotMarkerApp: App {
             logger: logger,
             logExportService: logExportService,
             highlightJobManager: highlightJobManager,
+            reviewStore: reviewStore,
         )
     }
 }

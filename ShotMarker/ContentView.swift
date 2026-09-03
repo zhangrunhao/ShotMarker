@@ -14,6 +14,7 @@ struct ContentView: View {
     private let logExportService: AppLogExportService?
     #if os(iOS)
         private let highlightJobManager: HighlightJobManager?
+        private let reviewStore: any HighlightClipReviewStoring
     #endif
 
     @MainActor
@@ -23,6 +24,7 @@ struct ContentView: View {
         logger: AppLogging = AppLogger.shared,
         logExportService: AppLogExportService? = nil,
         highlightJobManager: HighlightJobManager? = nil,
+        reviewStore: any HighlightClipReviewStoring,
     ) {
         self.store = store
         self.syncService = syncService
@@ -30,6 +32,7 @@ struct ContentView: View {
         self.logExportService = logExportService
         #if os(iOS)
             self.highlightJobManager = highlightJobManager
+            self.reviewStore = reviewStore
         #endif
     }
 
@@ -40,12 +43,16 @@ struct ContentView: View {
             logger: logger,
             logExportService: logExportService,
             highlightJobManager: highlightJobManager,
+            reviewStore: reviewStore,
         )
     }
 }
 
 #if DEBUG
     #Preview {
-        ContentView(store: InMemoryTrainingSessionStore(sessions: TrainingSession.previewSessions))
+        ContentView(
+            store: InMemoryTrainingSessionStore(sessions: TrainingSession.previewSessions),
+            reviewStore: InMemoryHighlightClipReviewStore(),
+        )
     }
 #endif

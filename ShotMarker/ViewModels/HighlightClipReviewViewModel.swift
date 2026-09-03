@@ -30,7 +30,6 @@ final class HighlightClipReviewViewModel: ObservableObject {
     let mediaProvider: HighlightClipReviewMediaProvider
     private(set) var videos: [SelectedTrainingVideo]
 
-    private let originalItems: [HighlightClipReviewItem]
     private let combinationKey: HighlightClipReviewCombinationKey
     private let reviewStore: any HighlightClipReviewStoring
     private let now: () -> Date
@@ -55,7 +54,6 @@ final class HighlightClipReviewViewModel: ObservableObject {
         onSubmissionSucceeded: @escaping () -> Void = {},
     ) {
         items = draft.items
-        originalItems = draft.items
         self.videos = videos
         self.combinationKey = combinationKey
         self.reviewStore = reviewStore
@@ -86,30 +84,6 @@ final class HighlightClipReviewViewModel: ObservableObject {
         refreshSummary()
     }
 
-    convenience init(
-        draft: HighlightClipReviewDraft,
-        videos: [SelectedTrainingVideo],
-        clipSettings: ClipSettings,
-        mediaProvider: HighlightClipReviewMediaProvider,
-        submitSegments: @escaping SubmitSegments,
-        onSubmissionSucceeded: @escaping () -> Void = {},
-    ) {
-        self.init(
-            draft: draft,
-            videos: videos,
-            clipSettings: clipSettings,
-            combinationKey: Self.makeCompatibilityKey(draft: draft, videos: videos),
-            reviewStore: InMemoryHighlightClipReviewStore(),
-            mediaProvider: mediaProvider,
-            submitSegments: submitSegments,
-            onSubmissionSucceeded: onSubmissionSucceeded,
-        )
-    }
-
-    var hasUserChanges: Bool {
-        items != originalItems
-    }
-
     var canConfirm: Bool {
         guard !summary.finalSegments.isEmpty,
               planningErrorMessage == nil,
@@ -121,102 +95,6 @@ final class HighlightClipReviewViewModel: ObservableObject {
         return items.filter(\.isIncluded).allSatisfy { item in
             !unavailableItemIDs.contains(item.id)
                 && itemErrorMessages[item.id] == nil
-        }
-    }
-
-    func setIncluded(_ isIncluded: Bool, itemID: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == itemID }) else {
-            return
-        }
-
-        items[index].isIncluded = isIncluded
-        refreshSummary()
-    }
-
-    func apply(_ edit: HighlightClipRangeEdit, itemID: UUID) throws {
-        guard let index = items.firstIndex(where: { $0.id == itemID }) else {
-            throw HighlightClipReviewPlanningError.missingMarkers
-        }
-        guard let video = videos.first(where: { $0.id == items[index].videoID }) else {
-            let error = HighlightClipReviewPlanningError.sourceVideoMissing
-            itemErrorMessages[itemID] = Self.userFacingMessage(for: error)
-            throw error
-        }
-
-        do {
-            items[index] = try HighlightClipReviewPlanner.apply(
-                edit,
-                to: items[index],
-                videoDuration: video.duration,
-            )
-            itemErrorMessages[itemID] = nil
-            refreshSummary()
-            scheduleThumbnailRefreshIfNeeded(itemID: itemID)
-        } catch {
-            itemErrorMessages[itemID] = Self.userFacingMessage(for: error)
-            throw error
-        }
-    }
-
-    func restoreDefault(itemID: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == itemID }) else {
-            return
-        }
-
-        items[index].start = items[index].defaultStart
-        items[index].duration = items[index].defaultDuration
-        itemErrorMessages[itemID] = nil
-        refreshSummary()
-        scheduleThumbnailRefreshIfNeeded(itemID: itemID)
-    }
-
-    func adjustStart(itemID: UUID, by delta: TimeInterval) throws {
-        guard let item = items.first(where: { $0.id == itemID }) else {
-            throw HighlightClipReviewPlanningError.missingMarkers
-        }
-        try apply(.setStart(item.start + delta), itemID: itemID)
-    }
-
-    func adjustEnd(itemID: UUID, by delta: TimeInterval) throws {
-        guard let item = items.first(where: { $0.id == itemID }) else {
-            throw HighlightClipReviewPlanningError.missingMarkers
-        }
-        try apply(.setEnd(item.range.end + delta), itemID: itemID)
-    }
-
-    func moveRange(itemID: UUID, by delta: TimeInterval) throws {
-        try apply(.moveBy(delta), itemID: itemID)
-    }
-
-    func handleTimelineAction(
-        _ action: HighlightClipTimelineAction,
-        itemID: UUID,
-        playbackController: HighlightClipPlaybackController,
-    ) async throws {
-        switch action {
-        case .setStart(let start):
-            try apply(.setStart(start), itemID: itemID)
-            let range = try range(for: itemID)
-            playbackController.updateRange(range)
-            await playbackController.previewStart(of: range)
-        case .setEnd(let end):
-            try apply(.setEnd(end), itemID: itemID)
-            let range = try range(for: itemID)
-            playbackController.updateRange(range)
-            await playbackController.previewEnd(of: range)
-        case .moveBy(let delta):
-            try apply(.moveBy(delta), itemID: itemID)
-            let range = try range(for: itemID)
-            playbackController.updateRange(range)
-            await playbackController.previewStart(of: range)
-        case .preview(let time):
-            guard let item = items.first(where: { $0.id == itemID }),
-                  let video = videos.first(where: { $0.id == item.videoID })
-            else {
-                throw HighlightClipReviewPlanningError.sourceVideoMissing
-            }
-            let previewTime = min(max(time, 0), video.duration)
-            await playbackController.preview(at: previewTime)
         }
     }
 
@@ -305,14 +183,6 @@ final class HighlightClipReviewViewModel: ObservableObject {
                 return try await self.confirmWorkingCopy(workingItem)
             },
         )
-    }
-
-    func openEditor(itemID: UUID) {
-        guard items.contains(where: { $0.id == itemID }) else {
-            return
-        }
-
-        editingItemID = itemID
     }
 
     func closeEditor() {
@@ -613,13 +483,6 @@ final class HighlightClipReviewViewModel: ObservableObject {
         }
     }
 
-    private func range(for itemID: UUID) throws -> HighlightClipRange {
-        guard let item = items.first(where: { $0.id == itemID }) else {
-            throw HighlightClipReviewPlanningError.missingMarkers
-        }
-        return item.range
-    }
-
     private func validateIncludedSources() async throws {
         let includedVideoIDs = Set(items.filter(\.isIncluded).map(\.videoID))
         for video in videos where includedVideoIDs.contains(video.id) {
@@ -651,56 +514,6 @@ final class HighlightClipReviewViewModel: ObservableObject {
             videos: videos,
             secondsBeforeMarker: normalizedSettings.secondsBeforeMarker,
             secondsAfterMarker: normalizedSettings.secondsAfterMarker,
-        )
-    }
-
-    private static func makeCompatibilityKey(
-        draft: HighlightClipReviewDraft,
-        videos: [SelectedTrainingVideo],
-    ) -> HighlightClipReviewCombinationKey {
-        let references = draft.items
-            .flatMap(\.markerReferences)
-            .sorted { lhs, rhs in
-                if lhs.markedAt == rhs.markedAt {
-                    return lhs.id.uuidString < rhs.id.uuidString
-                }
-                return lhs.markedAt < rhs.markedAt
-            }
-        let markerIdentities = references.map {
-            HighlightClipReviewMarkerIdentity(
-                id: $0.id,
-                markedAtMilliseconds: Int64(
-                    ($0.markedAt.timeIntervalSince1970 * 1_000).rounded(),
-                ),
-            )
-        }
-        let firstDate = references.first?.markedAt ?? .distantPast
-        let lastDate = references.last?.markedAt ?? firstDate
-        let trainingIdentity = HighlightClipReviewTrainingIdentity(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
-            startedAtMilliseconds: Int64((firstDate.timeIntervalSince1970 * 1_000).rounded()),
-            endedAtMilliseconds: Int64((lastDate.timeIntervalSince1970 * 1_000).rounded()),
-            markers: markerIdentities,
-        )
-        let videoIdentities = videos.enumerated().map { index, video in
-            (try? HighlightClipReviewIdentityBuilder.videoIdentity(for: video))
-                ?? HighlightClipReviewVideoIdentity(
-                    source: .fileSHA256("compatibility-\(index)"),
-                    recordedStartAtMilliseconds: Int64(
-                        (video.recordedStartAt.timeIntervalSince1970 * 1_000).rounded(),
-                    ),
-                    durationTicks: Int64(
-                        (video.duration * Double(HighlightClipReviewIdentityBuilder.videoTimescale))
-                            .rounded(),
-                    ),
-                )
-        }
-        return HighlightClipReviewCombinationKey(
-            digest: "compatibility",
-            combination: HighlightClipReviewCombination(
-                training: trainingIdentity,
-                videos: videoIdentities,
-            ),
         )
     }
 

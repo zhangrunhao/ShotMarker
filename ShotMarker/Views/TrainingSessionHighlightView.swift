@@ -14,6 +14,7 @@
         private let videoLoadingService: TrainingVideoLoadingService<PhotosPickerItem>
         private let photoLibraryAssetProvider: PhotoLibraryVideoAssetProvider
         private let temporaryFileStore: TrainingVideoTemporaryFileStore
+        private let reviewStore: any HighlightClipReviewStoring
 
         @State private var selectedItems: [PhotosPickerItem] = []
         @State private var selectedVideos: [SelectedTrainingVideo] = []
@@ -28,8 +29,7 @@
         @State private var alert: HighlightFlowAlert?
         @State private var reviewViewModel: HighlightClipReviewViewModel?
         @State private var isReviewPresented = false
-        @State private var pendingReviewMutation: HighlightReviewPendingMutation?
-        @State private var isShowingDiscardReviewConfirmation = false
+        @State private var isPreparingReview = false
         @State private var isExportingTrainingSession = false
         @State private var trainingSessionExportDocument: TrainingSessionJSONDocument?
 
@@ -37,10 +37,12 @@
             session: TrainingSession,
             logger: AppLogging = AppLogger.shared,
             highlightJobManager: HighlightJobManager? = nil,
+            reviewStore: any HighlightClipReviewStoring,
         ) {
             self.session = session
             self.logger = logger
             self.highlightJobManager = highlightJobManager
+            self.reviewStore = reviewStore
 
             let photoLibraryAssetProvider = PhotoLibraryVideoAssetProvider()
             let temporaryFileStore = TrainingVideoTemporaryFileStore()
@@ -74,7 +76,6 @@
                 coverageAndGenerationSections
             }
             .navigationTitle("生成集锦")
-            .navigationBarBackButtonHidden(shouldGuardWholeFlowExit)
             .toolbar {
                 flowToolbarContent
             }
@@ -125,24 +126,6 @@
             } message: {
                 Text("可能需要从 iCloud 下载原视频，过程中可能消耗流量。")
             }
-            .alert("重新规划片段？", isPresented: isShowingReplanConfirmation) {
-                Button("取消", role: .cancel) {
-                    pendingReviewMutation = nil
-                }
-                Button("重新规划", role: .destructive) {
-                    applyPendingReviewMutation()
-                }
-            } message: {
-                Text("更改视频或剪辑范围会丢失当前的排除与范围调整。")
-            }
-            .alert("放弃片段调整？", isPresented: $isShowingDiscardReviewConfirmation) {
-                Button("取消", role: .cancel) {}
-                Button("放弃并退出", role: .destructive) {
-                    discardReviewAndExitFlow()
-                }
-            } message: {
-                Text("当前片段的排除与范围调整将不会保留。")
-            }
             .onDisappear {
                 cleanupAfterWholeFlowDisappearsIfNeeded()
             }
@@ -150,16 +133,6 @@
 
         @ToolbarContentBuilder
         private var flowToolbarContent: some ToolbarContent {
-            if shouldGuardWholeFlowExit {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        isShowingDiscardReviewConfirmation = true
-                    } label: {
-                        Label("返回", systemImage: "chevron.backward")
-                    }
-                }
-            }
-
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     prepareTrainingSessionExport()
@@ -221,21 +194,6 @@
             )
         }
 
-        private var isShowingReplanConfirmation: Binding<Bool> {
-            Binding(
-                get: { pendingReviewMutation != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingReviewMutation = nil
-                    }
-                },
-            )
-        }
-
-        private var shouldGuardWholeFlowExit: Bool {
-            reviewViewModel?.hasUserChanges == true
-        }
-
         private var guardedSelectedItems: Binding<[PhotosPickerItem]> {
             Binding(
                 get: { selectedItems },
@@ -243,11 +201,8 @@
                     guard proposedItems != selectedItems else {
                         return
                     }
-                    guard reviewViewModel != nil else {
-                        selectedItems = proposedItems
-                        return
-                    }
-                    pendingReviewMutation = .selectedItems(proposedItems)
+                    invalidateCurrentReview()
+                    selectedItems = proposedItems
                 },
             )
         }
@@ -255,7 +210,6 @@
         private var guardedSecondsBeforeMarker: Binding<TimeInterval> {
             guardedRangeSetting(
                 currentValue: { clipSettings.secondsBeforeMarker },
-                mutation: HighlightReviewPendingMutation.secondsBeforeMarker,
                 apply: { clipSettings.secondsBeforeMarker = $0 },
             )
         }
@@ -263,14 +217,12 @@
         private var guardedSecondsAfterMarker: Binding<TimeInterval> {
             guardedRangeSetting(
                 currentValue: { clipSettings.secondsAfterMarker },
-                mutation: HighlightReviewPendingMutation.secondsAfterMarker,
                 apply: { clipSettings.secondsAfterMarker = $0 },
             )
         }
 
         private func guardedRangeSetting(
             currentValue: @escaping () -> TimeInterval,
-            mutation: @escaping (TimeInterval) -> HighlightReviewPendingMutation,
             apply: @escaping (TimeInterval) -> Void,
         ) -> Binding<TimeInterval> {
             Binding(
@@ -279,33 +231,17 @@
                     guard proposedValue != currentValue() else {
                         return
                     }
-                    guard reviewViewModel != nil else {
-                        apply(proposedValue)
-                        return
-                    }
-                    pendingReviewMutation = mutation(proposedValue)
+                    invalidateCurrentReview()
+                    apply(proposedValue)
                 },
             )
         }
 
         @MainActor
-        private func applyPendingReviewMutation() {
-            guard let pendingReviewMutation else {
-                return
-            }
-
+        private func invalidateCurrentReview() {
             reviewViewModel?.cancelMediaLoading()
             reviewViewModel = nil
-            self.pendingReviewMutation = nil
-
-            switch pendingReviewMutation {
-            case .selectedItems(let items):
-                selectedItems = items
-            case .secondsBeforeMarker(let value):
-                clipSettings.secondsBeforeMarker = value
-            case .secondsAfterMarker(let value):
-                clipSettings.secondsAfterMarker = value
-            }
+            isReviewPresented = false
         }
 
         private var trainingSummarySection: some View {
@@ -376,19 +312,26 @@
         private var generateHighlightSection: some View {
             Section {
                 Button {
-                    presentReview()
+                    Task {
+                        await prepareReview()
+                    }
                 } label: {
                     HStack {
-                        if isCreatingHighlightJob {
+                        if isPreparingReview {
                             ProgressView()
                         }
 
-                        Text(isCreatingHighlightJob ? "创建中" : "下一步：审核片段")
+                        Text(isPreparingReview ? "正在准备审核…" : "下一步：审核片段")
                             .frame(maxWidth: .infinity)
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!plan.canGenerate || isLoadingVideos || isCreatingHighlightJob)
+                .disabled(
+                    !plan.canGenerate
+                        || isLoadingVideos
+                        || isCreatingHighlightJob
+                        || isPreparingReview,
+                )
             }
         }
 
@@ -898,30 +841,78 @@
         }
 
         @MainActor
-        private func presentReview() {
-            let availableVideos = selectedVideoItems.availableVideos
-            let normalizedSettings = clipSettings.normalized
-            guard !availableVideos.isEmpty else {
+        private func prepareReview() async {
+            guard !isPreparingReview else {
+                return
+            }
+            isPreparingReview = true
+            defer {
+                isPreparingReview = false
+            }
+
+            let videos = selectedVideoItems.availableVideos
+            let settings = clipSettings.normalized
+            guard !videos.isEmpty else {
                 return
             }
 
-            if let reviewViewModel,
-               !reviewViewModel.requiresInvalidation(
-                   videos: availableVideos,
-                   clipSettings: normalizedSettings,
-               )
-            {
-                isReviewPresented = true
+            do {
+                let key = try HighlightClipReviewIdentityBuilder.combinationKey(
+                    for: session,
+                    videos: videos,
+                )
+                let loaded = try await reviewStore.loadRecord(for: key)
+                let restoration = HighlightClipReviewPlanner.restoreDraft(
+                    for: session,
+                    videos: videos,
+                    clipSettings: settings,
+                    persistedRecord: loaded.record,
+                )
+                installReviewViewModel(
+                    draft: restoration.draft,
+                    key: key,
+                    videos: videos,
+                    settings: settings,
+                    notice: reviewNotice(
+                        storeNotice: loaded.notice,
+                        discardedCount: restoration.discardedConfirmationCount,
+                    ),
+                    noticeCategory: Self.reviewNoticeCategory(
+                        storeNotice: loaded.notice,
+                        discardedCount: restoration.discardedConfirmationCount,
+                    ),
+                )
+            } catch is CancellationError {
                 return
+            } catch {
+                logger.error(
+                    "highlight.review.prepare.failed",
+                    category: .video,
+                    message: "集锦片段审核准备失败",
+                    error: nil,
+                    context: highlightContext(extra: [
+                        "selectedVideoCount": "\(videos.count)",
+                        "errorCategory": Self.reviewPreparationErrorCategory(error),
+                    ]),
+                )
+                alert = HighlightFlowAlert(
+                    title: "无法准备片段审核",
+                    message: Self.userFacingReviewPreparationMessage(for: error),
+                )
             }
+        }
 
+        @MainActor
+        private func installReviewViewModel(
+            draft: HighlightClipReviewDraft,
+            key: HighlightClipReviewCombinationKey,
+            videos: [SelectedTrainingVideo],
+            settings: ClipSettings,
+            notice: String?,
+            noticeCategory: String,
+        ) {
             reviewViewModel?.cancelMediaLoading()
-            let reviewDraft = HighlightClipReviewPlanner.makeDraft(
-                for: session,
-                videos: availableVideos,
-                clipSettings: normalizedSettings,
-            )
-            guard !reviewDraft.items.isEmpty else {
+            guard !draft.items.isEmpty else {
                 alert = HighlightFlowAlert(
                     title: "没有可审核片段",
                     message: "所选视频没有覆盖任何打点。请确认视频是否对应这次训练。",
@@ -937,14 +928,19 @@
                 set: { self.clipSettings = $0 },
             )
             let cleanupVideos = selectedVideoItems.compactMap(\.video)
-            let defaultCardCount = reviewDraft.items.count
-            let matchedMarkerCount = reviewDraft.matchedMarkerCount
+            let defaultCardCount = draft.items.filter {
+                $0.confirmationState == .defaultValue
+            }.count
+            let matchedMarkerCount = draft.matchedMarkerCount
             let manager = highlightJobManager
-            let submissionVideos = availableVideos
+            let submissionVideos = videos
             let viewModel = HighlightClipReviewViewModel(
-                draft: reviewDraft,
+                draft: draft,
                 videos: submissionVideos,
-                clipSettings: normalizedSettings,
+                clipSettings: settings,
+                combinationKey: key,
+                reviewStore: reviewStore,
+                recoveryNoticeMessage: notice,
                 mediaProvider: mediaProvider,
                 submitSegments: { confirmedSegments in
                     guard let manager else {
@@ -1007,9 +1003,12 @@
                 context: reviewContext(
                     defaultCardCount: defaultCardCount,
                     matchedMarkerCount: matchedMarkerCount,
-                    includedCardCount: reviewDraft.items.count,
+                    includedCardCount: draft.items.filter(\.isIncluded).count,
                     segments: viewModel.summary.finalSegments,
-                ),
+                ).merging([
+                    "selectedVideoCount": "\(videos.count)",
+                    "recoveryNoticeCategory": noticeCategory,
+                ]) { _, newValue in newValue },
             )
             isReviewPresented = true
         }
@@ -1021,7 +1020,6 @@
             cancelPreparationTasks()
             reviewViewModel?.cancelMediaLoading()
             cleanupTemporaryVideos(cleanupVideos)
-            pendingReviewMutation = nil
             selectedVideos = []
             selectedVideoItems = []
             selectedItems = []
@@ -1032,19 +1030,6 @@
                 await Task.yield()
                 dismiss()
             }
-        }
-
-        @MainActor
-        private func discardReviewAndExitFlow() {
-            cancelPreparationTasks()
-            reviewViewModel?.cancelMediaLoading()
-            cleanupTemporaryVideos(selectedVideoItems.compactMap(\.video))
-            pendingReviewMutation = nil
-            reviewViewModel = nil
-            selectedItems = []
-            selectedVideos = []
-            selectedVideoItems = []
-            dismiss()
         }
 
         @MainActor
@@ -1171,6 +1156,71 @@
             error is CancellationError ? "cancelled" : "assetPreparationFailed"
         }
 
+        private func reviewNotice(
+            storeNotice: HighlightClipReviewStoreNotice?,
+            discardedCount: Int,
+        ) -> String? {
+            var messages: [String] = []
+            switch storeNotice {
+            case .corruptDocumentRecovered:
+                messages.append("已恢复损坏的片段确认文件，当前使用默认范围。")
+            case .unsupportedSchemaVersion:
+                messages.append("片段确认数据来自更新版本，当前使用默认范围；更新 App 后才能保存新的片段确认。")
+            case nil:
+                break
+            }
+            if discardedCount > 0 {
+                messages.append("部分已保存片段无法恢复，已使用默认范围。")
+            }
+            return messages.isEmpty ? nil : messages.joined(separator: " ")
+        }
+
+        private nonisolated static func reviewNoticeCategory(
+            storeNotice: HighlightClipReviewStoreNotice?,
+            discardedCount: Int,
+        ) -> String {
+            let discarded = discardedCount > 0
+            switch (storeNotice, discarded) {
+            case (.corruptDocumentRecovered, true):
+                return "corruptDocumentRecoveredAndDiscardedConfirmation"
+            case (.corruptDocumentRecovered, false):
+                return "corruptDocumentRecovered"
+            case (.unsupportedSchemaVersion, true):
+                return "unsupportedSchemaVersionAndDiscardedConfirmation"
+            case (.unsupportedSchemaVersion, false):
+                return "unsupportedSchemaVersion"
+            case (nil, true):
+                return "discardedConfirmation"
+            case (nil, false):
+                return "none"
+            }
+        }
+
+        private nonisolated static func reviewPreparationErrorCategory(_ error: Error) -> String {
+            if error is HighlightClipReviewIdentityError {
+                return "identity"
+            }
+            if error is HighlightClipReviewStoreError {
+                return "reviewStore"
+            }
+            if error is HighlightClipReviewPlanningError {
+                return "planning"
+            }
+            return "reviewLoad"
+        }
+
+        private nonisolated static func userFacingReviewPreparationMessage(for error: Error) -> String {
+            if error is HighlightClipReviewIdentityError
+                || error is HighlightClipReviewStoreError
+                || error is HighlightClipReviewPlanningError,
+                let localizedError = error as? LocalizedError,
+                let description = localizedError.errorDescription
+            {
+                return description
+            }
+            return "无法读取片段确认，请重试。"
+        }
+
         private nonisolated static func jobCreationErrorCategory(_ error: Error) -> String {
             if error is CancellationError {
                 return "cancelled"
@@ -1197,12 +1247,6 @@
         let message: String
     }
 
-    private enum HighlightReviewPendingMutation {
-        case selectedItems([PhotosPickerItem])
-        case secondsBeforeMarker(TimeInterval)
-        case secondsAfterMarker(TimeInterval)
-    }
-
     private enum HighlightReviewFlowError: LocalizedError {
         case jobManagerUnavailable
 
@@ -1217,7 +1261,10 @@
     #if DEBUG
         #Preview {
             NavigationStack {
-                TrainingSessionHighlightView(session: TrainingSession.previewSessions[0])
+                TrainingSessionHighlightView(
+                    session: TrainingSession.previewSessions[0],
+                    reviewStore: InMemoryHighlightClipReviewStore(),
+                )
             }
         }
     #endif

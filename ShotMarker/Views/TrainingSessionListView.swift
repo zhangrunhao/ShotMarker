@@ -72,6 +72,7 @@ struct TrainingSessionListView: View {
     private let diagnosticsSnapshotProvider: (() -> PhoneWatchSyncDiagnosticsSnapshot)?
     private let logger: AppLogging
     private let logExportService: AppLogExportService?
+    private let reviewStore: any HighlightClipReviewStoring
 
     @MainActor
     init(
@@ -80,10 +81,12 @@ struct TrainingSessionListView: View {
         logger: AppLogging = AppLogger.shared,
         logExportService: AppLogExportService? = nil,
         highlightJobManager: HighlightJobManager? = nil,
+        reviewStore: any HighlightClipReviewStoring,
     ) {
         self.diagnosticsSnapshotProvider = diagnosticsSnapshotProvider
         self.logger = logger
         self.logExportService = logExportService
+        self.reviewStore = reviewStore
         let resolvedHighlightJobManager = Self.resolvedHighlightJobManager(highlightJobManager, logger: logger)
         _highlightJobManager = ObservedObject(wrappedValue: resolvedHighlightJobManager)
         _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(store: store, logger: logger))
@@ -96,10 +99,12 @@ struct TrainingSessionListView: View {
         logger: AppLogging = AppLogger.shared,
         logExportService: AppLogExportService? = nil,
         highlightJobManager: HighlightJobManager? = nil,
+        reviewStore: any HighlightClipReviewStoring,
     ) {
         self.diagnosticsSnapshotProvider = diagnosticsSnapshotProvider
         self.logger = logger
         self.logExportService = logExportService
+        self.reviewStore = reviewStore
         let resolvedHighlightJobManager = Self.resolvedHighlightJobManager(highlightJobManager, logger: logger)
         _highlightJobManager = ObservedObject(wrappedValue: resolvedHighlightJobManager)
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -364,7 +369,11 @@ struct TrainingSessionListView: View {
     private func destination(for sessionID: UUID) -> some View {
         #if os(iOS)
             if let session = viewModel.session(for: sessionID) {
-                TrainingSessionHighlightView(session: session, highlightJobManager: highlightJobManager)
+                TrainingSessionHighlightView(
+                    session: session,
+                    highlightJobManager: highlightJobManager,
+                    reviewStore: reviewStore,
+                )
             } else {
                 ContentUnavailableView("无法加载训练记录", systemImage: "exclamationmark.triangle")
             }
@@ -694,6 +703,7 @@ private struct TrainingSessionTransferAlert {
             viewModel: TrainingSessionListViewModel(
                 store: InMemoryTrainingSessionStore(sessions: TrainingSession.previewSessions),
             ),
+            reviewStore: InMemoryHighlightClipReviewStore(),
         )
     }
 #endif

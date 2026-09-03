@@ -144,6 +144,85 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testRecoveryNoticesAreNonBlockingAndDoNotDisableSubmission() {
+        let corrupt = makeReviewViewModelFixture(
+            recoveryNoticeMessage: "已恢复损坏的片段确认文件，当前使用默认范围。",
+        )
+        let partial = makeReviewViewModelFixture(
+            recoveryNoticeMessage: "部分已保存片段无法恢复，已使用默认范围。",
+        )
+        let future = makeReviewViewModelFixture(
+            recoveryNoticeMessage: "片段确认数据来自更新版本，当前使用默认范围；更新 App 后才能保存新的片段确认。",
+        )
+
+        XCTAssertTrue(corrupt.viewModel.canConfirm)
+        XCTAssertTrue(partial.viewModel.canConfirm)
+        XCTAssertTrue(future.viewModel.canConfirm)
+        XCTAssertNotNil(corrupt.viewModel.recoveryNoticeMessage)
+        XCTAssertNotNil(partial.viewModel.recoveryNoticeMessage)
+        XCTAssertNotNil(future.viewModel.recoveryNoticeMessage)
+    }
+
+    @MainActor
+    func testRecreatedReviewRestoresSameOrderAndReplansDefaultsForNewSettings() async throws {
+        let fixture = makeReviewFlowFixture()
+        let key = try HighlightClipReviewIdentityBuilder.combinationKey(
+            for: fixture.session,
+            videos: fixture.videos,
+        )
+        let first = fixture.makeViewModel(key: key)
+        let editor = first.makeEditorViewModel(itemID: first.items[0].id)!
+        try editor.moveRange(by: 1)
+        _ = await editor.confirm()
+
+        let loaded = try await fixture.store.loadRecord(for: key)
+        var changedSettings = fixture.settings
+        changedSettings.secondsBeforeMarker = 2
+        changedSettings.secondsAfterMarker = 2
+        let restored = HighlightClipReviewPlanner.restoreDraft(
+            for: fixture.session,
+            videos: fixture.videos,
+            clipSettings: changedSettings,
+            persistedRecord: loaded.record,
+        )
+        let recreated = fixture.makeViewModel(
+            draft: restored.draft,
+            key: key,
+            settings: changedSettings,
+        )
+
+        XCTAssertNil(recreated.editingItemID)
+        XCTAssertEqual(recreated.items[0].confirmationState, .confirmed)
+        XCTAssertEqual(recreated.items[0].range, first.items[0].range)
+        XCTAssertNotEqual(
+            recreated.items.filter { $0.confirmationState == .defaultValue }.map(\.range),
+            first.items.filter { $0.confirmationState == .defaultValue }.map(\.range),
+        )
+    }
+
+    @MainActor
+    func testReversedVideoOrderDoesNotLoadOriginalCombinationRecord() async throws {
+        let fixture = makeReviewFlowFixture()
+        let originalKey = try HighlightClipReviewIdentityBuilder.combinationKey(
+            for: fixture.session,
+            videos: fixture.videos,
+        )
+        try await fixture.store.upsert(
+            fixture.confirmation,
+            for: originalKey,
+            now: fixture.now,
+        )
+        let reversedKey = try HighlightClipReviewIdentityBuilder.combinationKey(
+            for: fixture.session,
+            videos: Array(fixture.videos.reversed()),
+        )
+
+        let reversedLoad = try await fixture.store.loadRecord(for: reversedKey)
+
+        XCTAssertNil(reversedLoad.record)
+    }
+
+    @MainActor
     func testThumbnailFailureShowsPlaceholderWithoutMarkingSourceUnavailable() async {
         let viewModel = makeViewModel(frameResults: [.failure(TestError.frameFailed)])
         let id = viewModel.items[0].id
@@ -202,13 +281,13 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testOpeningAnotherEditorKeepsDraftAndChangesOnlyEditingID() {
+    func testCreatingAnotherEditorKeepsGalleryAndChangesOnlyEditingID() {
         let viewModel = makeViewModel(itemCount: 2)
         let originalItems = viewModel.items
 
-        viewModel.openEditor(itemID: viewModel.items[0].id)
+        XCTAssertNotNil(viewModel.makeEditorViewModel(itemID: viewModel.items[0].id))
         XCTAssertEqual(viewModel.editingItemID, viewModel.items[0].id)
-        viewModel.openEditor(itemID: viewModel.items[1].id)
+        XCTAssertNotNil(viewModel.makeEditorViewModel(itemID: viewModel.items[1].id))
 
         XCTAssertEqual(viewModel.editingItemID, viewModel.items[1].id)
         XCTAssertEqual(viewModel.items, originalItems)
@@ -629,6 +708,101 @@ private func makeReviewViewModelFixture(
         store: store,
         key: key,
         originalSummary: viewModel.summary,
+    )
+}
+
+private struct ReviewFlowFixture {
+    let session: TrainingSession
+    let videos: [SelectedTrainingVideo]
+    let settings: ClipSettings
+    let store: InMemoryHighlightClipReviewStore
+    let now: Date
+    let confirmation: PersistedHighlightClipConfirmation
+
+    @MainActor
+    func makeViewModel(
+        draft: HighlightClipReviewDraft? = nil,
+        key: HighlightClipReviewCombinationKey,
+        settings overrideSettings: ClipSettings? = nil,
+    ) -> HighlightClipReviewViewModel {
+        let effectiveSettings = overrideSettings ?? settings
+        let effectiveDraft = draft ?? HighlightClipReviewPlanner.makeDraft(
+            for: session,
+            videos: videos,
+            clipSettings: effectiveSettings,
+        )
+        return HighlightClipReviewViewModel(
+            draft: effectiveDraft,
+            videos: videos,
+            clipSettings: effectiveSettings,
+            combinationKey: key,
+            reviewStore: store,
+            mediaProvider: HighlightClipReviewMediaProvider(
+                cacheLimit: 8,
+                loadAsset: { _ in
+                    AVURLAsset(url: URL(fileURLWithPath: "/tmp/review-flow.mov"))
+                },
+                generateFrame: { _, _ in Data([1]) },
+            ),
+            now: { now },
+            submitSegments: { _ in },
+        )
+    }
+}
+
+private func makeReviewFlowFixture() -> ReviewFlowFixture {
+    let firstStart = Date(timeIntervalSince1970: 100)
+    let secondStart = Date(timeIntervalSince1970: 300)
+    let firstMarker = ShotMarkerEvent(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000801")!,
+        markedAt: Date(timeIntervalSince1970: 110),
+    )
+    let secondMarker = ShotMarkerEvent(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000802")!,
+        markedAt: Date(timeIntervalSince1970: 140),
+    )
+    let firstSource = HighlightClipReviewSourceIdentity.photoLibraryAsset(
+        "review-flow-asset-a",
+    )
+    let videos = [
+        SelectedTrainingVideo(
+            id: "review-flow-runtime-a",
+            recordedStartAt: firstStart,
+            duration: 60,
+            reviewSourceIdentity: firstSource,
+        ),
+        SelectedTrainingVideo(
+            id: "review-flow-runtime-b",
+            recordedStartAt: secondStart,
+            duration: 60,
+            reviewSourceIdentity: .photoLibraryAsset("review-flow-asset-b"),
+        ),
+    ]
+    let session = TrainingSession(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000800")!,
+        startedAt: firstStart,
+        endedAt: secondStart.addingTimeInterval(60),
+        events: [firstMarker, secondMarker],
+    )
+    let now = Date(timeIntervalSince1970: 500)
+    return ReviewFlowFixture(
+        session: session,
+        videos: videos,
+        settings: .default,
+        store: InMemoryHighlightClipReviewStore(),
+        now: now,
+        confirmation: PersistedHighlightClipConfirmation(
+            videoIdentity: try! HighlightClipReviewIdentityBuilder.videoIdentity(
+                for: videos[0],
+            ),
+            markerIDs: [firstMarker.id],
+            defaultStart: 1,
+            defaultDuration: 13,
+            start: 1,
+            duration: 13,
+            isIncluded: true,
+            confirmedAt: now,
+        ),
     )
 }
 
