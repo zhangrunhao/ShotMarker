@@ -157,7 +157,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
             "sync.training.payload.received",
             category: .sync,
             message: "收到手表训练记录",
-            context: trainingContext(for: payload.id),
+            context: trainingContext(for: payload),
         )
 
         do {
@@ -169,7 +169,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
                 category: .sync,
                 message: "导入手表训练记录失败",
                 error: error,
-                context: trainingContext(for: payload.id),
+                context: trainingContext(for: payload),
             )
             return
         }
@@ -179,7 +179,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
             "sync.training.import.succeeded",
             category: .sync,
             message: "导入手表训练记录成功",
-            context: trainingContext(for: payload.id),
+            context: trainingContext(for: payload),
         )
         analytics.track(.trainingSyncSucceeded)
         notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
@@ -193,7 +193,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
                 category: .sync,
                 message: "发送训练记录 ACK 失败",
                 error: error,
-                context: trainingContext(for: payload.id),
+                context: trainingContext(for: payload),
             )
             return
         }
@@ -202,7 +202,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
             "sync.training.ack.sent",
             category: .sync,
             message: "已发送训练记录 ACK",
-            context: trainingContext(for: payload.id),
+            context: trainingContext(for: payload),
         )
     }
 
@@ -268,8 +268,8 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
         ]
     }
 
-    private func trainingContext(for trainingSessionId: UUID) -> [String: String] {
-        ["trainingSessionId": trainingSessionId.uuidString]
+    private func trainingContext(for payload: TrainingSessionSyncPayload) -> [String: String] {
+        ["trainingMarkerCount": "\(payload.events.count)"]
     }
 }
 

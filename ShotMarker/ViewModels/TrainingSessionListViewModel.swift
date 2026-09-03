@@ -248,10 +248,7 @@ final class TrainingSessionListViewModel: ObservableObject {
                 "training.sessions.merge.succeeded",
                 category: .training,
                 message: "训练记录合并成功",
-                context: [
-                    "mergedSessionCount": "\(selectedSessions.count)",
-                    "trainingSessionId": mergedSession.id.uuidString,
-                ],
+                context: ["mergedSessionCount": "\(selectedSessions.count)"],
             )
             notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
         } catch {

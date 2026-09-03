@@ -189,7 +189,7 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
         )
     }
 
-    func testCompletedTrainingSessionUserInfoLogsPayloadImportAndAck() async throws {
+    func testCompletedTrainingSessionUserInfoLogsCountsWithoutTrainingIdentity() async throws {
         let payload = try makePayload()
         let logger = SpyAppLogger()
         let service = PhoneWatchSyncService(
@@ -201,20 +201,26 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
         await service.handleReceivedUserInfo(try makeCompletedTrainingSessionUserInfo(payload: payload))
 
         XCTAssertEqual(logger.entry(named: "sync.training.payload.received")?.level, .info)
-        XCTAssertEqual(
-            logger.entry(named: "sync.training.payload.received")?.context["trainingSessionId"],
-            payload.id.uuidString,
-        )
+        XCTAssertEqual(logger.entry(named: "sync.training.payload.received")?.context[
+            "trainingMarkerCount"
+        ], "\(payload.events.count)")
+        XCTAssertNil(logger.entry(named: "sync.training.payload.received")?.context[
+            "trainingSessionId"
+        ])
         XCTAssertEqual(logger.entry(named: "sync.training.import.succeeded")?.level, .info)
-        XCTAssertEqual(
-            logger.entry(named: "sync.training.import.succeeded")?.context["trainingSessionId"],
-            payload.id.uuidString,
-        )
+        XCTAssertEqual(logger.entry(named: "sync.training.import.succeeded")?.context[
+            "trainingMarkerCount"
+        ], "\(payload.events.count)")
+        XCTAssertNil(logger.entry(named: "sync.training.import.succeeded")?.context[
+            "trainingSessionId"
+        ])
         XCTAssertEqual(logger.entry(named: "sync.training.ack.sent")?.level, .info)
-        XCTAssertEqual(
-            logger.entry(named: "sync.training.ack.sent")?.context["trainingSessionId"],
-            payload.id.uuidString,
-        )
+        XCTAssertEqual(logger.entry(named: "sync.training.ack.sent")?.context[
+            "trainingMarkerCount"
+        ], "\(payload.events.count)")
+        XCTAssertNil(logger.entry(named: "sync.training.ack.sent")?.context[
+            "trainingSessionId"
+        ])
     }
 
     func testUnknownUserInfoTypeDoesNothing() async throws {
@@ -343,7 +349,8 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
         let entry = logger.entry(named: "sync.training.import.failed")
         XCTAssertEqual(entry?.level, .error)
         XCTAssertEqual(entry?.category, .sync)
-        XCTAssertEqual(entry?.context["trainingSessionId"], payload.id.uuidString)
+        XCTAssertEqual(entry?.context["trainingMarkerCount"], "\(payload.events.count)")
+        XCTAssertNil(entry?.context["trainingSessionId"])
         XCTAssertNotNil(entry?.errorDescription)
     }
 
@@ -364,7 +371,8 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
         let entry = logger.entry(named: "sync.training.ack.failed")
         XCTAssertEqual(entry?.level, .error)
         XCTAssertEqual(entry?.category, .sync)
-        XCTAssertEqual(entry?.context["trainingSessionId"], payload.id.uuidString)
+        XCTAssertEqual(entry?.context["trainingMarkerCount"], "\(payload.events.count)")
+        XCTAssertNil(entry?.context["trainingSessionId"])
         XCTAssertNotNil(entry?.errorDescription)
     }
 

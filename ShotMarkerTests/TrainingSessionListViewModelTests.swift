@@ -491,7 +491,7 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertEqual(entry?.level, .info)
         XCTAssertEqual(entry?.category, .training)
         XCTAssertEqual(entry?.context["mergedSessionCount"], "2")
-        XCTAssertEqual(entry?.context["trainingSessionId"], firstSession.id.uuidString)
+        XCTAssertNil(entry?.context["trainingSessionId"])
     }
 
     func testMergeSelectedSessionsLogsFailure() async throws {
