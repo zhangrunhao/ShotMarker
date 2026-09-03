@@ -24,17 +24,17 @@ nonisolated enum HighlightClipReviewIdentityBuilder {
 
     static func trainingIdentity(for session: TrainingSession) -> HighlightClipReviewTrainingIdentity {
         let markers = session.events
-            .sorted {
-                if $0.markedAt == $1.markedAt {
-                    return $0.id.uuidString < $1.id.uuidString
-                }
-                return $0.markedAt < $1.markedAt
-            }
             .map {
                 HighlightClipReviewMarkerIdentity(
                     id: $0.id,
                     markedAtMilliseconds: milliseconds($0.markedAt),
                 )
+            }
+            .sorted {
+                if $0.markedAtMilliseconds == $1.markedAtMilliseconds {
+                    return $0.id.uuidString < $1.id.uuidString
+                }
+                return $0.markedAtMilliseconds < $1.markedAtMilliseconds
             }
         return HighlightClipReviewTrainingIdentity(
             id: session.id,
@@ -83,7 +83,7 @@ nonisolated enum HighlightClipReviewIdentityBuilder {
         )
     }
 
-    private static func milliseconds(_ date: Date) -> Int64 {
+    static func milliseconds(_ date: Date) -> Int64 {
         Int64((date.timeIntervalSince1970 * 1_000).rounded(.toNearestOrAwayFromZero))
     }
 }

@@ -132,6 +132,41 @@ final class VideoClipSegmentPlannerTests: XCTestCase {
         ])
     }
 
+    func testHighlightPlanUsesUUIDOrderForMarkersInSameNormalizedMillisecond() throws {
+        let lowID = try XCTUnwrap(
+            UUID(uuidString: "00000000-0000-0000-0000-000000001311"),
+        )
+        let highID = try XCTUnwrap(
+            UUID(uuidString: "00000000-0000-0000-0000-000000001312"),
+        )
+        let video = SelectedTrainingVideo(
+            id: "video",
+            recordedStartAt: Date(timeIntervalSince1970: 100),
+            duration: 60,
+        )
+        let session = TrainingSession(
+            startedAt: Date(timeIntervalSince1970: 100),
+            endedAt: Date(timeIntervalSince1970: 160),
+            events: [
+                ShotMarkerEvent(
+                    id: lowID,
+                    markedAt: Date(timeIntervalSince1970: 110.000_2),
+                ),
+                ShotMarkerEvent(
+                    id: highID,
+                    markedAt: Date(timeIntervalSince1970: 110.000_1),
+                ),
+            ],
+        )
+
+        let plan = VideoClipSegmentPlanner.highlightPlan(
+            for: session,
+            videos: [video],
+        )
+
+        XCTAssertEqual(plan.segments.first?.markerIDs, [lowID, highID])
+    }
+
     func testHighlightPlanMergesSegmentsSeparatedByOneSecondGap() throws {
         let firstMarker = try ShotMarkerEvent(
             id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000001601")),

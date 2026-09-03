@@ -23,7 +23,7 @@ nonisolated struct HighlightClipReviewContentHasher: HighlightClipReviewContentH
     }
 
     func sha256(for fileURL: URL) async throws -> String {
-        try await Task.detached(priority: .utility) {
+        let hashingTask = Task.detached(priority: .utility) {
             let handle = try FileHandle(forReadingFrom: fileURL)
             defer { try? handle.close() }
 
@@ -36,6 +36,11 @@ nonisolated struct HighlightClipReviewContentHasher: HighlightClipReviewContentH
                 digest.update(data: data)
             }
             return digest.finalize().map { String(format: "%02x", $0) }.joined()
-        }.value
+        }
+        return try await withTaskCancellationHandler {
+            try await hashingTask.value
+        } onCancel: {
+            hashingTask.cancel()
+        }
     }
 }

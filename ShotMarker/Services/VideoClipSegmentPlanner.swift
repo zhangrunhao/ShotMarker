@@ -146,10 +146,12 @@ enum VideoClipSegmentPlanner {
         clipSettings: ClipSettings = .default,
     ) -> HighlightClipPlan {
         let events = session.events.sorted {
-            if $0.markedAt == $1.markedAt {
+            let lhsMilliseconds = HighlightClipReviewIdentityBuilder.milliseconds($0.markedAt)
+            let rhsMilliseconds = HighlightClipReviewIdentityBuilder.milliseconds($1.markedAt)
+            if lhsMilliseconds == rhsMilliseconds {
                 return $0.id.uuidString < $1.id.uuidString
             }
-            return $0.markedAt < $1.markedAt
+            return lhsMilliseconds < rhsMilliseconds
         }
         let matchingSegments = events.compactMap { event in
             highlightSegment(

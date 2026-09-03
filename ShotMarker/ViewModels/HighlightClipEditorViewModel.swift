@@ -38,6 +38,9 @@ final class HighlightClipEditorViewModel: ObservableObject {
     }
 
     func apply(_ edit: HighlightClipRangeEdit) throws {
+        guard !isSaving else {
+            return
+        }
         let editedItem = try HighlightClipReviewPlanner.apply(
             edit,
             to: workingItem,
@@ -59,12 +62,18 @@ final class HighlightClipEditorViewModel: ObservableObject {
     }
 
     func setIncluded(_ isIncluded: Bool) {
+        guard !isSaving else {
+            return
+        }
         var editedItem = workingItem
         editedItem.isIncluded = isIncluded
         applyEffectiveChange(editedItem)
     }
 
     func restoreDefault() {
+        guard !isSaving else {
+            return
+        }
         var editedItem = workingItem
         editedItem.start = workingItem.defaultStart
         editedItem.duration = workingItem.defaultDuration
@@ -72,6 +81,9 @@ final class HighlightClipEditorViewModel: ObservableObject {
     }
 
     func discardChanges() {
+        guard !isSaving else {
+            return
+        }
         workingItem = openedItem
         hasChanges = false
         saveErrorMessage = nil
@@ -83,14 +95,17 @@ final class HighlightClipEditorViewModel: ObservableObject {
         }
 
         isSaving = true
+        let submittedItem = workingItem
         defer {
             isSaving = false
         }
 
         do {
-            let navigation = try await confirmWorkingCopy(workingItem)
-            workingItem.confirmationState = .confirmed
-            openedItem = workingItem
+            let navigation = try await confirmWorkingCopy(submittedItem)
+            var confirmedItem = submittedItem
+            confirmedItem.confirmationState = .confirmed
+            workingItem = confirmedItem
+            openedItem = confirmedItem
             hasChanges = false
             saveErrorMessage = nil
             return navigation

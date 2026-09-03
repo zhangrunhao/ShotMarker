@@ -48,6 +48,43 @@ final class HighlightClipReviewContentHasherTests: XCTestCase {
             XCTAssertEqual($0 as? TestError, .readFailed)
         }
     }
+
+    func testCallerCancellationStopsDetachedHashingTask() async throws {
+        let fileURL = try makeFile(bytes: Data([1]))
+        let readStarted = expectation(description: "hash read started")
+        let allowFirstReadToFinish = DispatchSemaphore(value: 0)
+        let lock = NSLock()
+        var readCount = 0
+        let hasher = HighlightClipReviewContentHasher(
+            chunkSize: 1,
+            readChunk: { _, _ in
+                lock.lock()
+                readCount += 1
+                let isFirstRead = readCount == 1
+                lock.unlock()
+                guard isFirstRead else {
+                    return nil
+                }
+                readStarted.fulfill()
+                allowFirstReadToFinish.wait()
+                return Data([1])
+            },
+        )
+        let task = Task {
+            try await hasher.sha256(for: fileURL)
+        }
+        await fulfillment(of: [readStarted], timeout: 1)
+
+        task.cancel()
+        allowFirstReadToFinish.signal()
+
+        do {
+            _ = try await task.value
+            XCTFail("Expected caller cancellation to stop hashing")
+        } catch is CancellationError {
+            // Expected.
+        }
+    }
 }
 
 private extension HighlightClipReviewContentHasherTests {

@@ -61,6 +61,7 @@ struct HighlightClipEditorView: View {
             }
             .padding()
         }
+        .disabled(editorViewModel.isSaving)
         .task(id: playbackLoadAttempt) {
             guard loadsMedia else {
                 return
@@ -87,6 +88,7 @@ struct HighlightClipEditorView: View {
                     requestExit(.review)
                 }
                 .frame(minWidth: 44, minHeight: 44)
+                .disabled(editorViewModel.isSaving)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -195,6 +197,9 @@ struct HighlightClipEditorView: View {
     }
 
     private func requestExit(_ action: PendingEditorExitAction) {
+        guard !editorViewModel.isSaving else {
+            return
+        }
         guard editorViewModel.hasChanges else {
             performExit(action)
             return

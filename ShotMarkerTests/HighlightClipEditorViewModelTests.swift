@@ -135,6 +135,35 @@ final class HighlightClipEditorViewModelTests: XCTestCase {
         let callCount = await gate.callCount()
         XCTAssertEqual(callCount, 1)
     }
+
+    func testEditsAndDiscardAreIgnoredWhileConfirmationIsSaving() async throws {
+        let gate = ConfirmationGate()
+        let viewModel = makeViewModel(
+            item: makeItem(state: .confirmed),
+            confirm: gate.confirm,
+        )
+        try viewModel.moveRange(by: 1)
+        let submittedItem = viewModel.workingItem
+        let confirmation = Task { await viewModel.confirm() }
+        await gate.waitUntilEntered()
+
+        try viewModel.moveRange(by: -1)
+        viewModel.setIncluded(false)
+        viewModel.restoreDefault()
+        viewModel.discardChanges()
+
+        XCTAssertEqual(viewModel.workingItem, submittedItem)
+        XCTAssertTrue(viewModel.hasChanges)
+
+        await gate.release(with: .returnToReview)
+        _ = await confirmation.value
+
+        var confirmedSubmittedItem = submittedItem
+        confirmedSubmittedItem.confirmationState = .confirmed
+        XCTAssertEqual(viewModel.workingItem, confirmedSubmittedItem)
+        XCTAssertEqual(viewModel.displayedConfirmationState, .confirmed)
+        XCTAssertFalse(viewModel.hasChanges)
+    }
 }
 
 @MainActor

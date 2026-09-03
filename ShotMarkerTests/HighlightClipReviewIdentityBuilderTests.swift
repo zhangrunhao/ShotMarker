@@ -108,6 +108,48 @@ final class HighlightClipReviewIdentityBuilderTests: XCTestCase {
         XCTAssertEqual(identity.markers.map(\.id), [low.id, high.id])
     }
 
+    func testMarkersWithinSameNormalizedMillisecondIgnoreSubmillisecondOrderNoise() {
+        let trainingID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
+        let lowID = UUID(uuidString: "00000000-0000-0000-0000-000000000021")!
+        let highID = UUID(uuidString: "00000000-0000-0000-0000-000000000022")!
+        let start = Date(timeIntervalSince1970: 10)
+        let first = TrainingSession(
+            id: trainingID,
+            startedAt: start,
+            endedAt: start.addingTimeInterval(60),
+            events: [
+                ShotMarkerEvent(
+                    id: highID,
+                    markedAt: Date(timeIntervalSince1970: 20.000_1),
+                ),
+                ShotMarkerEvent(
+                    id: lowID,
+                    markedAt: Date(timeIntervalSince1970: 20.000_2),
+                ),
+            ],
+        )
+        let noisy = TrainingSession(
+            id: trainingID,
+            startedAt: start,
+            endedAt: start.addingTimeInterval(60),
+            events: [
+                ShotMarkerEvent(
+                    id: highID,
+                    markedAt: Date(timeIntervalSince1970: 20.000_2),
+                ),
+                ShotMarkerEvent(
+                    id: lowID,
+                    markedAt: Date(timeIntervalSince1970: 20.000_1),
+                ),
+            ],
+        )
+
+        XCTAssertEqual(
+            HighlightClipReviewIdentityBuilder.trainingIdentity(for: first),
+            HighlightClipReviewIdentityBuilder.trainingIdentity(for: noisy),
+        )
+    }
+
     func testSettingsAndLabelStyleAreNotCombinationInputs() throws {
         let session = makeSession()
         let videos = [makeVideo()]
