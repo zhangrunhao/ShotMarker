@@ -86,13 +86,25 @@ struct ShotMarkerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(
-                store: store,
-                syncService: syncService,
-                logger: logger,
-                logExportService: logExportService,
-                highlightJobManager: highlightJobManager,
-            )
+            #if DEBUG
+                if ProcessInfo.processInfo.environment["SHOTMARKER_UI_TEST_TIMELINE"] == "1" {
+                    HighlightClipTimelineUITestHarnessView()
+                } else {
+                    contentView
+                }
+            #else
+                contentView
+            #endif
         }
+    }
+
+    private var contentView: some View {
+        ContentView(
+            store: store,
+            syncService: syncService,
+            logger: logger,
+            logExportService: logExportService,
+            highlightJobManager: highlightJobManager,
+        )
     }
 }

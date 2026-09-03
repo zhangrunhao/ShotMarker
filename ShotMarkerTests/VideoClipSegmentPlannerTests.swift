@@ -70,18 +70,16 @@ final class VideoClipSegmentPlannerTests: XCTestCase {
         XCTAssertEqual(plan.segments.map(\.markerLabel), ["1/2", "2/2"])
         XCTAssertEqual(plan.segments, [
             HighlightClipSegment(
-                markerID: firstMarker.id,
+                markerIDs: [firstMarker.id],
                 videoID: firstVideo.id,
-                markerAt: firstMarker.markedAt,
                 start: 10,
                 duration: 13,
                 markerNumber: 1,
                 markerTotalCount: 2,
             ),
             HighlightClipSegment(
-                markerID: secondMarker.id,
+                markerIDs: [secondMarker.id],
                 videoID: secondVideo.id,
-                markerAt: secondMarker.markedAt,
                 start: 10,
                 duration: 13,
                 markerNumber: 2,
@@ -120,11 +118,12 @@ final class VideoClipSegmentPlannerTests: XCTestCase {
         XCTAssertEqual(plan.unmatchedMarkerCount, 0)
         XCTAssertEqual(plan.segments.first?.markerLabel, "1-2/2")
         XCTAssertEqual(plan.segments.first?.coveredMarkerCount, 2)
+        XCTAssertEqual(plan.segments.first?.markerIDs, [firstMarker.id, secondMarker.id])
+        XCTAssertEqual(plan.segments.first?.markerNumberRange, 1 ... 2)
         XCTAssertEqual(plan.segments, [
             HighlightClipSegment(
-                markerID: firstMarker.id,
+                markerIDs: [firstMarker.id, secondMarker.id],
                 videoID: video.id,
-                markerAt: firstMarker.markedAt,
                 start: 4,
                 duration: 12,
                 markerNumberRange: 1...2,
@@ -163,9 +162,8 @@ final class VideoClipSegmentPlannerTests: XCTestCase {
         XCTAssertEqual(plan.segments.map(\.markerLabel), ["1-2/2"])
         XCTAssertEqual(plan.segments, [
             HighlightClipSegment(
-                markerID: firstMarker.id,
+                markerIDs: [firstMarker.id, secondMarker.id],
                 videoID: video.id,
-                markerAt: firstMarker.markedAt,
                 start: 6,
                 duration: 13,
                 markerNumberRange: 1...2,

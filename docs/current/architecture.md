@@ -1,17 +1,18 @@
 # ShotMarker 技术架构
 
-- 最后复核：2026-09-02
-- 代码基线：main / 8b33e93
+- 最后复核：2026-09-03
+- 验证代码基线：main 合并结果（父提交 560223f 与 cf534bd）
 
 ## 当前结论
 
-ShotMarker 当前由 iPhone App、Apple Watch App、两组测试 target 和共享同步载荷组成；训练、同步、带样式序数的集锦、日志与远端观测均按下述本地优先边界实现。
+ShotMarker 当前由 iPhone App、Apple Watch App、三组测试 target 和共享同步载荷组成；训练、同步、可审核且带样式序数的集锦、日志与远端观测均按下述本地优先边界实现。
 
 ## 运行单元
 
 - ShotMarker：SwiftUI 主 App；已验证产品范围为 iPhone，工程仍保留未验收的 iPad destination。
 - ShotMarkerWatchApp：Apple Watch App，SwiftUI、HealthKit、WatchConnectivity。
 - ShotMarkerTests：iPhone 单元与服务测试。
+- ShotMarkerUITests：iPhone Simulator UI 测试；通过 DEBUG 专用环境入口验证时间轴四类真实拖动，Release 不包含该入口。
 - ShotMarkerWatchAppTests：Watch 同步、outbox 和运行时测试。
 - Shared：手机与手表共用的训练同步载荷。
 
@@ -26,6 +27,7 @@ ShotMarker 当前由 iPhone App、Apple Watch App、两组测试 target 和共�
 - 集锦任务输入和输出文件保存在 App 沙盒中的稳定相对路径。
 - ClipSettings 保存片段前后时长和 MarkerLabelStyle；旧版缺少样式的设置及任务解码时补入默认样式，已有时长保持不变。
 - 剪辑设置、安装标识等小型配置使用 UserDefaults；HighlightJob 内嵌创建任务时规范化后的完整 ClipSettings 快照。
+- 新建 HighlightJob 同时保存 `clipPlanVersion = 1` 和已验证的 `ConfirmedHighlightSegment` 数组；未确认审核草稿不持久化。
 
 ## Watch 同步
 
@@ -47,11 +49,26 @@ WatchTrainingSyncOutbox
 
 - 视频选择和元数据校验由 Photos/AVFoundation 服务完成。照片库预览先请求禁止网络访问的完整画幅静态图；PhotoKit 没有返回海报时，再从本地可用视频资源提取首帧，不触发 iCloud 下载。
 - iCloud 视频先准备为可读本地资源，再进入规划和导出。
-- VideoClipSegmentPlanner 将绝对打点映射到视频片段并合并相邻片段。
+- 集锦审核与导出链路为：
+
+~~~text
+VideoClipSegmentPlanner 旧规划与默认范围
+→ HighlightClipReviewPlanner 草稿与最终汇总
+→ HighlightClipReviewViewModel
+→ ConfirmedHighlightSegment[] / clipPlanVersion 1
+→ HighlightJobManager
+→ HighlightJobRunner 版本路由
+→ VideoClipEditingService
+~~~
+
+- VideoClipSegmentPlanner 将绝对打点映射到默认视频片段并保留全部关联打点；HighlightClipReviewPlanner 统一 0.1 秒范围、重新编号、汇总、最终相邻合并和快照验证。
+- HighlightClipReviewMediaProvider 提供可取消的中点缩略图与局部胶片帧，并使用有上限的内存缓存；HighlightClipPlaybackController 保证单一活跃播放器、范围结束回起点和观察者清理。
+- 审核 ViewModel 只在本次生成流程内保存排除、范围、媒体和提交状态；视频顺序或前后时长变化会要求重新规划，序数样式变化不销毁范围草稿。
 - MarkerLabelLayout 统一预览与导出的 aspect-fit 画面、归一化中心点、按标签尺寸限制边界，以及 SwiftUI 左上原点到 Core Image 左下原点的转换。
 - TrainingSessionHighlightView 以初值为 false 的页面级状态控制片段序数 DisclosureGroup；展开状态不持久化，设置内容继续绑定从 ClipSettingsStore 加载并自动保存的 MarkerLabelStyle。
 - VideoClipEditingService 使用 AVMutableComposition 组合视频和可用音轨，按显式传入的 MarkerLabelStyle 绘制序数并输出 MOV；导出服务不读取 ClipSettingsStore。
-- HighlightJobManager 管理持久任务；HighlightJobRunner 串行执行，并把任务快照中的样式显式传给导出服务。
+- HighlightJobManager 只复制最终片段引用的视频并管理持久任务；HighlightJobRunner 对版本 1 直接使用精确片段，对两个新字段均缺失的旧 1.2/1.3 任务使用旧规划，其他不一致或未知版本不回退。
+- HighlightJobRunner 串行执行，并把任务快照中的范围与样式显式传给导出服务。
 - App 启动时把遗留的 queued、running 或 saving 任务标为 interrupted。
 - 生成完成只产生本地可播放文件；VideoClipPhotoLibrarySaver 由用户手动触发。
 
@@ -75,5 +92,6 @@ WatchTrainingSyncOutbox
 - PrivacyInfo.xcprivacy 声明 Device ID、Product Interaction、UserDefaults 和文件时间戳用途。
 - Tracking 为 false。
 - 片段序数缩略图和样式不上传，也不产生新的 Analytics 事件。
+- 审核缩略图、胶片帧、范围与原始打点引用不上传；审核日志只记录计数、总时长、是否合并和封闭错误类别。
 - GlitchTip 不配置用户身份，不上传训练记录、视频、截图或本地日志文件。
 - 客户端 DSN 可以随 App 分发；服务端管理令牌不得进入工程或 Git。

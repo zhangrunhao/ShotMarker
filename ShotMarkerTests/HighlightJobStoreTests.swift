@@ -51,6 +51,68 @@ final class HighlightJobStoreTests: XCTestCase {
         XCTAssertEqual(job.clipSettings.markerLabelStyle, .default)
     }
 
+    func testVersionOneJobRoundTripKeepsExactConfirmedSegments() throws {
+        let segment = ConfirmedHighlightSegment(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000060001")!,
+            videoID: "photo-asset-id",
+            markerIDs: [UUID(uuidString: "00000000-0000-0000-0000-000000010101")!],
+            start: 12.3,
+            duration: 4.5,
+            markerNumberLowerBound: 1,
+            markerNumberUpperBound: 1,
+            markerTotalCount: 1,
+        )
+        var job = try makeJob(status: .interrupted)
+        job.clipPlanVersion = 1
+        job.confirmedSegments = [segment]
+        let fileURL = temporaryDirectory.appendingPathComponent("highlight-jobs.json")
+        let store = HighlightJobStore(fileURL: fileURL)
+
+        try store.saveJobs([job])
+        let loaded = try XCTUnwrap(store.loadJobs().first)
+
+        XCTAssertEqual(loaded.clipPlanVersion, 1)
+        XCTAssertEqual(loaded.confirmedSegments, [segment])
+    }
+
+    func testVersion12AndVersion13FixturesDecodeWithoutClipSnapshot() throws {
+        for fixture in ["HighlightJob-1.2.json", "HighlightJob-1.3.json"] {
+            let url = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .appendingPathComponent("Fixtures/\(fixture)")
+            let job = try XCTUnwrap(HighlightJobStore(fileURL: url).loadJobs().first)
+
+            XCTAssertNil(job.clipPlanVersion, fixture)
+            XCTAssertNil(job.confirmedSegments, fixture)
+        }
+    }
+
+    func testLegacyEncodingDoesNotInventVersionOrConfirmedSegments() throws {
+        let job = try makeJob(status: .interrupted)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(job)) as? [String: Any],
+        )
+
+        XCTAssertNil(object["clipPlanVersion"])
+        XCTAssertNil(object["confirmedSegments"])
+    }
+
+    func testMalformedConfirmedSegmentsDecodesAsInvalidRunnerSentinel() throws {
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(try makeJob(status: .interrupted)),
+            ) as? [String: Any],
+        )
+        object["clipPlanVersion"] = 1
+        object["confirmedSegments"] = "damaged"
+        let data = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(HighlightJob.self, from: data)
+
+        XCTAssertEqual(decoded.clipPlanVersion, 1)
+        XCTAssertEqual(decoded.confirmedSegments, [])
+    }
+
     func testLoadMarksLaunchInterruptedStatusesAsInterrupted() throws {
         let fileURL = temporaryDirectory.appendingPathComponent("highlight-jobs.json")
         let store = HighlightJobStore(fileURL: fileURL)
@@ -97,6 +159,30 @@ final class HighlightJobStoreTests: XCTestCase {
                 "createdAt",
                 "updatedAt",
             ]),
+        )
+
+        var versionOneJob = job
+        versionOneJob.clipPlanVersion = 1
+        versionOneJob.confirmedSegments = [
+            ConfirmedHighlightSegment(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000060002")!,
+                videoID: "photo-asset-id",
+                markerIDs: [UUID(uuidString: "00000000-0000-0000-0000-000000010101")!],
+                start: 12.3,
+                duration: 4.5,
+                markerNumberLowerBound: 1,
+                markerNumberUpperBound: 1,
+                markerTotalCount: 1,
+            ),
+        ]
+        let versionOneObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(versionOneJob),
+            ) as? [String: Any],
+        )
+        XCTAssertEqual(
+            Set(versionOneObject.keys),
+            Set(jsonObject.keys).union(["clipPlanVersion", "confirmedSegments"]),
         )
     }
 

@@ -55,26 +55,42 @@ struct HighlightJobRunner {
         job.updatedAt = Date()
         onChange(job)
 
-        let selectedVideos = job.selectedVideos.map(\.selectedTrainingVideo)
-        let plan = VideoClipSegmentPlanner.highlightPlan(
-            for: job.trainingSession,
-            videos: selectedVideos,
-            clipSettings: job.clipSettings,
-        )
-        guard plan.canGenerate else {
-            job.status = .failed
-            job.errorMessage = "所选视频没有覆盖任何打点。"
-            job.updatedAt = Date()
-            onChange(job)
-            return job
-        }
-
-        let videosByID = Dictionary(uniqueKeysWithValues: job.selectedVideos.map { ($0.id, $0) })
-
         do {
+            let selectedVideos = job.selectedVideos.map(\.selectedTrainingVideo)
+            let segments: [HighlightClipSegment]
+            switch (job.clipPlanVersion, job.confirmedSegments) {
+            case (nil, nil):
+                let legacy = VideoClipSegmentPlanner.highlightPlan(
+                    for: job.trainingSession,
+                    videos: selectedVideos,
+                    clipSettings: job.clipSettings,
+                )
+                guard legacy.canGenerate else {
+                    throw HighlightJobRunnerError.noMatchedMarkers
+                }
+                segments = legacy.segments
+            case (nil, .some):
+                throw HighlightJobClipPlanError.snapshotWithoutVersion
+            case (1, nil):
+                throw HighlightJobClipPlanError.missingVersionOneSnapshot
+            case (1, .some(let confirmed)):
+                do {
+                    segments = try HighlightClipReviewPlanner.validateConfirmedSegments(
+                        confirmed,
+                        videos: selectedVideos,
+                        validMarkerIDs: Set(job.trainingSession.events.map(\.id)),
+                    ).map(\.highlightClipSegment)
+                } catch {
+                    throw HighlightJobClipPlanError.invalidVersionOneSnapshot
+                }
+            case (.some, _):
+                throw HighlightJobClipPlanError.unsupportedVersion
+            }
+
+            let videosByID = Dictionary(uniqueKeysWithValues: job.selectedVideos.map { ($0.id, $0) })
             try Task.checkCancellation()
             let temporaryOutputURL = try await makeHighlightClip(
-                plan.segments,
+                segments,
                 job.clipSettings.markerLabelStyle,
                 { progress in
                     job.progress = HighlightJobProgress(
@@ -96,9 +112,10 @@ struct HighlightJobRunner {
             let outputRelativePath = try fileStore.moveOutputVideo(at: temporaryOutputURL, jobID: job.id)
             job.outputVideoPath = outputRelativePath
             job.status = .completed
+            let markerCount = segments.reduce(0) { $0 + $1.coveredMarkerCount }
             job.progress = HighlightJobProgress(
-                completedMarkerCount: plan.matchedMarkerCount,
-                totalMarkerCount: plan.matchedMarkerCount,
+                completedMarkerCount: markerCount,
+                totalMarkerCount: markerCount,
             )
             job.updatedAt = Date()
             onChange(job)
@@ -127,12 +144,35 @@ struct HighlightJobRunner {
 }
 
 enum HighlightJobRunnerError: LocalizedError, Equatable {
+    case noMatchedMarkers
     case sourceVideoMissing
 
     var errorDescription: String? {
         switch self {
+        case .noMatchedMarkers:
+            "所选视频没有覆盖任何打点。"
         case .sourceVideoMissing:
             "找不到任务使用的视频，请重新选择视频。"
+        }
+    }
+}
+
+enum HighlightJobClipPlanError: LocalizedError, Equatable {
+    case snapshotWithoutVersion
+    case missingVersionOneSnapshot
+    case invalidVersionOneSnapshot
+    case unsupportedVersion
+
+    var errorDescription: String? {
+        switch self {
+        case .snapshotWithoutVersion:
+            "任务缺少片段计划版本，请重新创建集锦。"
+        case .missingVersionOneSnapshot:
+            "任务缺少已确认片段，请重新创建集锦。"
+        case .invalidVersionOneSnapshot:
+            "任务的已确认片段无效，请重新创建集锦。"
+        case .unsupportedVersion:
+            "任务使用了不支持的片段计划版本，请重新创建集锦。"
         }
     }
 }

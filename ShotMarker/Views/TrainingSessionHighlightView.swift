@@ -26,6 +26,10 @@
         @State private var preparationTasks: [String: Task<Void, Never>] = [:]
         @State private var preparationRunIDs: [String: UUID] = [:]
         @State private var alert: HighlightFlowAlert?
+        @State private var reviewViewModel: HighlightClipReviewViewModel?
+        @State private var isReviewPresented = false
+        @State private var pendingReviewMutation: HighlightReviewPendingMutation?
+        @State private var isShowingDiscardReviewConfirmation = false
         @State private var isExportingTrainingSession = false
         @State private var trainingSessionExportDocument: TrainingSessionJSONDocument?
 
@@ -57,6 +61,10 @@
         }
 
         var body: some View {
+            alertedFlowView
+        }
+
+        private var baseFlowView: some View {
             List {
                 trainingSummarySection
                 clipSettingsSection
@@ -66,16 +74,14 @@
                 coverageAndGenerationSections
             }
             .navigationTitle("生成集锦")
+            .navigationBarBackButtonHidden(shouldGuardWholeFlowExit)
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        prepareTrainingSessionExport()
-                    } label: {
-                        Label("导出记录", systemImage: "square.and.arrow.up")
-                    }
-                    .disabled(isCreatingHighlightJob || isExportingTrainingSession)
-                }
+                flowToolbarContent
             }
+        }
+
+        private var flowLifecycleView: some View {
+            baseFlowView
             .fileExporter(
                 isPresented: $isExportingTrainingSession,
                 document: trainingSessionExportDocument,
@@ -99,6 +105,13 @@
                 ClipSettingsStore.shared.save(newSettings)
                 logPlanUpdated()
             }
+            .navigationDestination(isPresented: $isReviewPresented) {
+                reviewDestination
+            }
+        }
+
+        private var alertedFlowView: some View {
+            flowLifecycleView
             .alert(alert?.title ?? "", isPresented: isShowingAlert) {
                 Button("好", role: .cancel) {}
             } message: {
@@ -112,9 +125,71 @@
             } message: {
                 Text("可能需要从 iCloud 下载原视频，过程中可能消耗流量。")
             }
+            .alert("重新规划片段？", isPresented: isShowingReplanConfirmation) {
+                Button("取消", role: .cancel) {
+                    pendingReviewMutation = nil
+                }
+                Button("重新规划", role: .destructive) {
+                    applyPendingReviewMutation()
+                }
+            } message: {
+                Text("更改视频或剪辑范围会丢失当前的排除与范围调整。")
+            }
+            .alert("放弃片段调整？", isPresented: $isShowingDiscardReviewConfirmation) {
+                Button("取消", role: .cancel) {}
+                Button("放弃并退出", role: .destructive) {
+                    discardReviewAndExitFlow()
+                }
+            } message: {
+                Text("当前片段的排除与范围调整将不会保留。")
+            }
             .onDisappear {
-                cancelPreparationTasks()
-                cleanupTemporaryVideos()
+                cleanupAfterWholeFlowDisappearsIfNeeded()
+            }
+        }
+
+        @ToolbarContentBuilder
+        private var flowToolbarContent: some ToolbarContent {
+            if shouldGuardWholeFlowExit {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        isShowingDiscardReviewConfirmation = true
+                    } label: {
+                        Label("返回", systemImage: "chevron.backward")
+                    }
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    prepareTrainingSessionExport()
+                } label: {
+                    Label("导出记录", systemImage: "square.and.arrow.up")
+                }
+                .disabled(isCreatingHighlightJob || isExportingTrainingSession)
+            }
+        }
+
+        @ViewBuilder
+        private var reviewDestination: some View {
+            if let reviewViewModel {
+                HighlightClipReviewView(
+                    viewModel: reviewViewModel,
+                    makePlaybackController: {
+                        HighlightClipPlaybackController { video in
+                            try await reviewViewModel.mediaProvider.asset(for: video)
+                        }
+                    },
+                    onRequestVideoReselection: {
+                        isReviewPresented = false
+                    },
+                )
+            } else {
+                ContentUnavailableView(
+                    "没有可审核片段",
+                    systemImage: "film",
+                    description: Text("返回后重新选择视频。"),
+                )
             }
         }
 
@@ -146,6 +221,93 @@
             )
         }
 
+        private var isShowingReplanConfirmation: Binding<Bool> {
+            Binding(
+                get: { pendingReviewMutation != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingReviewMutation = nil
+                    }
+                },
+            )
+        }
+
+        private var shouldGuardWholeFlowExit: Bool {
+            reviewViewModel?.hasUserChanges == true
+        }
+
+        private var guardedSelectedItems: Binding<[PhotosPickerItem]> {
+            Binding(
+                get: { selectedItems },
+                set: { proposedItems in
+                    guard proposedItems != selectedItems else {
+                        return
+                    }
+                    guard reviewViewModel != nil else {
+                        selectedItems = proposedItems
+                        return
+                    }
+                    pendingReviewMutation = .selectedItems(proposedItems)
+                },
+            )
+        }
+
+        private var guardedSecondsBeforeMarker: Binding<TimeInterval> {
+            guardedRangeSetting(
+                currentValue: { clipSettings.secondsBeforeMarker },
+                mutation: HighlightReviewPendingMutation.secondsBeforeMarker,
+                apply: { clipSettings.secondsBeforeMarker = $0 },
+            )
+        }
+
+        private var guardedSecondsAfterMarker: Binding<TimeInterval> {
+            guardedRangeSetting(
+                currentValue: { clipSettings.secondsAfterMarker },
+                mutation: HighlightReviewPendingMutation.secondsAfterMarker,
+                apply: { clipSettings.secondsAfterMarker = $0 },
+            )
+        }
+
+        private func guardedRangeSetting(
+            currentValue: @escaping () -> TimeInterval,
+            mutation: @escaping (TimeInterval) -> HighlightReviewPendingMutation,
+            apply: @escaping (TimeInterval) -> Void,
+        ) -> Binding<TimeInterval> {
+            Binding(
+                get: currentValue,
+                set: { proposedValue in
+                    guard proposedValue != currentValue() else {
+                        return
+                    }
+                    guard reviewViewModel != nil else {
+                        apply(proposedValue)
+                        return
+                    }
+                    pendingReviewMutation = mutation(proposedValue)
+                },
+            )
+        }
+
+        @MainActor
+        private func applyPendingReviewMutation() {
+            guard let pendingReviewMutation else {
+                return
+            }
+
+            reviewViewModel?.cancelMediaLoading()
+            reviewViewModel = nil
+            self.pendingReviewMutation = nil
+
+            switch pendingReviewMutation {
+            case .selectedItems(let items):
+                selectedItems = items
+            case .secondsBeforeMarker(let value):
+                clipSettings.secondsBeforeMarker = value
+            case .secondsAfterMarker(let value):
+                clipSettings.secondsAfterMarker = value
+            }
+        }
+
         private var trainingSummarySection: some View {
             Section("训练") {
                 LabeledContent("时间", value: trainingRangeText)
@@ -155,11 +317,11 @@
 
         private var clipSettingsSection: some View {
             Section("剪辑范围") {
-                Stepper(value: $clipSettings.secondsBeforeMarker, in: 0 ... 20, step: 1) {
+                Stepper(value: guardedSecondsBeforeMarker, in: 0 ... 20, step: 1) {
                     LabeledContent("打点前", value: "\(Int(clipSettings.secondsBeforeMarker)) 秒")
                 }
 
-                Stepper(value: $clipSettings.secondsAfterMarker, in: 1 ... 20, step: 1) {
+                Stepper(value: guardedSecondsAfterMarker, in: 1 ... 20, step: 1) {
                     LabeledContent("打点后", value: "\(Int(clipSettings.secondsAfterMarker)) 秒")
                 }
             }
@@ -169,7 +331,7 @@
         private var videoPickerSection: some View {
             Section {
                 PhotosPicker(
-                    selection: $selectedItems,
+                    selection: guardedSelectedItems,
                     maxSelectionCount: 20,
                     matching: .videos,
                     photoLibrary: .shared(),
@@ -214,16 +376,14 @@
         private var generateHighlightSection: some View {
             Section {
                 Button {
-                    Task {
-                        await createHighlightJob()
-                    }
+                    presentReview()
                 } label: {
                     HStack {
                         if isCreatingHighlightJob {
                             ProgressView()
                         }
 
-                        Text(isCreatingHighlightJob ? "创建中" : "生成集锦")
+                        Text(isCreatingHighlightJob ? "创建中" : "下一步：审核片段")
                             .frame(maxWidth: .infinity)
                     }
                 }
@@ -294,8 +454,10 @@
                     "training.session.export.failed",
                     category: .training,
                     message: "单次训练记录导出失败",
-                    error: error,
-                    context: highlightContext(),
+                    error: nil,
+                    context: highlightContext(extra: [
+                        "errorCategory": "serializationFailed",
+                    ]),
                 )
                 alert = HighlightFlowAlert(
                     title: "导出失败",
@@ -326,8 +488,10 @@
                     "training.session.export.failed",
                     category: .training,
                     message: "单次训练记录导出失败",
-                    error: error,
-                    context: highlightContext(),
+                    error: nil,
+                    context: highlightContext(extra: [
+                        "errorCategory": "fileExportFailed",
+                    ]),
                 )
                 alert = HighlightFlowAlert(
                     title: "导出失败",
@@ -530,7 +694,7 @@
                 "video.prepare.paused",
                 category: .video,
                 message: "已暂停准备所选视频",
-                context: highlightContext(extra: ["videoID": itemID]),
+                context: videoPreparationContext(itemIndex: itemIndex, video: item.video),
             )
         }
 
@@ -567,9 +731,7 @@
                 "video.prepare.started",
                 category: .video,
                 message: "开始准备所选视频",
-                context: highlightContext(extra: [
-                    "videoID": video.id,
-                ]),
+                context: videoPreparationContext(itemIndex: itemIndex, video: video),
             )
 
             do {
@@ -602,9 +764,7 @@
                     "video.prepare.succeeded",
                     category: .video,
                     message: "所选视频已准备完成",
-                    context: highlightContext(extra: [
-                        "videoID": video.id,
-                    ]),
+                    context: videoPreparationContext(itemIndex: latestIndex, video: video),
                 )
             } catch {
                 guard preparationRunIDs[itemID] == runID,
@@ -634,10 +794,13 @@
                     "video.prepare.failed",
                     category: .video,
                     message: "所选视频准备失败",
-                    context: highlightContext(extra: [
-                        "videoID": video.id,
-                        "error": "\(error)",
-                    ]),
+                    context: videoPreparationContext(
+                        itemIndex: latestIndex,
+                        video: video,
+                        extra: [
+                            "errorCategory": Self.videoPreparationErrorCategory(error),
+                        ],
+                    ),
                 )
             }
         }
@@ -662,6 +825,7 @@
 
         @MainActor
         private func loadSelectedVideos(from items: [PhotosPickerItem]) async {
+            let previousSelectionVideos = selectedVideoItems.compactMap(\.video)
             let retainedItemIDs = Set(items.compactMap(\.itemIdentifier))
             let retainedPreparationItems = selectedVideoItems
                 .filter { retainedItemIDs.contains($0.id) && ($0.isPreparing || $0.isPreparationPaused) }
@@ -670,7 +834,7 @@
                 }
 
             cancelPreparationTasks(excluding: retainedItemIDs)
-            cleanupTemporaryVideos()
+            cleanupTemporaryVideos(previousSelectionVideos)
             selectedVideos = []
             selectedVideoItems = []
 
@@ -734,68 +898,168 @@
         }
 
         @MainActor
-        private func createHighlightJob() async {
-            let currentPlan = plan
-            guard currentPlan.canGenerate else {
+        private func presentReview() {
+            let availableVideos = selectedVideoItems.availableVideos
+            let normalizedSettings = clipSettings.normalized
+            guard !availableVideos.isEmpty else {
                 return
             }
 
-            guard let highlightJobManager else {
-                alert = HighlightFlowAlert(title: "无法创建任务", message: "集锦任务管理器不可用。")
+            if let reviewViewModel,
+               !reviewViewModel.requiresInvalidation(
+                   videos: availableVideos,
+                   clipSettings: normalizedSettings,
+               )
+            {
+                isReviewPresented = true
                 return
             }
 
-            logger.info(
-                "highlight.job.create.started",
-                category: .video,
-                message: "开始创建集锦任务",
-                context: highlightPlanContext(currentPlan, extra: [
-                    "segmentCount": "\(currentPlan.segments.count)",
-                    "secondsBeforeMarker": Self.secondsString(clipSettings.secondsBeforeMarker),
-                    "secondsAfterMarker": Self.secondsString(clipSettings.secondsAfterMarker),
-                ]),
+            reviewViewModel?.cancelMediaLoading()
+            let reviewDraft = HighlightClipReviewPlanner.makeDraft(
+                for: session,
+                videos: availableVideos,
+                clipSettings: normalizedSettings,
             )
-            isCreatingHighlightJob = true
-            defer {
-                isCreatingHighlightJob = false
+            guard !reviewDraft.items.isEmpty else {
+                alert = HighlightFlowAlert(
+                    title: "没有可审核片段",
+                    message: "所选视频没有覆盖任何打点。请确认视频是否对应这次训练。",
+                )
+                return
             }
 
-            do {
-                _ = try await highlightJobManager.createJob(
-                    session: session,
-                    selectedVideos: selectedVideos,
-                    clipSettings: clipSettings,
-                )
-                cancelPreparationTasks()
-                cleanupTemporaryVideos()
-                selectedItems = []
-                selectedVideos = []
-                selectedVideoItems = []
-                logger.info(
-                    "highlight.job.create.succeeded",
-                    category: .video,
-                    message: "集锦任务创建成功",
-                    context: highlightPlanContext(currentPlan),
-                )
+            let mediaProvider = HighlightClipReviewMediaProvider.live(
+                photoLibraryAssetProvider: photoLibraryAssetProvider,
+            )
+            let settingsBinding = Binding<ClipSettings>(
+                get: { self.clipSettings },
+                set: { self.clipSettings = $0 },
+            )
+            let cleanupVideos = selectedVideoItems.compactMap(\.video)
+            let defaultCardCount = reviewDraft.items.count
+            let matchedMarkerCount = reviewDraft.matchedMarkerCount
+            let manager = highlightJobManager
+            let submissionVideos = availableVideos
+            let viewModel = HighlightClipReviewViewModel(
+                draft: reviewDraft,
+                videos: submissionVideos,
+                clipSettings: normalizedSettings,
+                mediaProvider: mediaProvider,
+                submitSegments: { confirmedSegments in
+                    guard let manager else {
+                        throw HighlightReviewFlowError.jobManagerUnavailable
+                    }
+
+                    let includedCardCount = self.reviewViewModel?.items.filter(\.isIncluded).count ?? 0
+                    let context = reviewContext(
+                        defaultCardCount: defaultCardCount,
+                        matchedMarkerCount: matchedMarkerCount,
+                        includedCardCount: includedCardCount,
+                        segments: confirmedSegments,
+                    )
+                    logger.info(
+                        "highlight.review.submit.started",
+                        category: .video,
+                        message: "开始按审核结果创建集锦任务",
+                        context: context,
+                    )
+                    isCreatingHighlightJob = true
+                    defer {
+                        isCreatingHighlightJob = false
+                    }
+
+                    do {
+                        _ = try await manager.createJob(
+                            session: session,
+                            selectedVideos: submissionVideos,
+                            clipSettings: settingsBinding.wrappedValue.normalized,
+                            confirmedSegments: confirmedSegments,
+                        )
+                        logger.info(
+                            "highlight.review.submit.succeeded",
+                            category: .video,
+                            message: "审核后的集锦任务创建成功",
+                            context: context,
+                        )
+                    } catch {
+                        logger.error(
+                            "highlight.review.submit.failed",
+                            category: .video,
+                            message: "审核后的集锦任务创建失败",
+                            error: nil,
+                            context: context.merging([
+                                "errorCategory": Self.jobCreationErrorCategory(error),
+                            ]) { _, newValue in newValue },
+                        )
+                        throw error
+                    }
+                },
+                onSubmissionSucceeded: {
+                    completeSuccessfulHighlightCreation(cleanupVideos: cleanupVideos)
+                },
+            )
+            reviewViewModel = viewModel
+            logger.info(
+                "highlight.review.prepared",
+                category: .video,
+                message: "集锦片段审核已准备",
+                context: reviewContext(
+                    defaultCardCount: defaultCardCount,
+                    matchedMarkerCount: matchedMarkerCount,
+                    includedCardCount: reviewDraft.items.count,
+                    segments: viewModel.summary.finalSegments,
+                ),
+            )
+            isReviewPresented = true
+        }
+
+        @MainActor
+        private func completeSuccessfulHighlightCreation(
+            cleanupVideos: [SelectedTrainingVideo],
+        ) {
+            cancelPreparationTasks()
+            reviewViewModel?.cancelMediaLoading()
+            cleanupTemporaryVideos(cleanupVideos)
+            pendingReviewMutation = nil
+            selectedVideos = []
+            selectedVideoItems = []
+            selectedItems = []
+            reviewViewModel = nil
+            isReviewPresented = false
+
+            Task { @MainActor in
+                await Task.yield()
                 dismiss()
-            } catch {
-                logger.error(
-                    "highlight.job.create.failed",
-                    category: .video,
-                    message: "集锦任务创建失败",
-                    error: error,
-                    context: highlightPlanContext(currentPlan),
-                )
-                alert = HighlightFlowAlert(
-                    title: "创建任务失败",
-                    message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
-                )
             }
+        }
+
+        @MainActor
+        private func discardReviewAndExitFlow() {
+            cancelPreparationTasks()
+            reviewViewModel?.cancelMediaLoading()
+            cleanupTemporaryVideos(selectedVideoItems.compactMap(\.video))
+            pendingReviewMutation = nil
+            reviewViewModel = nil
+            selectedItems = []
+            selectedVideos = []
+            selectedVideoItems = []
+            dismiss()
+        }
+
+        @MainActor
+        private func cleanupAfterWholeFlowDisappearsIfNeeded() {
+            guard !isReviewPresented else {
+                return
+            }
+
+            cancelPreparationTasks()
+            reviewViewModel?.cancelMediaLoading()
+            cleanupTemporaryVideos(selectedVideoItems.compactMap(\.video))
         }
 
         private func highlightContext(extra: [String: String] = [:]) -> [String: String] {
             var context = [
-                "trainingSessionId": session.id.uuidString,
                 "totalMarkerCount": "\(session.markerCount)",
             ]
             context.merge(extra) { _, newValue in newValue }
@@ -811,6 +1075,37 @@
                 "matchedMarkerCount": "\(plan.matchedMarkerCount)",
                 "unmatchedMarkerCount": "\(plan.unmatchedMarkerCount)",
                 "segmentCount": "\(plan.segments.count)",
+            ].merging(extra) { _, newValue in newValue })
+        }
+
+        private func reviewContext(
+            defaultCardCount: Int,
+            matchedMarkerCount: Int,
+            includedCardCount: Int,
+            segments: [ConfirmedHighlightSegment],
+        ) -> [String: String] {
+            let includedMarkerCount = Set(segments.flatMap(\.markerIDs)).count
+            return highlightContext(extra: [
+                "defaultCardCount": "\(defaultCardCount)",
+                "includedMarkerCount": "\(includedMarkerCount)",
+                "excludedMarkerCount": "\(max(matchedMarkerCount - includedMarkerCount, 0))",
+                "finalSegmentCount": "\(segments.count)",
+                "totalDurationSeconds": String(
+                    format: "%.1f",
+                    segments.reduce(0) { $0 + $1.duration },
+                ),
+                "didMerge": segments.count < includedCardCount ? "true" : "false",
+            ])
+        }
+
+        private func videoPreparationContext(
+            itemIndex: Int,
+            video: SelectedTrainingVideo?,
+            extra: [String: String] = [:],
+        ) -> [String: String] {
+            highlightContext(extra: [
+                "itemIndex": "\(itemIndex + 1)",
+                "source": Self.sourceCategory(for: video),
             ].merging(extra) { _, newValue in newValue })
         }
 
@@ -856,12 +1151,40 @@
             )
         }
 
-        private func cleanupTemporaryVideos() {
-            temporaryFileStore.cleanupTemporaryVideos(selectedVideos)
-        }
-
         private func cleanupTemporaryVideos(_ videos: [SelectedTrainingVideo]) {
             temporaryFileStore.cleanupTemporaryVideos(videos)
+        }
+
+        private nonisolated static func sourceCategory(
+            for video: SelectedTrainingVideo?,
+        ) -> String {
+            guard let video else {
+                return "unknown"
+            }
+            if let url = URL(string: video.id), url.isFileURL {
+                return "pickerFile"
+            }
+            return "photoLibrary"
+        }
+
+        private nonisolated static func videoPreparationErrorCategory(_ error: Error) -> String {
+            error is CancellationError ? "cancelled" : "assetPreparationFailed"
+        }
+
+        private nonisolated static func jobCreationErrorCategory(_ error: Error) -> String {
+            if error is CancellationError {
+                return "cancelled"
+            }
+            if error is HighlightClipReviewPlanningError {
+                return "validation"
+            }
+            if error is HighlightJobFileStoreError {
+                return "fileStore"
+            }
+            if error is HighlightReviewFlowError {
+                return "managerUnavailable"
+            }
+            return "taskCreation"
         }
 
         private nonisolated static func secondsString(_ value: TimeInterval) -> String {
@@ -872,6 +1195,23 @@
     private struct HighlightFlowAlert {
         let title: String
         let message: String
+    }
+
+    private enum HighlightReviewPendingMutation {
+        case selectedItems([PhotosPickerItem])
+        case secondsBeforeMarker(TimeInterval)
+        case secondsAfterMarker(TimeInterval)
+    }
+
+    private enum HighlightReviewFlowError: LocalizedError {
+        case jobManagerUnavailable
+
+        var errorDescription: String? {
+            switch self {
+            case .jobManagerUnavailable:
+                "集锦任务管理器不可用。"
+            }
+        }
     }
 
     #if DEBUG

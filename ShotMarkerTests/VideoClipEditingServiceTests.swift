@@ -40,21 +40,18 @@ final class VideoClipEditingServiceTests: XCTestCase {
     func testMakeHighlightClipExportsPlannedSegmentsIntoOneMovie() async throws {
         let sourceURL = temporaryDirectory.appendingPathComponent("highlight-source.mov")
         try await makeSilentVideo(at: sourceURL, duration: 8)
-        let markerAt = Date(timeIntervalSince1970: 1_000)
         let firstMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002001"))
         let secondMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002002"))
         let segments = [
             HighlightClipSegment(
-                markerID: firstMarkerID,
+                markerIDs: [firstMarkerID],
                 videoID: "video",
-                markerAt: markerAt,
                 start: 1,
                 duration: 2,
             ),
             HighlightClipSegment(
-                markerID: secondMarkerID,
+                markerIDs: [secondMarkerID],
                 videoID: "video",
-                markerAt: markerAt.addingTimeInterval(10),
                 start: 5,
                 duration: 1,
             ),
@@ -80,13 +77,11 @@ final class VideoClipEditingServiceTests: XCTestCase {
         let sourceURL = temporaryDirectory.appendingPathComponent("highlight-fast-export-source.mov")
         try await makeSilentVideo(at: sourceURL, duration: 8)
         let logger = SpyAppLogger()
-        let markerAt = Date(timeIntervalSince1970: 1_000)
         let markerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002501"))
         let segments = [
             HighlightClipSegment(
-                markerID: markerID,
+                markerIDs: [markerID],
                 videoID: "video",
-                markerAt: markerAt,
                 start: 1,
                 duration: 2,
             ),
@@ -107,29 +102,25 @@ final class VideoClipEditingServiceTests: XCTestCase {
     func testMakeHighlightClipRequestsOnlyNeededSegmentsForEachSourceVideo() async throws {
         let sourceURL = temporaryDirectory.appendingPathComponent("highlight-request-source.mov")
         try await makeSilentVideo(at: sourceURL, duration: 40)
-        let markerAt = Date(timeIntervalSince1970: 1_000)
         let firstMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002301"))
         let secondMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002302"))
         let thirdMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002303"))
         let segments = [
             HighlightClipSegment(
-                markerID: firstMarkerID,
+                markerIDs: [firstMarkerID],
                 videoID: "long-video",
-                markerAt: markerAt,
                 start: 6,
                 duration: 6,
             ),
             HighlightClipSegment(
-                markerID: secondMarkerID,
+                markerIDs: [secondMarkerID],
                 videoID: "short-video",
-                markerAt: markerAt.addingTimeInterval(60),
                 start: 10,
                 duration: 5,
             ),
             HighlightClipSegment(
-                markerID: thirdMarkerID,
+                markerIDs: [thirdMarkerID],
                 videoID: "long-video",
-                markerAt: markerAt.addingTimeInterval(120),
                 start: 18,
                 duration: 6,
             ),
@@ -152,15 +143,13 @@ final class VideoClipEditingServiceTests: XCTestCase {
     }
 
     func testAssetRequestPrefersMediumDeliveryForSmallClipSetFromLongSourceVideo() throws {
-        let markerAt = Date(timeIntervalSince1970: 1_000)
         let markerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002401"))
         let request = HighlightClipAssetRequest(
             videoID: "long-video",
             segments: [
                 HighlightClipSegment(
-                    markerID: markerID,
+                    markerIDs: [markerID],
                     videoID: "long-video",
-                    markerAt: markerAt,
                     start: 1_200,
                     duration: 120,
                 ),
@@ -181,23 +170,20 @@ final class VideoClipEditingServiceTests: XCTestCase {
     func testMakeHighlightClipReportsMatchedMarkerProgress() async throws {
         let sourceURL = temporaryDirectory.appendingPathComponent("highlight-progress-source.mov")
         try await makeSilentVideo(at: sourceURL, duration: 8)
-        let markerAt = Date(timeIntervalSince1970: 1_000)
         let firstMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002101"))
         let secondMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002102"))
         let segments = [
             HighlightClipSegment(
-                markerID: firstMarkerID,
+                markerIDs: [firstMarkerID],
                 videoID: "video",
-                markerAt: markerAt,
                 start: 1,
                 duration: 2,
                 markerNumber: 1,
                 markerTotalCount: 2,
             ),
             HighlightClipSegment(
-                markerID: secondMarkerID,
+                markerIDs: [secondMarkerID],
                 videoID: "video",
-                markerAt: markerAt.addingTimeInterval(10),
                 start: 5,
                 duration: 1,
                 markerNumber: 2,
@@ -226,23 +212,20 @@ final class VideoClipEditingServiceTests: XCTestCase {
     func testMakeHighlightClipDoesNotConsumeProgressWhileBuildingComposition() async throws {
         let sourceURL = temporaryDirectory.appendingPathComponent("highlight-composition-progress-source.mov")
         try await makeSilentVideo(at: sourceURL, duration: 8)
-        let markerAt = Date(timeIntervalSince1970: 1_000)
         let firstMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002201"))
         let secondMarkerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002202"))
         let segments = [
             HighlightClipSegment(
-                markerID: firstMarkerID,
+                markerIDs: [firstMarkerID],
                 videoID: "first-video",
-                markerAt: markerAt,
                 start: 1,
                 duration: 2,
                 markerNumber: 1,
                 markerTotalCount: 2,
             ),
             HighlightClipSegment(
-                markerID: secondMarkerID,
+                markerIDs: [secondMarkerID],
                 videoID: "second-video",
-                markerAt: markerAt.addingTimeInterval(10),
                 start: 5,
                 duration: 1,
                 markerNumber: 2,
@@ -329,9 +312,8 @@ final class VideoClipEditingServiceTests: XCTestCase {
         )
         let segments = [
             HighlightClipSegment(
-                markerID: markerID,
+                markerIDs: [markerID],
                 videoID: "video",
-                markerAt: Date(timeIntervalSince1970: 1_000),
                 start: 1,
                 duration: 2,
             ),
@@ -395,9 +377,10 @@ final class VideoClipEditingServiceTests: XCTestCase {
         try await makeSilentVideo(at: sourceURL, duration: 4)
         let logger = SpyAppLogger()
         let segment = HighlightClipSegment(
-            markerID: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002701")),
+            markerIDs: [
+                try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002701")),
+            ],
             videoID: "video",
-            markerAt: Date(timeIntervalSince1970: 1_000),
             start: 1,
             duration: 2,
         )

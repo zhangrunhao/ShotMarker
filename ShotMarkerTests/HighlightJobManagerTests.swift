@@ -53,6 +53,7 @@ final class HighlightJobManagerTests: XCTestCase {
                 ),
             ],
             clipSettings: ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4),
+            confirmedSegments: makeConfirmedSegments(videoID: sourceURL.absoluteString),
         )
         await Task.yield()
 
@@ -61,6 +62,92 @@ final class HighlightJobManagerTests: XCTestCase {
         let storedJobs = try store.loadJobs()
         XCTAssertEqual(storedJobs.first?.status, .completed)
         XCTAssertEqual(analytics.events, [.highlightGenerateSucceeded])
+    }
+
+    func testCreateJobPersistsVersionOneAndValidatedSnapshot() async throws {
+        let segments = makeConfirmedSegments()
+        let manager = makeIdleManager()
+
+        let job = try await manager.createJob(
+            session: makeSession(),
+            selectedVideos: [makeSelectedVideo()],
+            clipSettings: ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4),
+            confirmedSegments: segments,
+        )
+
+        XCTAssertEqual(job.clipPlanVersion, 1)
+        XCTAssertEqual(job.confirmedSegments, segments)
+    }
+
+    func testCreateJobKeepsOnlyVideosReferencedByConfirmedSegments() async throws {
+        let retainedURL = temporaryDirectory.appendingPathComponent("retained.mov")
+        let excludedURL = temporaryDirectory.appendingPathComponent("excluded.mov")
+        try Data([1]).write(to: retainedURL)
+        try Data([2]).write(to: excludedURL)
+        let manager = makeIdleManager()
+
+        let job = try await manager.createJob(
+            session: makeSession(),
+            selectedVideos: [
+                SelectedTrainingVideo(
+                    id: retainedURL.absoluteString,
+                    recordedStartAt: Date(timeIntervalSince1970: 2_000),
+                    duration: 900,
+                ),
+                SelectedTrainingVideo(
+                    id: excludedURL.absoluteString,
+                    recordedStartAt: Date(timeIntervalSince1970: 2_000),
+                    duration: 900,
+                ),
+            ],
+            clipSettings: .default,
+            confirmedSegments: makeConfirmedSegments(videoID: retainedURL.absoluteString),
+        )
+
+        XCTAssertEqual(job.selectedVideos.map(\.id), [retainedURL.absoluteString])
+        XCTAssertTrue(job.selectedVideos[0].source.isJobInputFile)
+    }
+
+    func testCreateJobRejectsInvalidSnapshotBeforePersistingOrCopying() async throws {
+        let store = InMemoryHighlightJobStore()
+        let sourceURL = temporaryDirectory.appendingPathComponent("source.mov")
+        try Data([1]).write(to: sourceURL)
+        let manager = HighlightJobManager(
+            store: store,
+            fileStore: HighlightJobFileStore(baseDirectoryURL: temporaryDirectory),
+            runnerFactory: { _ in .immediateCompleted },
+        )
+        let invalid = [
+            ConfirmedHighlightSegment(
+                id: UUID(),
+                videoID: sourceURL.absoluteString,
+                markerIDs: [],
+                start: 0,
+                duration: 1,
+                markerNumberLowerBound: 1,
+                markerNumberUpperBound: 1,
+                markerTotalCount: 1,
+            ),
+        ]
+
+        do {
+            _ = try await manager.createJob(
+                session: makeSession(),
+                selectedVideos: [
+                    SelectedTrainingVideo(
+                        id: sourceURL.absoluteString,
+                        recordedStartAt: Date(timeIntervalSince1970: 2_000),
+                        duration: 900,
+                    ),
+                ],
+                clipSettings: .default,
+                confirmedSegments: invalid,
+            )
+            XCTFail("Expected invalid snapshot")
+        } catch {
+            XCTAssertEqual(error as? HighlightClipReviewPlanningError, .missingMarkers)
+        }
+        XCTAssertTrue(try store.loadJobs().isEmpty)
     }
 
     func testCreateJobKeepsCapturedStyleAfterDefaultsChange() async throws {
@@ -89,6 +176,7 @@ final class HighlightJobManagerTests: XCTestCase {
                 secondsAfterMarker: 4,
                 markerLabelStyle: capturedStyle,
             ),
+            confirmedSegments: makeConfirmedSegments(),
         )
         settingsStore.save(
             ClipSettings(
@@ -100,6 +188,138 @@ final class HighlightJobManagerTests: XCTestCase {
 
         XCTAssertEqual(job.clipSettings.markerLabelStyle, capturedStyle)
         XCTAssertEqual(manager.jobs.first?.clipSettings.markerLabelStyle, capturedStyle)
+    }
+
+    func testSubmittingAfterMarkerStyleChangeUsesSameSegmentsAndLatestStyle() async throws {
+        let manager = makeIdleManager()
+        let session = try makeSession()
+        let selectedVideos = [makeSelectedVideo()]
+        var latestSettings = ClipSettings.default
+        let viewModel = makeReviewViewModel(
+            selectedVideos: selectedVideos,
+            submitSegments: { segments in
+                _ = try await manager.createJob(
+                    session: session,
+                    selectedVideos: selectedVideos,
+                    clipSettings: latestSettings,
+                    confirmedSegments: segments,
+                )
+            },
+        )
+        let displayedSegments = viewModel.summary.finalSegments
+        let latestStyle = MarkerLabelStyle(
+            fontSizeRatio: 0.18,
+            normalizedCenterX: 0.72,
+            normalizedCenterY: 0.28,
+            textOpacity: 0.65,
+            backgroundOpacity: 0.35,
+        )
+        latestSettings = ClipSettings(
+            secondsBeforeMarker: latestSettings.secondsBeforeMarker,
+            secondsAfterMarker: latestSettings.secondsAfterMarker,
+            markerLabelStyle: latestStyle,
+        )
+
+        await viewModel.submit()
+
+        XCTAssertNil(viewModel.submissionErrorMessage)
+        XCTAssertEqual(manager.jobs.first?.confirmedSegments, displayedSegments)
+        XCTAssertEqual(manager.jobs.first?.clipSettings.markerLabelStyle, latestStyle.normalized)
+    }
+
+    func testCreateJobFailureLeavesTemporaryInputsAndReviewDraftAvailableForRetry() async throws {
+        let sourceURL = temporaryDirectory.appendingPathComponent("retry-source.mov")
+        try Data([1, 2, 3]).write(to: sourceURL)
+        let selectedVideos = [
+            SelectedTrainingVideo(
+                id: sourceURL.absoluteString,
+                recordedStartAt: Date(timeIntervalSince1970: 2_000),
+                duration: 900,
+            ),
+        ]
+        let manager = HighlightJobManager(
+            store: InMemoryHighlightJobStore(),
+            fileStore: FailingCopyHighlightJobFileStore(),
+            runnerFactory: { _ in .immediateCompleted },
+        )
+        var cleanupCallCount = 0
+        let viewModel = makeReviewViewModel(
+            selectedVideos: selectedVideos,
+            submitSegments: { segments in
+                _ = try await manager.createJob(
+                    session: self.makeSession(),
+                    selectedVideos: selectedVideos,
+                    clipSettings: .default,
+                    confirmedSegments: segments,
+                )
+            },
+            onSubmissionSucceeded: {
+                cleanupCallCount += 1
+            },
+        )
+        try viewModel.apply(.moveBy(0.5), itemID: viewModel.items[0].id)
+        let expectedItems = viewModel.items
+
+        await viewModel.submit()
+
+        XCTAssertNotNil(viewModel.submissionErrorMessage)
+        XCTAssertEqual(viewModel.items, expectedItems)
+        XCTAssertEqual(cleanupCallCount, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sourceURL.path))
+    }
+
+    func testSuccessfulCreationCleansAllPickerTemporaryFilesAfterReferencedFilesAreCopied() async throws {
+        let retainedURL = temporaryDirectory.appendingPathComponent("retained-picker.mov")
+        let excludedURL = temporaryDirectory.appendingPathComponent("excluded-picker.mov")
+        try Data([1, 2, 3]).write(to: retainedURL)
+        try Data([4, 5, 6]).write(to: excludedURL)
+        let selectedVideos = [
+            SelectedTrainingVideo(
+                id: retainedURL.absoluteString,
+                recordedStartAt: Date(timeIntervalSince1970: 2_000),
+                duration: 900,
+            ),
+            SelectedTrainingVideo(
+                id: excludedURL.absoluteString,
+                recordedStartAt: Date(timeIntervalSince1970: 2_000),
+                duration: 900,
+            ),
+        ]
+        let fileStore = HighlightJobFileStore(baseDirectoryURL: temporaryDirectory)
+        let manager = HighlightJobManager(
+            store: InMemoryHighlightJobStore(),
+            fileStore: fileStore,
+            runnerFactory: { _ in .immediateCompleted },
+        )
+        var cleanupURLs: [URL] = []
+        let viewModel = makeReviewViewModel(
+            selectedVideos: selectedVideos,
+            submitSegments: { segments in
+                _ = try await manager.createJob(
+                    session: self.makeSession(),
+                    selectedVideos: selectedVideos,
+                    clipSettings: .default,
+                    confirmedSegments: segments,
+                )
+            },
+            onSubmissionSucceeded: {
+                cleanupURLs = selectedVideos.compactMap { URL(string: $0.id) }
+                cleanupURLs.forEach { try? FileManager.default.removeItem(at: $0) }
+            },
+        )
+
+        await viewModel.submit()
+
+        let job = try XCTUnwrap(manager.jobs.first)
+        XCTAssertEqual(job.selectedVideos.map(\.id), [retainedURL.absoluteString])
+        guard case .jobInputFile(let relativePath) = try XCTUnwrap(job.selectedVideos.first).source else {
+            return XCTFail("Expected retained picker source to be copied")
+        }
+        let copiedURL = try fileStore.url(forRelativePath: relativePath)
+        XCTAssertEqual(try Data(contentsOf: copiedURL), Data([1, 2, 3]))
+        XCTAssertEqual(Set(cleanupURLs), Set([retainedURL, excludedURL]))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: retainedURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: excludedURL.path))
     }
 
     func testFailedHighlightGenerationDoesNotTrackSuccess() async throws {
@@ -115,6 +335,7 @@ final class HighlightJobManagerTests: XCTestCase {
             session: makeSession(),
             selectedVideos: [makeSelectedVideo()],
             clipSettings: ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4),
+            confirmedSegments: makeConfirmedSegments(),
         )
         await Task.yield()
 
@@ -133,6 +354,7 @@ final class HighlightJobManagerTests: XCTestCase {
             session: makeSession(),
             selectedVideos: [makeSelectedVideo()],
             clipSettings: ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4),
+            confirmedSegments: makeConfirmedSegments(),
         )
 
         manager.cancel(jobID: job.id)
@@ -174,6 +396,7 @@ final class HighlightJobManagerTests: XCTestCase {
             session: makeSession(),
             selectedVideos: [makeSelectedVideo()],
             clipSettings: ClipSettings(secondsBeforeMarker: 9, secondsAfterMarker: 4),
+            confirmedSegments: makeConfirmedSegments(),
         )
         await gate.waitUntilStarted()
 
@@ -228,6 +451,29 @@ final class HighlightJobManagerTests: XCTestCase {
         await Task.yield()
 
         XCTAssertEqual(runnerStyle, style)
+    }
+
+    func testRestartAndLaunchRecoveryKeepVersionOneSnapshot() async throws {
+        let segments = makeConfirmedSegments()
+        var interruptedJob = try makeJob(status: .interrupted)
+        interruptedJob.clipPlanVersion = 1
+        interruptedJob.confirmedSegments = segments
+        var runnerJob: HighlightJob?
+        let manager = HighlightJobManager(
+            store: InMemoryHighlightJobStore(jobs: [interruptedJob]),
+            fileStore: HighlightJobFileStore(baseDirectoryURL: temporaryDirectory),
+            runnerFactory: { job in
+                runnerJob = job
+                return .immediateCompleted
+            },
+        )
+        manager.load()
+
+        await manager.restart(jobID: interruptedJob.id)
+        await Task.yield()
+
+        XCTAssertEqual(runnerJob?.clipPlanVersion, 1)
+        XCTAssertEqual(runnerJob?.confirmedSegments, segments)
     }
 
     func testClearCompletedJobRemovesFilesAndRecord() throws {
@@ -392,6 +638,74 @@ final class HighlightJobManagerTests: XCTestCase {
         SelectedTrainingVideo(id: "photo-asset-id", recordedStartAt: Date(timeIntervalSince1970: 2_000), duration: 900)
     }
 
+    private func makeConfirmedSegments(
+        videoID: String = "photo-asset-id",
+        markerID: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000040101")!,
+    ) -> [ConfirmedHighlightSegment] {
+        [
+            ConfirmedHighlightSegment(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000040201")!,
+                videoID: videoID,
+                markerIDs: [markerID],
+                start: 10,
+                duration: 13,
+                markerNumberLowerBound: 1,
+                markerNumberUpperBound: 1,
+                markerTotalCount: 1,
+            ),
+        ]
+    }
+
+    private func makeReviewViewModel(
+        selectedVideos: [SelectedTrainingVideo],
+        submitSegments: @escaping HighlightClipReviewViewModel.SubmitSegments,
+        onSubmissionSucceeded: @escaping () -> Void = {},
+    ) -> HighlightClipReviewViewModel {
+        let markerID = UUID(uuidString: "00000000-0000-0000-0000-000000040101")!
+        let item = HighlightClipReviewItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000040301")!,
+            videoID: selectedVideos[0].id,
+            markerReferences: [
+                HighlightClipMarkerReference(
+                    id: markerID,
+                    markedAt: Date(timeIntervalSince1970: 2_120),
+                    timeInVideo: 120,
+                    originalMatchedNumber: 1,
+                ),
+            ],
+            defaultStart: 10,
+            defaultDuration: 13,
+            start: 10,
+            duration: 13,
+            isIncluded: true,
+        )
+        let mediaProvider = HighlightClipReviewMediaProvider(
+            cacheLimit: 0,
+            loadAsset: { _ in AVURLAsset(url: URL(fileURLWithPath: "/tmp/video.mov")) },
+            generateFrame: { _, _ in Data() },
+        )
+        return HighlightClipReviewViewModel(
+            draft: HighlightClipReviewDraft(
+                selectedVideoCount: selectedVideos.count,
+                totalMarkerCount: 1,
+                items: [item],
+            ),
+            videos: selectedVideos,
+            clipSettings: .default,
+            mediaProvider: mediaProvider,
+            submitSegments: submitSegments,
+            onSubmissionSucceeded: onSubmissionSucceeded,
+        )
+    }
+
+    private func makeIdleManager() -> HighlightJobManager {
+        HighlightJobManager(
+            store: InMemoryHighlightJobStore(),
+            fileStore: HighlightJobFileStore(baseDirectoryURL: temporaryDirectory),
+            runnerFactory: { _ in .immediateCompleted },
+        )
+    }
+
     private func makeJob(
         id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000040001")!,
         status: HighlightJobStatus,
@@ -465,6 +779,27 @@ private extension HighlightJobRunner {
 
 private enum HighlightJobRunnerTestError: Error {
     case failed
+}
+
+private struct FailingCopyHighlightJobFileStore: HighlightJobFileStoreProtocol {
+    func copyInputVideo(at _: URL, jobID _: UUID, videoID _: String) throws -> String {
+        throw FailingCopyHighlightJobFileStoreError.copyFailed
+    }
+
+    func moveOutputVideo(at _: URL, jobID _: UUID) throws -> String {
+        throw FailingCopyHighlightJobFileStoreError.copyFailed
+    }
+
+    func url(forRelativePath _: String) throws -> URL {
+        throw FailingCopyHighlightJobFileStoreError.copyFailed
+    }
+
+    func removeOutput(for _: UUID) throws {}
+    func removeAllFiles(for _: UUID) throws {}
+}
+
+private enum FailingCopyHighlightJobFileStoreError: Error {
+    case copyFailed
 }
 
 private final class FailingSaveHighlightJobStore: HighlightJobStoreProtocol {
