@@ -509,11 +509,9 @@ final class HighlightClipReviewViewModel: ObservableObject {
         videos: [SelectedTrainingVideo],
         clipSettings: ClipSettings,
     ) -> HighlightClipReviewInputFingerprint {
-        let normalizedSettings = clipSettings.normalized
-        return HighlightClipReviewInputFingerprint(
+        HighlightClipReviewInputFingerprint(
             videos: videos,
-            secondsBeforeMarker: normalizedSettings.secondsBeforeMarker,
-            secondsAfterMarker: normalizedSettings.secondsAfterMarker,
+            clipSettings: clipSettings,
         )
     }
 

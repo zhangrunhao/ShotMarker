@@ -30,6 +30,7 @@
         @State private var reviewViewModel: HighlightClipReviewViewModel?
         @State private var isReviewPresented = false
         @State private var isPreparingReview = false
+        @State private var reviewPreparationRevision = UUID()
         @State private var isExportingTrainingSession = false
         @State private var trainingSessionExportDocument: TrainingSessionJSONDocument?
 
@@ -239,6 +240,7 @@
 
         @MainActor
         private func invalidateCurrentReview() {
+            reviewPreparationRevision = UUID()
             reviewViewModel?.cancelMediaLoading()
             reviewViewModel = nil
             isReviewPresented = false
@@ -857,6 +859,11 @@
             guard !videos.isEmpty else {
                 return
             }
+            let preparationSnapshot = HighlightClipReviewPreparationSnapshot(
+                videos: videos,
+                clipSettings: settings,
+                revision: reviewPreparationRevision,
+            )
 
             do {
                 let key = try HighlightClipReviewIdentityBuilder.combinationKey(
@@ -864,6 +871,13 @@
                     videos: videos,
                 )
                 let loaded = try await reviewStore.loadRecord(for: key)
+                guard preparationSnapshot.matches(
+                    videos: selectedVideoItems.availableVideos,
+                    clipSettings: clipSettings,
+                    revision: reviewPreparationRevision,
+                ) else {
+                    return
+                }
                 let restoration = HighlightClipReviewPlanner.restoreDraft(
                     for: session,
                     videos: videos,
@@ -887,6 +901,13 @@
             } catch is CancellationError {
                 return
             } catch {
+                guard preparationSnapshot.matches(
+                    videos: selectedVideoItems.availableVideos,
+                    clipSettings: clipSettings,
+                    revision: reviewPreparationRevision,
+                ) else {
+                    return
+                }
                 logger.error(
                     "highlight.review.prepare.failed",
                     category: .video,

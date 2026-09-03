@@ -363,6 +363,69 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
         ))
     }
 
+    func testPreparationSnapshotRejectsInvalidatedRevisionBeforeNewVideosFinishLoading() {
+        let revision = UUID(uuidString: "00000000-0000-0000-0000-000000000901")!
+        let snapshot = HighlightClipReviewPreparationSnapshot(
+            videos: [makeVideo()],
+            clipSettings: .default,
+            revision: revision,
+        )
+
+        XCTAssertFalse(snapshot.matches(
+            videos: [makeVideo()],
+            clipSettings: .default,
+            revision: UUID(uuidString: "00000000-0000-0000-0000-000000000902")!,
+        ))
+    }
+
+    func testPreparationSnapshotRejectsChangedVideoOrderOrRange() {
+        let revision = UUID(uuidString: "00000000-0000-0000-0000-000000000903")!
+        let firstVideo = makeVideo(id: "first")
+        let secondVideo = makeVideo(id: "second")
+        let snapshot = HighlightClipReviewPreparationSnapshot(
+            videos: [firstVideo, secondVideo],
+            clipSettings: .default,
+            revision: revision,
+        )
+        var changedRange = ClipSettings.default
+        changedRange.secondsBeforeMarker += 1
+
+        XCTAssertFalse(snapshot.matches(
+            videos: [secondVideo, firstVideo],
+            clipSettings: .default,
+            revision: revision,
+        ))
+        XCTAssertFalse(snapshot.matches(
+            videos: [firstVideo, secondVideo],
+            clipSettings: changedRange,
+            revision: revision,
+        ))
+    }
+
+    func testPreparationSnapshotAllowsMarkerLabelStyleOnlyChange() {
+        let revision = UUID(uuidString: "00000000-0000-0000-0000-000000000904")!
+        let video = makeVideo()
+        let snapshot = HighlightClipReviewPreparationSnapshot(
+            videos: [video],
+            clipSettings: .default,
+            revision: revision,
+        )
+        var changedStyle = ClipSettings.default
+        changedStyle.markerLabelStyle = MarkerLabelStyle(
+            fontSizeRatio: 0.2,
+            normalizedCenterX: 0.8,
+            normalizedCenterY: 0.7,
+            textOpacity: 0.5,
+            backgroundOpacity: 0.3,
+        )
+
+        XCTAssertTrue(snapshot.matches(
+            videos: [video],
+            clipSettings: changedStyle,
+            revision: revision,
+        ))
+    }
+
     @MainActor
     func testFingerprintTreatsVideoOrderAsPlanningInput() {
         let firstVideo = makeVideo(id: "first")

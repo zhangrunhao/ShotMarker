@@ -128,4 +128,40 @@ struct HighlightClipReviewInputFingerprint: Equatable {
     let videos: [SelectedTrainingVideo]
     let secondsBeforeMarker: TimeInterval
     let secondsAfterMarker: TimeInterval
+
+    init(videos: [SelectedTrainingVideo], clipSettings: ClipSettings) {
+        let normalizedSettings = clipSettings.normalized
+        self.videos = videos
+        secondsBeforeMarker = normalizedSettings.secondsBeforeMarker
+        secondsAfterMarker = normalizedSettings.secondsAfterMarker
+    }
+}
+
+struct HighlightClipReviewPreparationSnapshot: Equatable {
+    let inputFingerprint: HighlightClipReviewInputFingerprint
+    let revision: UUID
+
+    init(
+        videos: [SelectedTrainingVideo],
+        clipSettings: ClipSettings,
+        revision: UUID,
+    ) {
+        inputFingerprint = HighlightClipReviewInputFingerprint(
+            videos: videos,
+            clipSettings: clipSettings,
+        )
+        self.revision = revision
+    }
+
+    func matches(
+        videos: [SelectedTrainingVideo],
+        clipSettings: ClipSettings,
+        revision: UUID,
+    ) -> Bool {
+        self.revision == revision
+            && inputFingerprint == HighlightClipReviewInputFingerprint(
+                videos: videos,
+                clipSettings: clipSettings,
+            )
+    }
 }
