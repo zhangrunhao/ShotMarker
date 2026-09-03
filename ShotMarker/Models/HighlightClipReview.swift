@@ -96,6 +96,11 @@ struct HighlightClipReviewDraft: Equatable {
     }
 }
 
+struct HighlightClipReviewRestorationResult: Equatable {
+    let draft: HighlightClipReviewDraft
+    let discardedConfirmationCount: Int
+}
+
 struct HighlightClipReviewSummary: Equatable {
     let includedMarkerCount: Int
     let excludedMarkerCount: Int

@@ -132,6 +132,7 @@ enum HighlightClipReviewPlanner {
                 start: segment.start,
                 duration: segment.duration,
                 isIncluded: true,
+                confirmationState: .defaultValue,
             )
         }
 
@@ -357,7 +358,7 @@ enum HighlightClipReviewPlanner {
         )
     }
 
-    private static func isNormalizedTenth(_ value: TimeInterval) -> Bool {
+    static func isNormalizedTenth(_ value: TimeInterval) -> Bool {
         abs(normalizedTenths(value) - value) < 0.000_000_1
     }
 }
