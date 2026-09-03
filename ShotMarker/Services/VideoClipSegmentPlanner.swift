@@ -9,6 +9,19 @@ struct SelectedTrainingVideo: Identifiable, Equatable {
     let id: String
     let recordedStartAt: Date
     let duration: TimeInterval
+    let reviewSourceIdentity: HighlightClipReviewSourceIdentity?
+
+    init(
+        id: String,
+        recordedStartAt: Date,
+        duration: TimeInterval,
+        reviewSourceIdentity: HighlightClipReviewSourceIdentity? = nil,
+    ) {
+        self.id = id
+        self.recordedStartAt = recordedStartAt
+        self.duration = duration
+        self.reviewSourceIdentity = reviewSourceIdentity
+    }
 
     var recordedEndAt: Date {
         recordedStartAt.addingTimeInterval(duration)
@@ -132,7 +145,12 @@ enum VideoClipSegmentPlanner {
         videos: [SelectedTrainingVideo],
         clipSettings: ClipSettings = .default,
     ) -> HighlightClipPlan {
-        let events = session.events.sorted { $0.markedAt < $1.markedAt }
+        let events = session.events.sorted {
+            if $0.markedAt == $1.markedAt {
+                return $0.id.uuidString < $1.id.uuidString
+            }
+            return $0.markedAt < $1.markedAt
+        }
         let matchingSegments = events.compactMap { event in
             highlightSegment(
                 for: event,

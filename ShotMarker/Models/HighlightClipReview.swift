@@ -14,6 +14,11 @@ struct HighlightClipMarkerReference: Identifiable, Equatable {
     let originalMatchedNumber: Int
 }
 
+enum HighlightClipConfirmationState: Equatable {
+    case defaultValue
+    case confirmed
+}
+
 struct HighlightClipReviewItem: Identifiable, Equatable {
     let id: UUID
     let videoID: String
@@ -23,6 +28,29 @@ struct HighlightClipReviewItem: Identifiable, Equatable {
     var start: TimeInterval
     var duration: TimeInterval
     var isIncluded: Bool
+    var confirmationState: HighlightClipConfirmationState
+
+    init(
+        id: UUID,
+        videoID: String,
+        markerReferences: [HighlightClipMarkerReference],
+        defaultStart: TimeInterval,
+        defaultDuration: TimeInterval,
+        start: TimeInterval,
+        duration: TimeInterval,
+        isIncluded: Bool,
+        confirmationState: HighlightClipConfirmationState = .defaultValue,
+    ) {
+        self.id = id
+        self.videoID = videoID
+        self.markerReferences = markerReferences
+        self.defaultStart = defaultStart
+        self.defaultDuration = defaultDuration
+        self.start = start
+        self.duration = duration
+        self.isIncluded = isIncluded
+        self.confirmationState = confirmationState
+    }
 
     var range: HighlightClipRange {
         HighlightClipRange(start: start, duration: duration)
