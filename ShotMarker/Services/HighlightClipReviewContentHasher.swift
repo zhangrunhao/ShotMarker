@@ -1,11 +1,11 @@
 import CryptoKit
 import Foundation
 
-protocol HighlightClipReviewContentHashing: Sendable {
+nonisolated protocol HighlightClipReviewContentHashing: Sendable {
     func sha256(for fileURL: URL) async throws -> String
 }
 
-struct HighlightClipReviewContentHasher: HighlightClipReviewContentHashing, @unchecked Sendable {
+nonisolated struct HighlightClipReviewContentHasher: HighlightClipReviewContentHashing, @unchecked Sendable {
     typealias ReadChunk = (FileHandle, Int) throws -> Data?
 
     private let chunkSize: Int
