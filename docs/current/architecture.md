@@ -28,6 +28,7 @@ ShotMarker 当前由 iPhone App、Apple Watch App、三组测试 target 和共�
 - ClipSettings 保存片段前后时长和 MarkerLabelStyle；旧版缺少样式的设置及任务解码时补入默认样式，已有时长保持不变。
 - 剪辑设置、安装标识等小型配置使用 UserDefaults；HighlightJob 内嵌创建任务时规范化后的完整 ClipSettings 快照。
 - 新建 HighlightJob 同时保存 `clipPlanVersion = 1` 和已验证的 `ConfirmedHighlightSegment` 数组；未确认审核草稿不持久化。
+- 有效决定要求新增独立版本化 JSON，按训练内容与同序视频组合长期保存逐片段确认；当前尚无该 Store、稳定媒体身份或恢复链路，实施范围见 [活跃 Change](../changes/2026-09-03-highlight-clip-confirmation-spec.md)。
 
 ## Watch 同步
 

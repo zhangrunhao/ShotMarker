@@ -22,6 +22,8 @@ ShotMarker 的 iPhone、Apple Watch、训练同步、视频准备、片段审核
 
 ## 已确认但未实现
 
+[片段确认持久化与连续审核](../changes/2026-09-03-highlight-clip-confirmation-spec.md) 已完成设计确认，但当前代码仍只在本次内存草稿中保存单片段调整，没有默认/已确认状态、逐片段确认按钮或跨启动恢复。
+
 [iOS 语音口令打点与技术统计](../changes/2026-07-29-ios-voice-command-marking-spec.md) 已完成设计确认，但当前代码没有语音识别、语音事件或球员统计能力。
 
 ## 主要风险
