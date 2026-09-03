@@ -28,6 +28,18 @@ struct HighlightClipReviewView: View {
         ScrollView {
             LazyVStack(spacing: 18, pinnedViews: [.sectionHeaders]) {
                 Section {
+                    if let recoveryNoticeMessage = viewModel.recoveryNoticeMessage {
+                        Label(
+                            recoveryNoticeMessage,
+                            systemImage: "exclamationmark.triangle",
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+                        .accessibilityLabel(recoveryNoticeMessage)
+                    }
+
                     LazyVGrid(columns: columns, spacing: 14) {
                         ForEach(viewModel.items) { item in
                             thumbnailLoadingCard(for: item)
@@ -48,11 +60,22 @@ struct HighlightClipReviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $editorDestination) { destination in
             HighlightClipEditorView(
-                viewModel: viewModel,
-                itemID: destination.id,
+                reviewViewModel: viewModel,
+                editorViewModel: destination.editorViewModel,
                 playbackController: destination.playbackController,
                 loadsMedia: loadsMedia,
                 onRequestVideoReselection: onRequestVideoReselection,
+                onConfirmationNavigation: { navigation in
+                    viewModel.cancelFilmstripLoading(itemID: destination.id)
+                    destination.playbackController.reset()
+                    switch navigation {
+                    case .open(let itemID):
+                        openEditor(itemID: itemID)
+                    case .returnToReview:
+                        editorDestination = nil
+                        viewModel.closeEditor()
+                    }
+                },
             )
         }
         .onChange(of: editorDestination?.id) { previousID, currentID in
@@ -184,11 +207,6 @@ struct HighlightClipReviewView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.orange)
                     }
-                    if !item.isIncluded {
-                        Label("已排除", systemImage: "minus.circle.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
                     if unavailable {
                         Text(viewModel.itemErrorMessages[item.id] ?? "来源视频不可用")
                             .font(.caption)
@@ -230,17 +248,28 @@ struct HighlightClipReviewView: View {
         unavailable: Bool,
     ) -> some View {
         if unavailable {
-            Label("不可用", systemImage: "exclamationmark.triangle.fill")
+            Label("视频不可用", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.red)
-        } else if item.isIncluded {
-            Label("保留", systemImage: "checkmark.circle.fill")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.green)
+                .fixedSize(horizontal: false, vertical: true)
         } else {
-            Label("排除", systemImage: "minus.circle.fill")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+            switch (item.confirmationState, item.isIncluded) {
+            case (.defaultValue, _):
+                Label("默认", systemImage: "circle.dashed")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            case (.confirmed, true):
+                Label("已确认 · 保留", systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.green)
+                    .fixedSize(horizontal: false, vertical: true)
+            case (.confirmed, false):
+                Label("已确认 · 排除", systemImage: "minus.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -340,9 +369,12 @@ struct HighlightClipReviewView: View {
     }
 
     private func openEditor(itemID: UUID) {
-        viewModel.openEditor(itemID: itemID)
+        guard let editorViewModel = viewModel.makeEditorViewModel(itemID: itemID) else {
+            return
+        }
         editorDestination = HighlightClipEditorDestination(
             id: itemID,
+            editorViewModel: editorViewModel,
             playbackController: makePlaybackController(),
         )
     }
@@ -368,10 +400,11 @@ struct HighlightClipReviewView: View {
         var components = [
             "片段 \(number)",
             naturalDuration(item.duration),
-            item.isIncluded ? "已保留" : "已排除",
+            item.confirmationState == .confirmed ? "已确认状态" : "默认状态",
+            item.isIncluded ? "保留" : "排除",
         ]
         if unavailable {
-            components.append(viewModel.itemErrorMessages[item.id] ?? "来源视频不可用")
+            components.append("视频不可用")
         }
         if merging {
             components.append("生成时将与相邻片段合并")
@@ -397,6 +430,7 @@ struct HighlightClipReviewView: View {
 
 private struct HighlightClipEditorDestination: Identifiable, Hashable {
     let id: UUID
+    let editorViewModel: HighlightClipEditorViewModel
     let playbackController: HighlightClipPlaybackController
 
     static func == (
@@ -419,31 +453,53 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
                 id: "preview-video",
                 recordedStartAt: Date(timeIntervalSince1970: 100),
                 duration: 60,
+                reviewSourceIdentity: .photoLibraryAsset("preview-video"),
             )
             let items = [
                 makeItem(number: 1, videoID: video.id, start: 5, duration: 4),
-                makeItem(number: 2, videoID: video.id, start: 9.5, duration: 3),
-                makeItem(number: 3, videoID: video.id, start: 20, duration: 5),
+                makeItem(
+                    number: 2,
+                    videoID: video.id,
+                    start: 9.5,
+                    duration: 3,
+                    state: .confirmed,
+                ),
+                makeItem(
+                    number: 3,
+                    videoID: video.id,
+                    start: 20,
+                    duration: 5,
+                    included: false,
+                    state: .confirmed,
+                ),
+                makeItem(
+                    number: 4,
+                    videoID: video.id,
+                    start: 30,
+                    duration: 4,
+                    state: .confirmed,
+                ),
             ]
             let viewModel = makeViewModel(items: items, video: video)
-            viewModel.setIncluded(false, itemID: items[2].id)
+            viewModel.markSourceUnavailable(itemID: items[3].id)
             if unavailable {
                 viewModel.markSourceUnavailable(itemID: items[0].id)
             }
             return viewModel
         }
 
-        static func editorViewModel() -> HighlightClipReviewViewModel {
+        static func editorReviewViewModel() -> HighlightClipReviewViewModel {
             let video = SelectedTrainingVideo(
                 id: "preview-video",
                 recordedStartAt: Date(timeIntervalSince1970: 100),
                 duration: 60,
+                reviewSourceIdentity: .photoLibraryAsset("preview-video"),
             )
             let first = makeItem(number: 1, videoID: video.id, start: 2, duration: 2)
             let markerReferences: [HighlightClipMarkerReference] = [
                 makePreviewMarker(suffix: 91_100, time: 12, number: 2),
-                makePreviewMarker(suffix: 91_101, time: 14, number: 2),
-                makePreviewMarker(suffix: 91_102, time: 16, number: 3),
+                makePreviewMarker(suffix: 91_101, time: 14, number: 3),
+                makePreviewMarker(suffix: 91_102, time: 16, number: 4),
             ]
             let editorItem = HighlightClipReviewItem(
                 id: fixedUUID(91_000),
@@ -454,8 +510,20 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
                 start: 10,
                 duration: 8,
                 isIncluded: true,
+                confirmationState: .confirmed,
             )
             return makeViewModel(items: [first, editorItem], video: video)
+        }
+
+        static func editorViewModel(
+            reviewViewModel: HighlightClipReviewViewModel,
+        ) -> HighlightClipEditorViewModel {
+            let item = reviewViewModel.items.last!
+            return HighlightClipEditorViewModel(
+                item: item,
+                video: reviewViewModel.videos.first { $0.id == item.videoID }!,
+                confirmWorkingCopy: { _ in .returnToReview },
+            )
         }
 
         static func playbackController() -> HighlightClipPlaybackController {
@@ -471,7 +539,15 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
             items: [HighlightClipReviewItem],
             video: SelectedTrainingVideo,
         ) -> HighlightClipReviewViewModel {
-            HighlightClipReviewViewModel(
+            let session = TrainingSession(
+                id: fixedUUID(92_000),
+                startedAt: video.recordedStartAt,
+                endedAt: video.recordedEndAt,
+                events: items.flatMap(\.markerReferences).map {
+                    ShotMarkerEvent(id: $0.id, markedAt: $0.markedAt)
+                },
+            )
+            return HighlightClipReviewViewModel(
                 draft: HighlightClipReviewDraft(
                     selectedVideoCount: 1,
                     totalMarkerCount: items.reduce(0) { $0 + $1.markerReferences.count },
@@ -479,6 +555,11 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
                 ),
                 videos: [video],
                 clipSettings: .default,
+                combinationKey: try! HighlightClipReviewIdentityBuilder.combinationKey(
+                    for: session,
+                    videos: [video],
+                ),
+                reviewStore: InMemoryHighlightClipReviewStore(),
                 mediaProvider: HighlightClipReviewMediaProvider(
                     cacheLimit: 0,
                     loadAsset: { _ in
@@ -497,6 +578,8 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
             videoID: String,
             start: TimeInterval,
             duration: TimeInterval,
+            included: Bool = true,
+            state: HighlightClipConfirmationState = .defaultValue,
         ) -> HighlightClipReviewItem {
             let marker = HighlightClipMarkerReference(
                 id: fixedUUID(90_100 + number),
@@ -512,7 +595,8 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
                 defaultDuration: duration,
                 start: start,
                 duration: duration,
-                isIncluded: true,
+                isIncluded: included,
+                confirmationState: state,
             )
         }
 

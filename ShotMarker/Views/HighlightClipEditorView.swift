@@ -1,112 +1,221 @@
 import AVKit
 import SwiftUI
 
+private enum PendingEditorExitAction: Equatable {
+    case review
+    case videoSelection
+}
+
 struct HighlightClipEditorView: View {
-    @ObservedObject var viewModel: HighlightClipReviewViewModel
-    let itemID: UUID
+    @ObservedObject var reviewViewModel: HighlightClipReviewViewModel
+    @ObservedObject var editorViewModel: HighlightClipEditorViewModel
     @ObservedObject var playbackController: HighlightClipPlaybackController
 
     @Environment(\.dismiss) private var dismiss
     @State private var window: HighlightClipTimelineWindow
     @State private var editorErrorMessage: String?
     @State private var playbackLoadAttempt = 0
+    @State private var isFineTuningExpanded = false
+    @State private var isShowingDiscardConfirmation = false
+    @State private var pendingExitAction: PendingEditorExitAction?
 
     private let loadsMedia: Bool
     private let onRequestVideoReselection: () -> Void
+    private let onConfirmationNavigation:
+        (HighlightClipConfirmationNavigation) -> Void
     private let filmstripCount = 8
 
     init(
-        viewModel: HighlightClipReviewViewModel,
-        itemID: UUID,
+        reviewViewModel: HighlightClipReviewViewModel,
+        editorViewModel: HighlightClipEditorViewModel,
         playbackController: HighlightClipPlaybackController,
         loadsMedia: Bool = true,
         onRequestVideoReselection: @escaping () -> Void = {},
+        onConfirmationNavigation:
+            @escaping (HighlightClipConfirmationNavigation) -> Void = { _ in },
     ) {
-        self.viewModel = viewModel
-        self.itemID = itemID
+        self.reviewViewModel = reviewViewModel
+        self.editorViewModel = editorViewModel
         self.playbackController = playbackController
         self.loadsMedia = loadsMedia
         self.onRequestVideoReselection = onRequestVideoReselection
+        self.onConfirmationNavigation = onConfirmationNavigation
 
-        let item = viewModel.items.first { $0.id == itemID }
-        let video = item.flatMap { item in
-            viewModel.videos.first { $0.id == item.videoID }
-        }
         _window = State(initialValue: HighlightClipTimelineGeometry.makeWindow(
-            range: item?.range ?? .init(start: 0, duration: 0),
-            videoDuration: video?.duration ?? 0,
+            range: editorViewModel.workingItem.range,
+            videoDuration: editorViewModel.video.duration,
         ))
     }
 
     var body: some View {
-        Group {
-            if let item, let video {
-                ScrollView {
-                    VStack(spacing: 18) {
-                        playbackArea(item: item)
-                        timeReadout(item: item)
-                        timeline(item: item)
-                        playbackButton
-                        fineTuneControls(item: item, video: video)
-                        inclusionAndRestore(item: item)
-                        errorMessages(itemID: item.id)
-                    }
-                    .padding()
-                }
-                .task(id: playbackLoadAttempt) {
-                    guard loadsMedia else {
-                        return
-                    }
-                    await loadPlayback(video: video, range: item.range)
-                }
-                .task(id: window) {
-                    guard loadsMedia else {
-                        return
-                    }
-                    await viewModel.loadFilmstrip(
-                        itemID: item.id,
-                        window: window,
-                        count: filmstripCount,
-                        targetSize: .init(width: 180, height: 100),
-                    )
-                }
-            } else {
-                ContentUnavailableView(
-                    "片段不可用",
-                    systemImage: "film",
-                    description: Text("找不到此片段或来源视频。"),
-                )
+        ScrollView {
+            VStack(spacing: 18) {
+                confirmationStatus
+                playbackArea(item: item)
+                timeReadout(item: item)
+                timeline(item: item)
+                playbackButton
+                fineTuneControls(item: item, video: video)
+                inclusionAndRestore(item: item)
+                errorMessages(itemID: item.id)
             }
+            .padding()
+        }
+        .task(id: playbackLoadAttempt) {
+            guard loadsMedia else {
+                return
+            }
+            await loadPlayback(video: video, range: item.range)
+        }
+        .task(id: window) {
+            guard loadsMedia else {
+                return
+            }
+            await reviewViewModel.loadFilmstrip(
+                itemID: item.id,
+                window: window,
+                count: filmstripCount,
+                targetSize: .init(width: 180, height: 100),
+            )
         }
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("返回") {
+                    requestExit(.review)
+                }
+                .frame(minWidth: 44, minHeight: 44)
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            confirmationAction
+        }
+        .alert("放弃本次调整？", isPresented: $isShowingDiscardConfirmation) {
+            Button("继续调整", role: .cancel) {
+                pendingExitAction = nil
+            }
+            Button("放弃", role: .destructive) {
+                editorViewModel.discardChanges()
+                performPendingExit()
+            }
+        } message: {
+            Text("未确认的范围与保留状态更改不会保存。")
+        }
         .onChange(of: playbackController.loadError) { _, error in
             if error == .sourceUnavailable {
-                viewModel.markSourceUnavailable(itemID: itemID)
+                reviewViewModel.markSourceUnavailable(itemID: item.id)
             }
         }
         .onDisappear {
-            viewModel.cancelFilmstripLoading(itemID: itemID)
+            reviewViewModel.cancelFilmstripLoading(itemID: item.id)
             playbackController.reset()
         }
     }
 
-    private var item: HighlightClipReviewItem? {
-        viewModel.items.first { $0.id == itemID }
+    private var item: HighlightClipReviewItem {
+        editorViewModel.workingItem
     }
 
-    private var video: SelectedTrainingVideo? {
-        guard let item else {
-            return nil
-        }
-        return viewModel.videos.first { $0.id == item.videoID }
+    private var video: SelectedTrainingVideo {
+        editorViewModel.video
     }
 
     private var navigationTitle: String {
-        guard let item else {
-            return "片段"
-        }
         return "片段 \(displayNumber(for: item))"
+    }
+
+    @ViewBuilder
+    private var confirmationStatus: some View {
+        HStack {
+            switch editorViewModel.displayedConfirmationState {
+            case .defaultValue:
+                Label("默认", systemImage: "circle.dashed")
+                    .foregroundStyle(.orange)
+            case .confirmed:
+                Label("已确认", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            }
+            Spacer()
+        }
+        .font(.subheadline.weight(.semibold))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var confirmationAction: some View {
+        VStack(spacing: 8) {
+            if let message = editorViewModel.saveErrorMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .accessibilityLabel("保存失败，\(message)")
+            }
+            Button {
+                confirmWorkingCopy()
+            } label: {
+                HStack {
+                    if editorViewModel.isSaving {
+                        ProgressView()
+                    }
+                    Text(confirmButtonTitle)
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(editorViewModel.isSaving || cannotConfirmIncludedUnavailableSource)
+        }
+        .padding()
+        .background(.regularMaterial)
+    }
+
+    private var cannotConfirmIncludedUnavailableSource: Bool {
+        editorViewModel.workingItem.isIncluded
+            && reviewViewModel.unavailableItemIDs.contains(editorViewModel.workingItem.id)
+    }
+
+    private var confirmButtonTitle: String {
+        if editorViewModel.isSaving {
+            return "正在保存…"
+        }
+        return editorViewModel.workingItem.isIncluded
+            ? "确认片段"
+            : "排除并确认片段"
+    }
+
+    private func confirmWorkingCopy() {
+        playbackController.pause()
+        Task { @MainActor in
+            guard let navigation = await editorViewModel.confirm() else {
+                return
+            }
+            onConfirmationNavigation(navigation)
+        }
+    }
+
+    private func requestExit(_ action: PendingEditorExitAction) {
+        guard editorViewModel.hasChanges else {
+            performExit(action)
+            return
+        }
+        pendingExitAction = action
+        isShowingDiscardConfirmation = true
+    }
+
+    private func performPendingExit() {
+        guard let action = pendingExitAction else { return }
+        pendingExitAction = nil
+        performExit(action)
+    }
+
+    private func performExit(_ action: PendingEditorExitAction) {
+        reviewViewModel.cancelFilmstripLoading(itemID: editorViewModel.workingItem.id)
+        playbackController.reset()
+        dismiss()
+        if action == .videoSelection {
+            onRequestVideoReselection()
+        }
     }
 
     private func playbackArea(item: HighlightClipReviewItem) -> some View {
@@ -145,15 +254,14 @@ struct HighlightClipEditorView: View {
                 .foregroundStyle(.white)
 
             if error == .sourceUnavailable {
-                Button("排除此片段") {
-                    viewModel.setIncluded(false, itemID: item.id)
-                    dismiss()
+                Button("排除并确认片段") {
+                    editorViewModel.setIncluded(false)
+                    confirmWorkingCopy()
                 }
                 .buttonStyle(.borderedProminent)
 
                 Button("返回重新选择视频") {
-                    dismiss()
-                    onRequestVideoReselection()
+                    requestExit(.videoSelection)
                 }
                 .buttonStyle(.bordered)
                 .tint(.white)
@@ -232,47 +340,51 @@ struct HighlightClipEditorView: View {
         item: HighlightClipReviewItem,
         video: SelectedTrainingVideo,
     ) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("精调范围")
-                .font(.headline)
-
-            fineTuneGroup(
-                title: "起点",
-                negativeLabel: "-0.5s 更早",
-                positiveLabel: "+0.5s 更晚",
-                negativeDisabled: item.start <= 0,
-                positiveDisabled: item.duration <= 1,
-                negativeDisabledReason: "已到达视频起点",
-                positiveDisabledReason: "片段已达到最短时长",
-                negativeAction: .setStart(item.start - 0.5),
-                positiveAction: .setStart(item.start + 0.5),
-            )
-            fineTuneGroup(
-                title: "终点",
-                negativeLabel: "-0.5s 更早",
-                positiveLabel: "+0.5s 更晚",
-                negativeDisabled: item.duration <= 1,
-                positiveDisabled: item.range.end >= video.duration,
-                negativeDisabledReason: "片段已达到最短时长",
-                positiveDisabledReason: "已到达视频终点",
-                negativeAction: .setEnd(item.range.end - 0.5),
-                positiveAction: .setEnd(item.range.end + 0.5),
-            )
-            fineTuneGroup(
-                title: "整体",
-                negativeLabel: "-0.5s 向前",
-                positiveLabel: "+0.5s 向后",
-                negativeDisabled: item.start <= 0,
-                positiveDisabled: item.range.end >= video.duration,
-                negativeDisabledReason: "已到达视频起点",
-                positiveDisabledReason: "已到达视频终点",
-                negativeAction: .moveBy(-0.5),
-                positiveAction: .moveBy(0.5),
-            )
+        DisclosureGroup(
+            "精确范围调整",
+            isExpanded: $isFineTuningExpanded,
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                fineTuneGroup(
+                    title: "起点",
+                    negativeLabel: "-0.5s 更早",
+                    positiveLabel: "+0.5s 更晚",
+                    negativeDisabled: item.start <= 0,
+                    positiveDisabled: item.duration <= 1,
+                    negativeDisabledReason: "已到达视频起点",
+                    positiveDisabledReason: "片段已达到最短时长",
+                    negativeAction: .setStart(item.start - 0.5),
+                    positiveAction: .setStart(item.start + 0.5),
+                )
+                fineTuneGroup(
+                    title: "终点",
+                    negativeLabel: "-0.5s 更早",
+                    positiveLabel: "+0.5s 更晚",
+                    negativeDisabled: item.duration <= 1,
+                    positiveDisabled: item.range.end >= video.duration,
+                    negativeDisabledReason: "片段已达到最短时长",
+                    positiveDisabledReason: "已到达视频终点",
+                    negativeAction: .setEnd(item.range.end - 0.5),
+                    positiveAction: .setEnd(item.range.end + 0.5),
+                )
+                fineTuneGroup(
+                    title: "整体",
+                    negativeLabel: "-0.5s 向前",
+                    positiveLabel: "+0.5s 向后",
+                    negativeDisabled: item.start <= 0,
+                    positiveDisabled: item.range.end >= video.duration,
+                    negativeDisabledReason: "已到达视频起点",
+                    positiveDisabledReason: "已到达视频终点",
+                    negativeAction: .moveBy(-0.5),
+                    positiveAction: .moveBy(0.5),
+                )
+            }
+            .padding(.top, 10)
         }
         .padding()
         .background(Color(uiColor: .secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityValue(isFineTuningExpanded ? "已展开" : "已收起")
     }
 
     private func fineTuneGroup(
@@ -327,7 +439,7 @@ struct HighlightClipEditorView: View {
                 "保留此片段",
                 isOn: Binding(
                     get: { item.isIncluded },
-                    set: { viewModel.setIncluded($0, itemID: item.id) },
+                    set: { editorViewModel.setIncluded($0) },
                 ),
             )
             .frame(minHeight: 44)
@@ -349,7 +461,7 @@ struct HighlightClipEditorView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel("范围调整失败，\(editorErrorMessage)")
         }
-        if let itemError = viewModel.itemErrorMessages[itemID] {
+        if let itemError = reviewViewModel.itemErrorMessages[itemID] {
             Text(itemError)
                 .font(.footnote)
                 .foregroundStyle(.red)
@@ -358,8 +470,8 @@ struct HighlightClipEditorView: View {
     }
 
     private var filmstripFrames: [Data?] {
-        guard viewModel.filmstripWindowsByItemID[itemID] == window,
-              let frames = viewModel.filmstripFramesByItemID[itemID]
+        guard reviewViewModel.filmstripWindowsByItemID[item.id] == window,
+              let frames = reviewViewModel.filmstripFramesByItemID[item.id]
         else {
             return Array(repeating: nil, count: filmstripCount)
         }
@@ -372,18 +484,30 @@ struct HighlightClipEditorView: View {
     ) async {
         await playbackController.load(video: video, range: range)
         if playbackController.loadError == .sourceUnavailable {
-            viewModel.markSourceUnavailable(itemID: itemID)
+            reviewViewModel.markSourceUnavailable(itemID: item.id)
         }
     }
 
     private func performTimelineAction(_ action: HighlightClipTimelineAction) {
         Task { @MainActor in
             do {
-                try await viewModel.handleTimelineAction(
-                    action,
-                    itemID: itemID,
-                    playbackController: playbackController,
-                )
+                switch action {
+                case .setStart(let start):
+                    try editorViewModel.apply(.setStart(start))
+                    playbackController.updateRange(item.range)
+                    await playbackController.previewStart(of: item.range)
+                case .setEnd(let end):
+                    try editorViewModel.apply(.setEnd(end))
+                    playbackController.updateRange(item.range)
+                    await playbackController.previewEnd(of: item.range)
+                case .moveBy(let delta):
+                    try editorViewModel.apply(.moveBy(delta))
+                    playbackController.updateRange(item.range)
+                    await playbackController.previewStart(of: item.range)
+                case .preview(let time):
+                    let previewTime = min(max(time, 0), video.duration)
+                    await playbackController.preview(at: previewTime)
+                }
                 editorErrorMessage = nil
                 shiftWindowToCurrentRange()
             } catch {
@@ -393,10 +517,7 @@ struct HighlightClipEditorView: View {
     }
 
     private func restoreDefaultRange() {
-        viewModel.restoreDefault(itemID: itemID)
-        guard let item else {
-            return
-        }
+        editorViewModel.restoreDefault()
         playbackController.updateRange(item.range)
         Task { @MainActor in
             await playbackController.previewStart(of: item.range)
@@ -406,11 +527,6 @@ struct HighlightClipEditorView: View {
     }
 
     private func shiftWindowToCurrentRange() {
-        guard let item,
-              let video = viewModel.videos.first(where: { $0.id == item.videoID })
-        else {
-            return
-        }
         let shiftedWindow = HighlightClipTimelineGeometry.shiftedWindow(
             window,
             toContain: item.range,
@@ -422,7 +538,7 @@ struct HighlightClipEditorView: View {
     }
 
     private func reviewNumbers(for item: HighlightClipReviewItem) -> [UUID: Int] {
-        let numberRange = viewModel.summary.displayNumberRangesByItemID[item.id]
+        let numberRange = reviewViewModel.summary.displayNumberRangesByItemID[item.id]
             ?? item.originalNumberRange
         guard let lowerBound = numberRange?.lowerBound else {
             return [:]
@@ -434,7 +550,7 @@ struct HighlightClipEditorView: View {
     }
 
     private func displayNumber(for item: HighlightClipReviewItem) -> String {
-        let range = viewModel.summary.displayNumberRangesByItemID[item.id]
+        let range = reviewViewModel.summary.displayNumberRangesByItemID[item.id]
             ?? item.originalNumberRange
         guard let range else {
             return "—"
@@ -476,11 +592,14 @@ struct HighlightClipEditorView: View {
 
 #if DEBUG
     #Preview("合并片段编辑") {
-        let viewModel = HighlightClipReviewPreviewFixtures.editorViewModel()
+        let reviewViewModel = HighlightClipReviewPreviewFixtures.editorReviewViewModel()
+        let editorViewModel = HighlightClipReviewPreviewFixtures.editorViewModel(
+            reviewViewModel: reviewViewModel,
+        )
         NavigationStack {
             HighlightClipEditorView(
-                viewModel: viewModel,
-                itemID: viewModel.items.last!.id,
+                reviewViewModel: reviewViewModel,
+                editorViewModel: editorViewModel,
                 playbackController: HighlightClipReviewPreviewFixtures.playbackController(),
                 loadsMedia: false,
             )
