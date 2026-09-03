@@ -171,6 +171,7 @@
         static func live(
             photoLibraryAssetProvider: PhotoLibraryVideoAssetProvider,
             temporaryFileStore: TrainingVideoTemporaryFileStore,
+            contentHasher: any HighlightClipReviewContentHashing = HighlightClipReviewContentHasher(),
         ) -> TrainingVideoLoadingService<PhotosPickerItem> {
             let readinessChecker = SelectedTrainingVideoReadinessChecker { assetIdentifier in
                 let asset = try photoLibraryAssetProvider.photoAsset(with: assetIdentifier)
@@ -186,10 +187,12 @@
                     do {
                         let metadata = try photoLibraryAssetProvider.metadata(from: asset)
                         return LoadedTrainingVideo(
-                            video: SelectedTrainingVideo(
-                                id: asset.localIdentifier,
-                                recordedStartAt: metadata.recordedStartAt,
-                                duration: metadata.duration,
+                            video: try await makeReviewIdentifiedVideo(
+                                runtimeID: asset.localIdentifier,
+                                photoLibraryIdentifier: asset.localIdentifier,
+                                temporaryFileURL: nil,
+                                metadata: metadata,
+                                contentHasher: contentHasher,
                             ),
                             thumbnailData: thumbnailData,
                         )
@@ -204,18 +207,29 @@
                 loadPickedVideo: { item in
                     let pickedVideo = try await temporaryFileStore.loadPickedTrainingVideo(from: item)
                     let thumbnailData = await temporaryFileStore.thumbnailData(from: pickedVideo.url)
+                    let metadata: TrainingVideoMetadata
                     do {
-                        let metadata = try await temporaryFileStore.metadata(from: pickedVideo.url)
+                        metadata = try await temporaryFileStore.metadata(from: pickedVideo.url)
+                    } catch {
+                        temporaryFileStore.removeTemporaryVideo(at: pickedVideo.url)
+                        throw SelectedTrainingVideoLoadFailure(
+                            id: pickedVideo.url.absoluteString,
+                            thumbnailData: thumbnailData,
+                            error: error,
+                        )
+                    }
+
+                    do {
                         return LoadedTrainingVideo(
-                            video: SelectedTrainingVideo(
-                                id: pickedVideo.url.absoluteString,
-                                recordedStartAt: metadata.recordedStartAt,
-                                duration: metadata.duration,
+                            video: try await makePickedReviewVideo(
+                                url: pickedVideo.url,
+                                metadata: metadata,
+                                contentHasher: contentHasher,
+                                removeTemporaryVideo: temporaryFileStore.removeTemporaryVideo,
                             ),
                             thumbnailData: thumbnailData,
                         )
                     } catch {
-                        temporaryFileStore.removeTemporaryVideo(at: pickedVideo.url)
                         throw SelectedTrainingVideoLoadFailure(
                             id: pickedVideo.url.absoluteString,
                             thumbnailData: thumbnailData,
@@ -230,6 +244,52 @@
                     temporaryFileStore.removeTemporaryVideoIfNeeded(video)
                 },
             )
+        }
+
+        static func makeReviewIdentifiedVideo(
+            runtimeID: String,
+            photoLibraryIdentifier: String?,
+            temporaryFileURL: URL?,
+            metadata: TrainingVideoMetadata,
+            contentHasher: any HighlightClipReviewContentHashing,
+        ) async throws -> SelectedTrainingVideo {
+            let sourceIdentity: HighlightClipReviewSourceIdentity
+            if let photoLibraryIdentifier {
+                sourceIdentity = .photoLibraryAsset(photoLibraryIdentifier)
+            } else {
+                guard let temporaryFileURL else {
+                    throw HighlightClipReviewIdentityError.missingSourceIdentity
+                }
+                sourceIdentity = .fileSHA256(
+                    try await contentHasher.sha256(for: temporaryFileURL),
+                )
+            }
+            return SelectedTrainingVideo(
+                id: runtimeID,
+                recordedStartAt: metadata.recordedStartAt,
+                duration: metadata.duration,
+                reviewSourceIdentity: sourceIdentity,
+            )
+        }
+
+        static func makePickedReviewVideo(
+            url: URL,
+            metadata: TrainingVideoMetadata,
+            contentHasher: any HighlightClipReviewContentHashing,
+            removeTemporaryVideo: (URL) -> Void,
+        ) async throws -> SelectedTrainingVideo {
+            do {
+                return try await makeReviewIdentifiedVideo(
+                    runtimeID: url.absoluteString,
+                    photoLibraryIdentifier: nil,
+                    temporaryFileURL: url,
+                    metadata: metadata,
+                    contentHasher: contentHasher,
+                )
+            } catch {
+                removeTemporaryVideo(url)
+                throw error
+            }
         }
     }
 #endif

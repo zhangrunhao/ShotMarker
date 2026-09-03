@@ -2,7 +2,7 @@ import CoreMedia
 import CryptoKit
 import Foundation
 
-enum HighlightClipReviewIdentityError: LocalizedError, Equatable {
+nonisolated enum HighlightClipReviewIdentityError: LocalizedError, Equatable {
     case missingSourceIdentity
     case invalidVideoMetadata
     case duplicateVideoIdentity
@@ -19,7 +19,7 @@ enum HighlightClipReviewIdentityError: LocalizedError, Equatable {
     }
 }
 
-enum HighlightClipReviewIdentityBuilder {
+nonisolated enum HighlightClipReviewIdentityBuilder {
     static let videoTimescale: CMTimeScale = 600
 
     static func trainingIdentity(for session: TrainingSession) -> HighlightClipReviewTrainingIdentity {

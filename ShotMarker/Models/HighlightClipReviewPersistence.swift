@@ -1,6 +1,6 @@
 import Foundation
 
-struct HighlightClipReviewSourceIdentity: Codable, Equatable, Hashable, Sendable {
+nonisolated struct HighlightClipReviewSourceIdentity: Codable, Equatable, Hashable, Sendable {
     enum Kind: String, Codable, Sendable {
         case photoLibraryAsset
         case fileSHA256
@@ -18,35 +18,35 @@ struct HighlightClipReviewSourceIdentity: Codable, Equatable, Hashable, Sendable
     }
 }
 
-struct HighlightClipReviewMarkerIdentity: Codable, Equatable, Hashable, Sendable {
+nonisolated struct HighlightClipReviewMarkerIdentity: Codable, Equatable, Hashable, Sendable {
     let id: UUID
     let markedAtMilliseconds: Int64
 }
 
-struct HighlightClipReviewTrainingIdentity: Codable, Equatable, Hashable, Sendable {
+nonisolated struct HighlightClipReviewTrainingIdentity: Codable, Equatable, Hashable, Sendable {
     let id: UUID
     let startedAtMilliseconds: Int64
     let endedAtMilliseconds: Int64
     let markers: [HighlightClipReviewMarkerIdentity]
 }
 
-struct HighlightClipReviewVideoIdentity: Codable, Equatable, Hashable, Sendable {
+nonisolated struct HighlightClipReviewVideoIdentity: Codable, Equatable, Hashable, Sendable {
     let source: HighlightClipReviewSourceIdentity
     let recordedStartAtMilliseconds: Int64
     let durationTicks: Int64
 }
 
-struct HighlightClipReviewCombination: Codable, Equatable, Hashable, Sendable {
+nonisolated struct HighlightClipReviewCombination: Codable, Equatable, Hashable, Sendable {
     let training: HighlightClipReviewTrainingIdentity
     let videos: [HighlightClipReviewVideoIdentity]
 }
 
-struct HighlightClipReviewCombinationKey: Equatable, Hashable, Sendable {
+nonisolated struct HighlightClipReviewCombinationKey: Equatable, Hashable, Sendable {
     let digest: String
     let combination: HighlightClipReviewCombination
 }
 
-struct HighlightClipReviewStoreDocument: Codable, Equatable, Sendable {
+nonisolated struct HighlightClipReviewStoreDocument: Codable, Equatable, Sendable {
     static let currentSchemaVersion = 1
 
     let schemaVersion: Int
@@ -55,7 +55,7 @@ struct HighlightClipReviewStoreDocument: Codable, Equatable, Sendable {
     static let empty = Self(schemaVersion: currentSchemaVersion, records: [])
 }
 
-struct PersistedHighlightClipReview: Codable, Equatable, Sendable {
+nonisolated struct PersistedHighlightClipReview: Codable, Equatable, Sendable {
     let combinationDigest: String
     let combination: HighlightClipReviewCombination
     var confirmedItems: [PersistedHighlightClipConfirmation]
@@ -63,7 +63,7 @@ struct PersistedHighlightClipReview: Codable, Equatable, Sendable {
     var updatedAt: Date
 }
 
-struct PersistedHighlightClipConfirmation: Codable, Equatable, Sendable {
+nonisolated struct PersistedHighlightClipConfirmation: Codable, Equatable, Sendable {
     let videoIdentity: HighlightClipReviewVideoIdentity
     let markerIDs: [UUID]
     let defaultStart: TimeInterval
@@ -78,7 +78,7 @@ struct PersistedHighlightClipConfirmation: Codable, Equatable, Sendable {
     }
 }
 
-struct HighlightClipConfirmationIdentity: Equatable, Hashable, Sendable {
+nonisolated struct HighlightClipConfirmationIdentity: Equatable, Hashable, Sendable {
     let videoIdentity: HighlightClipReviewVideoIdentity
     let markerIDs: [UUID]
 }
