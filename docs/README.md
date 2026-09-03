@@ -25,6 +25,7 @@ ShotMarker 对外网站、支持页和 how-to 由 `zhangrh.shop` 仓库维护，
 
 ## 正在进行的变更
 
+- [ShotMarker 1.2 App Store 提交](changes/2026-08-21-app-store-1-2-submission-plan.md)：候选构建、TestFlight、隐私披露、商店资料、审核与发布验收计划
 - [iOS 语音口令打点与技术统计](changes/2026-07-29-ios-voice-command-marking-spec.md)：设计已确认，尚未实现
 
 changes 使用扁平文件：
