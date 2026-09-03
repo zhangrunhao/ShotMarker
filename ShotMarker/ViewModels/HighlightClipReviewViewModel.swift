@@ -25,11 +25,15 @@ final class HighlightClipReviewViewModel: ObservableObject {
     @Published private(set) var editingItemID: UUID?
     @Published private(set) var isSubmitting = false
     @Published private(set) var submissionErrorMessage: String?
+    @Published private(set) var recoveryNoticeMessage: String?
 
     let mediaProvider: HighlightClipReviewMediaProvider
     private(set) var videos: [SelectedTrainingVideo]
 
     private let originalItems: [HighlightClipReviewItem]
+    private let combinationKey: HighlightClipReviewCombinationKey
+    private let reviewStore: any HighlightClipReviewStoring
+    private let now: () -> Date
     private let inputFingerprint: HighlightClipReviewInputFingerprint
     private let submitSegments: SubmitSegments
     private let onSubmissionSucceeded: () -> Void
@@ -42,14 +46,22 @@ final class HighlightClipReviewViewModel: ObservableObject {
         draft: HighlightClipReviewDraft,
         videos: [SelectedTrainingVideo],
         clipSettings: ClipSettings,
+        combinationKey: HighlightClipReviewCombinationKey,
+        reviewStore: any HighlightClipReviewStoring,
+        recoveryNoticeMessage: String? = nil,
         mediaProvider: HighlightClipReviewMediaProvider,
+        now: @escaping () -> Date = Date.init,
         submitSegments: @escaping SubmitSegments,
         onSubmissionSucceeded: @escaping () -> Void = {},
     ) {
         items = draft.items
         originalItems = draft.items
         self.videos = videos
+        self.combinationKey = combinationKey
+        self.reviewStore = reviewStore
+        self.recoveryNoticeMessage = recoveryNoticeMessage
         self.mediaProvider = mediaProvider
+        self.now = now
         self.submitSegments = submitSegments
         self.onSubmissionSucceeded = onSubmissionSucceeded
         inputFingerprint = Self.makeFingerprint(videos: videos, clipSettings: clipSettings)
@@ -72,6 +84,26 @@ final class HighlightClipReviewViewModel: ObservableObject {
         }
 
         refreshSummary()
+    }
+
+    convenience init(
+        draft: HighlightClipReviewDraft,
+        videos: [SelectedTrainingVideo],
+        clipSettings: ClipSettings,
+        mediaProvider: HighlightClipReviewMediaProvider,
+        submitSegments: @escaping SubmitSegments,
+        onSubmissionSucceeded: @escaping () -> Void = {},
+    ) {
+        self.init(
+            draft: draft,
+            videos: videos,
+            clipSettings: clipSettings,
+            combinationKey: Self.makeCompatibilityKey(draft: draft, videos: videos),
+            reviewStore: InMemoryHighlightClipReviewStore(),
+            mediaProvider: mediaProvider,
+            submitSegments: submitSegments,
+            onSubmissionSucceeded: onSubmissionSucceeded,
+        )
     }
 
     var hasUserChanges: Bool {
@@ -256,6 +288,25 @@ final class HighlightClipReviewViewModel: ObservableObject {
         )
     }
 
+    func makeEditorViewModel(itemID: UUID) -> HighlightClipEditorViewModel? {
+        guard let item = items.first(where: { $0.id == itemID }),
+              let video = videos.first(where: { $0.id == item.videoID })
+        else {
+            return nil
+        }
+        editingItemID = itemID
+        return HighlightClipEditorViewModel(
+            item: item,
+            video: video,
+            confirmWorkingCopy: { [weak self] workingItem in
+                guard let self else {
+                    throw CancellationError()
+                }
+                return try await self.confirmWorkingCopy(workingItem)
+            },
+        )
+    }
+
     func openEditor(itemID: UUID) {
         guard items.contains(where: { $0.id == itemID }) else {
             return
@@ -266,6 +317,98 @@ final class HighlightClipReviewViewModel: ObservableObject {
 
     func closeEditor() {
         editingItemID = nil
+    }
+
+    private func confirmWorkingCopy(
+        _ workingItem: HighlightClipReviewItem,
+    ) async throws -> HighlightClipConfirmationNavigation {
+        do {
+            guard let index = items.firstIndex(where: { $0.id == workingItem.id }) else {
+                throw HighlightClipReviewPlanningError.missingMarkers
+            }
+            let currentItem = items[index]
+            guard currentItem.videoID == workingItem.videoID,
+                  currentItem.markerReferences == workingItem.markerReferences,
+                  currentItem.defaultStart == workingItem.defaultStart,
+                  currentItem.defaultDuration == workingItem.defaultDuration
+            else {
+                throw HighlightClipReviewPlanningError.inconsistentNumbering
+            }
+            guard let video = videos.first(where: { $0.id == currentItem.videoID }) else {
+                throw HighlightClipReviewPlanningError.sourceVideoMissing
+            }
+
+            let normalizedStart = HighlightClipReviewPlanner.normalizedTenths(
+                workingItem.start,
+            )
+            let normalizedEnd = HighlightClipReviewPlanner.normalizedTenths(
+                workingItem.range.end,
+            )
+            let normalizedDuration = HighlightClipReviewPlanner.normalizedTenths(
+                normalizedEnd - normalizedStart,
+            )
+            _ = try HighlightClipReviewPlanner.validatedRange(
+                HighlightClipRange(
+                    start: normalizedStart,
+                    duration: normalizedDuration,
+                ),
+                videoDuration: video.duration,
+            )
+
+            var candidate = currentItem
+            candidate.start = normalizedStart
+            candidate.duration = normalizedDuration
+            candidate.isIncluded = workingItem.isIncluded
+
+            var sourceValidationSucceeded = false
+            if candidate.isIncluded {
+                try await mediaProvider.validateSourceAvailability(for: video)
+                sourceValidationSucceeded = true
+            }
+
+            let videoIdentity = try HighlightClipReviewIdentityBuilder.videoIdentity(for: video)
+            let confirmationDate = now()
+            let confirmation = PersistedHighlightClipConfirmation(
+                videoIdentity: videoIdentity,
+                markerIDs: currentItem.markerReferences.map(\.id),
+                defaultStart: currentItem.defaultStart,
+                defaultDuration: currentItem.defaultDuration,
+                start: candidate.start,
+                duration: candidate.duration,
+                isIncluded: candidate.isIncluded,
+                confirmedAt: confirmationDate,
+            )
+            try await reviewStore.upsert(
+                confirmation,
+                for: combinationKey,
+                now: confirmationDate,
+            )
+
+            candidate.confirmationState = .confirmed
+            items[index] = candidate
+            if sourceValidationSucceeded {
+                unavailableItemIDs.remove(candidate.id)
+                itemErrorMessages[candidate.id] = nil
+            }
+            refreshSummary()
+            scheduleThumbnailRefreshIfNeeded(itemID: candidate.id)
+
+            if let nextItem = items.dropFirst(index + 1).first(where: {
+                $0.confirmationState == .defaultValue
+            }) {
+                editingItemID = nextItem.id
+                return .open(itemID: nextItem.id)
+            }
+
+            editingItemID = nil
+            return .returnToReview
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw HighlightClipReviewConfirmationFailure(
+                message: Self.confirmationMessage(for: error),
+            )
+        }
     }
 
     func confirmedSegments() throws -> [ConfirmedHighlightSegment] {
@@ -511,6 +654,67 @@ final class HighlightClipReviewViewModel: ObservableObject {
         )
     }
 
+    private static func makeCompatibilityKey(
+        draft: HighlightClipReviewDraft,
+        videos: [SelectedTrainingVideo],
+    ) -> HighlightClipReviewCombinationKey {
+        let references = draft.items
+            .flatMap(\.markerReferences)
+            .sorted { lhs, rhs in
+                if lhs.markedAt == rhs.markedAt {
+                    return lhs.id.uuidString < rhs.id.uuidString
+                }
+                return lhs.markedAt < rhs.markedAt
+            }
+        let markerIdentities = references.map {
+            HighlightClipReviewMarkerIdentity(
+                id: $0.id,
+                markedAtMilliseconds: Int64(
+                    ($0.markedAt.timeIntervalSince1970 * 1_000).rounded(),
+                ),
+            )
+        }
+        let firstDate = references.first?.markedAt ?? .distantPast
+        let lastDate = references.last?.markedAt ?? firstDate
+        let trainingIdentity = HighlightClipReviewTrainingIdentity(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+            startedAtMilliseconds: Int64((firstDate.timeIntervalSince1970 * 1_000).rounded()),
+            endedAtMilliseconds: Int64((lastDate.timeIntervalSince1970 * 1_000).rounded()),
+            markers: markerIdentities,
+        )
+        let videoIdentities = videos.enumerated().map { index, video in
+            (try? HighlightClipReviewIdentityBuilder.videoIdentity(for: video))
+                ?? HighlightClipReviewVideoIdentity(
+                    source: .fileSHA256("compatibility-\(index)"),
+                    recordedStartAtMilliseconds: Int64(
+                        (video.recordedStartAt.timeIntervalSince1970 * 1_000).rounded(),
+                    ),
+                    durationTicks: Int64(
+                        (video.duration * Double(HighlightClipReviewIdentityBuilder.videoTimescale))
+                            .rounded(),
+                    ),
+                )
+        }
+        return HighlightClipReviewCombinationKey(
+            digest: "compatibility",
+            combination: HighlightClipReviewCombination(
+                training: trainingIdentity,
+                videos: videoIdentities,
+            ),
+        )
+    }
+
+    private static func confirmationMessage(for error: Error) -> String {
+        if error is HighlightClipReviewIdentityError
+            || error is HighlightClipReviewPlanningError
+            || error is HighlightClipReviewMediaError
+            || error is HighlightClipReviewStoreError
+        {
+            return userFacingMessage(for: error)
+        }
+        return "无法保存片段确认，请重试。"
+    }
+
     private static func userFacingMessage(for error: Error) -> String {
         if let localizedError = error as? LocalizedError,
            let description = localizedError.errorDescription
@@ -520,4 +724,10 @@ final class HighlightClipReviewViewModel: ObservableObject {
 
         return error.localizedDescription
     }
+}
+
+private nonisolated struct HighlightClipReviewConfirmationFailure: LocalizedError {
+    let message: String
+
+    var errorDescription: String? { message }
 }

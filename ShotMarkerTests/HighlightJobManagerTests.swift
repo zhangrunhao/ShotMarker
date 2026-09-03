@@ -235,6 +235,7 @@ final class HighlightJobManagerTests: XCTestCase {
                 id: sourceURL.absoluteString,
                 recordedStartAt: Date(timeIntervalSince1970: 2_000),
                 duration: 900,
+                reviewSourceIdentity: .fileSHA256("retry-source"),
             ),
         ]
         let manager = HighlightJobManager(
@@ -257,7 +258,11 @@ final class HighlightJobManagerTests: XCTestCase {
                 cleanupCallCount += 1
             },
         )
-        try viewModel.apply(.moveBy(0.5), itemID: viewModel.items[0].id)
+        let editor = try XCTUnwrap(
+            viewModel.makeEditorViewModel(itemID: viewModel.items[0].id),
+        )
+        try editor.moveRange(by: 0.5)
+        _ = await editor.confirm()
         let expectedItems = viewModel.items
 
         await viewModel.submit()
@@ -278,11 +283,13 @@ final class HighlightJobManagerTests: XCTestCase {
                 id: retainedURL.absoluteString,
                 recordedStartAt: Date(timeIntervalSince1970: 2_000),
                 duration: 900,
+                reviewSourceIdentity: .fileSHA256("retained-picker"),
             ),
             SelectedTrainingVideo(
                 id: excludedURL.absoluteString,
                 recordedStartAt: Date(timeIntervalSince1970: 2_000),
                 duration: 900,
+                reviewSourceIdentity: .fileSHA256("excluded-picker"),
             ),
         ]
         let fileStore = HighlightJobFileStore(baseDirectoryURL: temporaryDirectory)
@@ -635,7 +642,12 @@ final class HighlightJobManagerTests: XCTestCase {
     }
 
     private func makeSelectedVideo() -> SelectedTrainingVideo {
-        SelectedTrainingVideo(id: "photo-asset-id", recordedStartAt: Date(timeIntervalSince1970: 2_000), duration: 900)
+        SelectedTrainingVideo(
+            id: "photo-asset-id",
+            recordedStartAt: Date(timeIntervalSince1970: 2_000),
+            duration: 900,
+            reviewSourceIdentity: .photoLibraryAsset("photo-asset-id"),
+        )
     }
 
     private func makeConfirmedSegments(
@@ -684,6 +696,16 @@ final class HighlightJobManagerTests: XCTestCase {
             loadAsset: { _ in AVURLAsset(url: URL(fileURLWithPath: "/tmp/video.mov")) },
             generateFrame: { _, _ in Data() },
         )
+        let session = TrainingSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000040699")!,
+            startedAt: selectedVideos[0].recordedStartAt,
+            endedAt: selectedVideos[0].recordedEndAt,
+            events: [ShotMarkerEvent(id: markerID, markedAt: Date(timeIntervalSince1970: 2_120))],
+        )
+        let key = try! HighlightClipReviewIdentityBuilder.combinationKey(
+            for: session,
+            videos: selectedVideos,
+        )
         return HighlightClipReviewViewModel(
             draft: HighlightClipReviewDraft(
                 selectedVideoCount: selectedVideos.count,
@@ -692,6 +714,8 @@ final class HighlightJobManagerTests: XCTestCase {
             ),
             videos: selectedVideos,
             clipSettings: .default,
+            combinationKey: key,
+            reviewStore: InMemoryHighlightClipReviewStore(),
             mediaProvider: mediaProvider,
             submitSegments: submitSegments,
             onSubmissionSucceeded: onSubmissionSucceeded,

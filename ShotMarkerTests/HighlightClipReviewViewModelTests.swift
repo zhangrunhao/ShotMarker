@@ -4,49 +4,143 @@ import XCTest
 
 final class HighlightClipReviewViewModelTests: XCTestCase {
     @MainActor
-    func testExcludeRestoreAndRangeEditsKeepStableCardIdentity() throws {
-        let viewModel = makeViewModel()
-        let id = viewModel.items[0].id
+    func testEditorChangesDoNotTouchGalleryBeforeStoreSuccess() throws {
+        let fixture = makeReviewViewModelFixture()
+        let originalItems = fixture.viewModel.items
+        let editor = fixture.viewModel.makeEditorViewModel(itemID: originalItems[0].id)!
 
-        try viewModel.apply(.moveBy(0.5), itemID: id)
-        viewModel.setIncluded(false, itemID: id)
-        viewModel.setIncluded(true, itemID: id)
+        try editor.moveRange(by: 1)
+        editor.setIncluded(false)
 
-        XCTAssertEqual(viewModel.items[0].id, id)
-        XCTAssertEqual(viewModel.items[0].start, 0.5)
-        XCTAssertTrue(viewModel.items[0].isIncluded)
-        XCTAssertTrue(viewModel.hasUserChanges)
+        XCTAssertNotEqual(editor.workingItem, originalItems[0])
+        XCTAssertEqual(fixture.viewModel.items, originalItems)
+        XCTAssertEqual(fixture.viewModel.summary, fixture.originalSummary)
     }
 
     @MainActor
-    func testRestoreDefaultOnlyChangesCurrentCardRangeAndNotInclusion() throws {
-        let viewModel = makeViewModel(itemCount: 2)
-        let firstID = viewModel.items[0].id
-        let secondBefore = viewModel.items[1]
-        try viewModel.apply(.moveBy(1), itemID: firstID)
-        viewModel.setIncluded(false, itemID: firstID)
+    func testDefaultItemCanBeConfirmedWithoutChangingRange() async {
+        let fixture = makeReviewViewModelFixture()
+        let editor = fixture.viewModel.makeEditorViewModel(
+            itemID: fixture.viewModel.items[0].id,
+        )!
 
-        viewModel.restoreDefault(itemID: firstID)
+        let navigation = await editor.confirm()
 
-        XCTAssertEqual(viewModel.items[0].range, viewModel.items[0].defaultRange)
-        XCTAssertFalse(viewModel.items[0].isIncluded)
-        XCTAssertEqual(viewModel.items[1], secondBefore)
+        let upsertCount = await fixture.store.upsertCount
+        XCTAssertNotNil(navigation)
+        XCTAssertEqual(fixture.viewModel.items[0].confirmationState, .confirmed)
+        XCTAssertEqual(upsertCount, 1)
     }
 
     @MainActor
-    func testNoIncludedOrIncludedUnavailableCardDisablesConfirmation() {
-        let viewModel = makeViewModel()
-        let id = viewModel.items[0].id
+    func testStoreFailureKeepsGalleryAndNavigationUnchanged() async throws {
+        let fixture = makeReviewViewModelFixture(storeError: TestError.writeFailed)
+        let originalItems = fixture.viewModel.items
+        let editor = fixture.viewModel.makeEditorViewModel(itemID: originalItems[0].id)!
+        try editor.moveRange(by: 1)
 
-        viewModel.setIncluded(false, itemID: id)
-        XCTAssertFalse(viewModel.canConfirm)
+        let navigation = await editor.confirm()
 
-        viewModel.setIncluded(true, itemID: id)
-        viewModel.markSourceUnavailable(itemID: id)
-        XCTAssertFalse(viewModel.canConfirm)
+        XCTAssertNil(navigation)
+        XCTAssertEqual(fixture.viewModel.items, originalItems)
+        XCTAssertEqual(fixture.viewModel.editingItemID, originalItems[0].id)
+        XCTAssertNotNil(editor.saveErrorMessage)
+    }
 
-        viewModel.setIncluded(false, itemID: id)
-        XCTAssertFalse(viewModel.canConfirm)
+    @MainActor
+    func testSuccessfulConfirmationNormalizesThenPersistsThenPublishes() async throws {
+        let fixture = makeReviewViewModelFixture(now: Date(timeIntervalSince1970: 500))
+        let firstID = fixture.viewModel.items[0].id
+        let editor = fixture.viewModel.makeEditorViewModel(itemID: firstID)!
+        try editor.apply(.replace(start: 10.06, duration: 2.04))
+
+        _ = await editor.confirm()
+
+        let persisted = await fixture.store.confirmations(for: fixture.key)
+        XCTAssertEqual(persisted[0].start, 10.1)
+        XCTAssertEqual(persisted[0].duration, 2.0)
+        XCTAssertEqual(persisted[0].confirmedAt, Date(timeIntervalSince1970: 500))
+        XCTAssertEqual(
+            fixture.viewModel.items[0].range,
+            HighlightClipRange(start: 10.1, duration: 2.0),
+        )
+        XCTAssertEqual(fixture.viewModel.items[0].confirmationState, .confirmed)
+    }
+
+    @MainActor
+    func testIncludedUnavailableSourceCannotConfirmButExcludedCan() async {
+        let fixture = makeReviewViewModelFixture(sourceError: .sourceUnavailable)
+        let itemID = fixture.viewModel.items[0].id
+        fixture.viewModel.markSourceUnavailable(itemID: itemID)
+        let included = fixture.viewModel.makeEditorViewModel(itemID: itemID)!
+
+        let includedNavigation = await included.confirm()
+        let beforeExclusionCount = await fixture.store.upsertCount
+        XCTAssertNil(includedNavigation)
+        XCTAssertEqual(beforeExclusionCount, 0)
+
+        included.setIncluded(false)
+        let excludedNavigation = await included.confirm()
+        let afterExclusionCount = await fixture.store.upsertCount
+        XCTAssertNotNil(excludedNavigation)
+        XCTAssertEqual(afterExclusionCount, 1)
+        XCTAssertFalse(fixture.viewModel.items[0].isIncluded)
+    }
+
+    @MainActor
+    func testConfirmationSkipsConfirmedCardsAndOpensFirstLaterDefault() async {
+        let fixture = makeReviewViewModelFixture(
+            states: [.defaultValue, .confirmed, .defaultValue],
+        )
+        let editor = fixture.viewModel.makeEditorViewModel(
+            itemID: fixture.viewModel.items[0].id,
+        )!
+
+        let navigation = await editor.confirm()
+
+        XCTAssertEqual(navigation, .open(itemID: fixture.viewModel.items[2].id))
+    }
+
+    @MainActor
+    func testConfirmationAfterLastLaterDefaultReturnsToReviewWithoutLooping() async {
+        let fixture = makeReviewViewModelFixture(
+            states: [.defaultValue, .confirmed, .confirmed],
+        )
+        let editor = fixture.viewModel.makeEditorViewModel(
+            itemID: fixture.viewModel.items[0].id,
+        )!
+
+        let navigation = await editor.confirm()
+
+        XCTAssertEqual(navigation, .returnToReview)
+        XCTAssertNil(fixture.viewModel.editingItemID)
+    }
+
+    @MainActor
+    func testPageSubmissionAcceptsMixedConfirmedAndDefaultItems() async {
+        let submitter = SegmentRecorder()
+        let fixture = makeReviewViewModelFixture(
+            states: [.confirmed, .defaultValue],
+            submitSegments: { segments in
+                await submitter.submit(segments)
+            },
+        )
+
+        XCTAssertTrue(fixture.viewModel.canConfirm)
+        await fixture.viewModel.submit()
+        let callCount = await submitter.callCount
+        let lastMarkerIDs = await submitter.lastSegments.flatMap(\.markerIDs)
+
+        XCTAssertEqual(callCount, 1)
+        XCTAssertEqual(
+            Set(lastMarkerIDs),
+            Set(
+                fixture.viewModel.items
+                    .filter(\.isIncluded)
+                    .flatMap(\.markerReferences)
+                    .map(\.id),
+            ),
+        )
     }
 
     @MainActor
@@ -75,7 +169,9 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
             targetSize: .init(width: 200, height: 120),
         )
 
-        try viewModel.apply(.moveBy(1), itemID: id)
+        let editor = viewModel.makeEditorViewModel(itemID: id)!
+        try editor.moveRange(by: 1)
+        _ = await editor.confirm()
         let refresh = Task {
             await viewModel.loadThumbnail(
                 itemID: id,
@@ -103,27 +199,6 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.items, originalItems)
         XCTAssertEqual(viewModel.submissionErrorMessage, "submitFailed")
         XCTAssertFalse(viewModel.isSubmitting)
-    }
-
-    @MainActor
-    func testSummaryRefreshesAfterEveryIncludeAndRangeChange() throws {
-        let viewModel = makeViewModel(itemCount: 2)
-        XCTAssertEqual(viewModel.summary.includedMarkerCount, 2)
-        XCTAssertEqual(viewModel.summary.excludedMarkerCount, 0)
-        XCTAssertEqual(viewModel.summary.finalSegmentCount, 2)
-        XCTAssertEqual(viewModel.summary.totalDuration, 4)
-
-        viewModel.setIncluded(false, itemID: viewModel.items[1].id)
-        XCTAssertEqual(viewModel.summary.includedMarkerCount, 1)
-        XCTAssertEqual(viewModel.summary.excludedMarkerCount, 1)
-        XCTAssertEqual(viewModel.summary.finalSegmentCount, 1)
-        XCTAssertEqual(viewModel.summary.totalDuration, 2)
-
-        try viewModel.apply(.setEnd(3), itemID: viewModel.items[0].id)
-        XCTAssertEqual(viewModel.summary.includedMarkerCount, 1)
-        XCTAssertEqual(viewModel.summary.excludedMarkerCount, 1)
-        XCTAssertEqual(viewModel.summary.finalSegmentCount, 1)
-        XCTAssertEqual(viewModel.summary.totalDuration, 3)
     }
 
     @MainActor
@@ -155,6 +230,7 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
                     id: video.id,
                     recordedStartAt: video.recordedStartAt.addingTimeInterval(1),
                     duration: video.duration,
+                    reviewSourceIdentity: video.reviewSourceIdentity,
                 ),
             ],
             clipSettings: settings,
@@ -165,6 +241,7 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
                     id: video.id,
                     recordedStartAt: video.recordedStartAt,
                     duration: video.duration + 1,
+                    reviewSourceIdentity: video.reviewSourceIdentity,
                 ),
             ],
             clipSettings: settings,
@@ -208,43 +285,13 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testReturningFromEditorAndSettingsKeepsSameDraftValues() throws {
-        let viewModel = makeViewModel(itemCount: 2)
-        let firstID = viewModel.items[0].id
-        let secondID = viewModel.items[1].id
-        try viewModel.apply(.replace(start: 6, duration: 3), itemID: firstID)
-        viewModel.setIncluded(false, itemID: secondID)
-        let expectedItems = viewModel.items
-
-        viewModel.openEditor(itemID: firstID)
-        viewModel.closeEditor()
-        XCTAssertFalse(viewModel.requiresInvalidation(
-            videos: [makeVideo()],
-            clipSettings: ClipSettings(
-                secondsBeforeMarker: ClipSettings.default.secondsBeforeMarker,
-                secondsAfterMarker: ClipSettings.default.secondsAfterMarker,
-                markerLabelStyle: MarkerLabelStyle(
-                    fontSizeRatio: 0.2,
-                    normalizedCenterX: 0.75,
-                    normalizedCenterY: 0.25,
-                    textOpacity: 0.8,
-                    backgroundOpacity: 0.4,
-                ),
-            ),
-        ))
-        viewModel.openEditor(itemID: firstID)
-
-        XCTAssertEqual(viewModel.items, expectedItems)
-        XCTAssertEqual(viewModel.editingItemID, firstID)
-    }
-
-    @MainActor
     func testFingerprintTreatsVideoOrderAsPlanningInput() {
         let firstVideo = makeVideo(id: "first")
         let secondVideo = SelectedTrainingVideo(
             id: "second",
             recordedStartAt: firstVideo.recordedStartAt,
             duration: firstVideo.duration,
+            reviewSourceIdentity: .photoLibraryAsset("legacy-test-asset-second"),
         )
         let mediaProvider = HighlightClipReviewMediaProvider(
             cacheLimit: 0,
@@ -259,6 +306,16 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
             ),
             videos: [firstVideo, secondVideo],
             clipSettings: .default,
+            combinationKey: try! HighlightClipReviewIdentityBuilder.combinationKey(
+                for: TrainingSession(
+                    id: UUID(uuidString: "00000000-0000-0000-0000-000000000698")!,
+                    startedAt: firstVideo.recordedStartAt,
+                    endedAt: firstVideo.recordedEndAt,
+                    events: [],
+                ),
+                videos: [firstVideo, secondVideo],
+            ),
+            reviewStore: InMemoryHighlightClipReviewStore(),
             mediaProvider: mediaProvider,
             submitSegments: { _ in },
         )
@@ -271,8 +328,10 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
 
     @MainActor
     func testConfirmedSegmentsReturnsTheAlreadyDisplayedSummaryArray() throws {
-        let viewModel = makeViewModel(itemCount: 2)
-        viewModel.setIncluded(false, itemID: viewModel.items[1].id)
+        let viewModel = makeViewModel(
+            itemCount: 2,
+            states: [.confirmed, .defaultValue],
+        )
         let displayed = viewModel.summary.finalSegments
 
         XCTAssertEqual(try viewModel.confirmedSegments(), displayed)
@@ -296,51 +355,6 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
         XCTAssertEqual(callCount, 1)
         await gate.release()
         await firstSubmit.value
-    }
-
-    @MainActor
-    func testStartEndAndMoveFineTuneUseExactlyHalfSecond() throws {
-        let startViewModel = makeViewModel()
-        let startID = startViewModel.items[0].id
-        try startViewModel.apply(.replace(start: 5, duration: 4), itemID: startID)
-        try startViewModel.adjustStart(itemID: startID, by: -0.5)
-        XCTAssertEqual(startViewModel.items[0].range, .init(start: 4.5, duration: 4.5))
-
-        let endViewModel = makeViewModel()
-        let endID = endViewModel.items[0].id
-        try endViewModel.apply(.replace(start: 5, duration: 4), itemID: endID)
-        try endViewModel.adjustEnd(itemID: endID, by: 0.5)
-        XCTAssertEqual(endViewModel.items[0].range, .init(start: 5, duration: 4.5))
-
-        let moveViewModel = makeViewModel()
-        let moveID = moveViewModel.items[0].id
-        try moveViewModel.apply(.replace(start: 5, duration: 4), itemID: moveID)
-        try moveViewModel.moveRange(itemID: moveID, by: 0.5)
-        XCTAssertEqual(moveViewModel.items[0].range, .init(start: 5.5, duration: 4))
-    }
-
-    @MainActor
-    func testPlayheadPreviewDoesNotMutateRange() async throws {
-        let viewModel = makeViewModel()
-        let itemID = viewModel.items[0].id
-        try viewModel.apply(.replace(start: 5, duration: 4), itemID: itemID)
-        let originalItem = viewModel.items[0]
-        let engine = ReviewTimelineSpyPlaybackEngine()
-        let playbackController = HighlightClipPlaybackController(
-            engine: engine,
-            loadAsset: { _ in AVURLAsset(url: URL(fileURLWithPath: "/tmp/video.mov")) },
-        )
-        await playbackController.load(video: makeVideo(), range: originalItem.range)
-        engine.resetSeekHistory()
-
-        try await viewModel.handleTimelineAction(
-            .preview(6.5),
-            itemID: itemID,
-            playbackController: playbackController,
-        )
-
-        XCTAssertEqual(viewModel.items[0], originalItem)
-        XCTAssertEqual(engine.seekedTimes, [6.5])
     }
 
     @MainActor
@@ -395,25 +409,6 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testUnavailableIncludedCardCanBeExcludedAndThenOtherCardsSubmit() async {
-        var submitted: [ConfirmedHighlightSegment] = []
-        let viewModel = makeViewModel(itemCount: 2) { segments in
-            submitted = segments
-        }
-        let unavailableID = viewModel.items[0].id
-        let remainingID = viewModel.items[1].id
-        viewModel.markSourceUnavailable(itemID: unavailableID)
-        XCTAssertFalse(viewModel.canConfirm)
-
-        viewModel.setIncluded(false, itemID: unavailableID)
-        XCTAssertTrue(viewModel.canConfirm)
-        await viewModel.submit()
-
-        XCTAssertEqual(submitted.count, 1)
-        XCTAssertEqual(submitted[0].id, remainingID)
-    }
-
-    @MainActor
     func testSubmitRevalidatesIncludedSourceWithoutTrustingCachedAsset() async {
         var sourceIsAvailable = true
         var assetLoadCount = 0
@@ -455,6 +450,7 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
     @MainActor
     private func makeViewModel(
         itemCount: Int = 1,
+        states: [HighlightClipConfirmationState]? = nil,
         frameResults: [Result<Data, TestError>] = [.success(Data([1]))],
         mediaProvider injectedMediaProvider: HighlightClipReviewMediaProvider? = nil,
         submitSegments: @escaping ([ConfirmedHighlightSegment]) async throws -> Void = { _ in },
@@ -493,8 +489,21 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
                 start: Double(index * 5),
                 duration: 2,
                 isIncluded: true,
+                confirmationState: states?[index] ?? .defaultValue,
             )
         }
+        let session = TrainingSession(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000699")!,
+            startedAt: video.recordedStartAt,
+            endedAt: video.recordedEndAt,
+            events: items.flatMap(\.markerReferences).map {
+                ShotMarkerEvent(id: $0.id, markedAt: $0.markedAt)
+            },
+        )
+        let key = try! HighlightClipReviewIdentityBuilder.combinationKey(
+            for: session,
+            videos: [video],
+        )
         return HighlightClipReviewViewModel(
             draft: HighlightClipReviewDraft(
                 selectedVideoCount: 1,
@@ -503,6 +512,8 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
             ),
             videos: [video],
             clipSettings: .default,
+            combinationKey: key,
+            reviewStore: InMemoryHighlightClipReviewStore(),
             mediaProvider: mediaProvider,
             submitSegments: submitSegments,
         )
@@ -513,45 +524,128 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
             id: id,
             recordedStartAt: Date(timeIntervalSince1970: 100),
             duration: 60,
+            reviewSourceIdentity: .photoLibraryAsset("legacy-test-asset-\(id)"),
         )
     }
 }
 
 @MainActor
-private final class ReviewTimelineSpyPlaybackEngine: HighlightClipPlaybackEngine {
-    let player = AVPlayer()
-    private(set) var seekedTimes: [TimeInterval] = []
+private struct ReviewViewModelFixture {
+    let viewModel: HighlightClipReviewViewModel
+    let store: InMemoryHighlightClipReviewStore
+    let key: HighlightClipReviewCombinationKey
+    let originalSummary: HighlightClipReviewSummary
+}
 
-    func replaceCurrentItem(with _: AVAsset) {}
-    func clearCurrentItem() {}
-    func play() {}
-    func pause() {}
-
-    func seek(to seconds: TimeInterval) async {
-        seekedTimes.append(seconds)
+@MainActor
+private func makeReviewViewModelFixture(
+    states: [HighlightClipConfirmationState] = [
+        .defaultValue,
+        .defaultValue,
+        .defaultValue,
+    ],
+    storeError: TestError? = nil,
+    sourceError: HighlightClipReviewMediaError? = nil,
+    now: Date = Date(timeIntervalSince1970: 400),
+    recoveryNoticeMessage: String? = nil,
+    submitSegments: @escaping HighlightClipReviewViewModel.SubmitSegments = { _ in },
+) -> ReviewViewModelFixture {
+    let video = SelectedTrainingVideo(
+        id: "review-runtime-video",
+        recordedStartAt: Date(timeIntervalSince1970: 100),
+        duration: 60,
+        reviewSourceIdentity: .photoLibraryAsset("review-asset"),
+    )
+    let events = states.indices.map { index in
+        ShotMarkerEvent(
+            id: UUID(
+                uuidString: String(
+                    format: "00000000-0000-0000-0000-%012d",
+                    60_100 + index,
+                ),
+            )!,
+            markedAt: Date(timeIntervalSince1970: 110 + Double(index * 10)),
+        )
     }
-
-    func addPeriodicTimeObserver(_: @escaping (TimeInterval) -> Void) -> Any {
-        UUID()
+    let session = TrainingSession(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000600")!,
+        startedAt: Date(timeIntervalSince1970: 100),
+        endedAt: Date(timeIntervalSince1970: 160),
+        events: events,
+    )
+    let items = zip(events.indices, states).map { index, state in
+        let event = events[index]
+        return HighlightClipReviewItem(
+            id: event.id,
+            videoID: video.id,
+            markerReferences: [
+                HighlightClipMarkerReference(
+                    id: event.id,
+                    markedAt: event.markedAt,
+                    timeInVideo: event.markedAt.timeIntervalSince(video.recordedStartAt),
+                    originalMatchedNumber: index + 1,
+                ),
+            ],
+            defaultStart: 10 + Double(index * 10),
+            defaultDuration: 2,
+            start: 10 + Double(index * 10),
+            duration: 2,
+            isIncluded: true,
+            confirmationState: state,
+        )
     }
+    let key = try! HighlightClipReviewIdentityBuilder.combinationKey(
+        for: session,
+        videos: [video],
+    )
+    let store = InMemoryHighlightClipReviewStore(upsertError: storeError)
+    let mediaProvider = HighlightClipReviewMediaProvider(
+        cacheLimit: 8,
+        loadAsset: { _ in
+            if let sourceError {
+                throw sourceError
+            }
+            return AVURLAsset(url: URL(fileURLWithPath: "/tmp/review-video.mov"))
+        },
+        generateFrame: { _, _ in Data([1]) },
+    )
+    let viewModel = HighlightClipReviewViewModel(
+        draft: HighlightClipReviewDraft(
+            selectedVideoCount: 1,
+            totalMarkerCount: events.count,
+            items: items,
+        ),
+        videos: [video],
+        clipSettings: .default,
+        combinationKey: key,
+        reviewStore: store,
+        recoveryNoticeMessage: recoveryNoticeMessage,
+        mediaProvider: mediaProvider,
+        now: { now },
+        submitSegments: submitSegments,
+    )
+    return ReviewViewModelFixture(
+        viewModel: viewModel,
+        store: store,
+        key: key,
+        originalSummary: viewModel.summary,
+    )
+}
 
-    func addBoundaryTimeObserver(
-        at _: TimeInterval,
-        _: @escaping () -> Void,
-    ) -> Any {
-        UUID()
-    }
+private actor SegmentRecorder {
+    private(set) var callCount = 0
+    private(set) var lastSegments: [ConfirmedHighlightSegment] = []
 
-    func removeTimeObserver(_: Any) {}
-
-    func resetSeekHistory() {
-        seekedTimes.removeAll()
+    func submit(_ segments: [ConfirmedHighlightSegment]) {
+        callCount += 1
+        lastSegments = segments
     }
 }
 
-private enum TestError: LocalizedError {
+private nonisolated enum TestError: LocalizedError {
     case frameFailed
     case submitFailed
+    case writeFailed
 
     var errorDescription: String? { String(describing: self) }
 }
