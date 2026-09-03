@@ -3,11 +3,11 @@
 - 最后复核：2026-09-03
 - 验证代码基线：`codex/highlight-clip-confirmation` / `babebb0`
 - 工程版本：1.3（Build 3）
-- 当前阶段：片段审核与逐片段确认实现、Simulator 验证已完成，等待正式 Archive、真机与上传链路验收
+- 当前阶段：现有片段审核与逐片段确认已完成 Simulator 验证；可编辑集锦任务设计已确认、待实施；正式 Archive、真机与上传链路仍待验收
 
 ## 当前结论
 
-ShotMarker 的 iPhone、Apple Watch、训练同步、视频准备、片段审核与范围调整、逐片段长期确认与同组合恢复、可预览并固化到任务的片段序数样式、集锦任务队列、本地日志、隐私清单、GlitchTip 和四类产品埋点均已进入代码。1.3 的完整 Simulator 测试与 Release 构建已通过；最近正式签名 Archive 与 Organizer Validate 仍是 1.2（Build 1）。当前主要工作是正式 Archive、真机、TestFlight、崩溃符号化、线上埋点和商店披露验收。
+ShotMarker 的 iPhone、Apple Watch、训练同步、视频准备、片段审核与范围调整、逐片段长期确认与同组合恢复、可预览并固化到任务的片段序数样式、集锦任务队列、本地日志、隐私清单、GlitchTip 和四类产品埋点均已进入代码。1.3 的完整 Simulator 测试与 Release 构建已通过；最近正式签名 Archive 与 Organizer Validate 仍是 1.2（Build 1）。可编辑任务、训练快照解耦、独立生成执行、退出即停止和全量本地数据切割已经确认但尚未实现；当前任务与组合确认行为仍保持旧实现。
 
 ## 已确认事实
 
@@ -24,6 +24,8 @@ ShotMarker 的 iPhone、Apple Watch、训练同步、视频准备、片段审核
 
 ## 已确认但未实现
 
+[可编辑集锦任务与生成执行](../changes/2026-09-03-editable-highlight-task-spec.md) 已完成设计确认。当前代码仍在最终生成时创建 `HighlightJob`、按训练与视频组合共享确认并在启动时转为 `interrupted`；尚未实现进入审核即创建独立任务、固定训练快照、任务再编辑、执行停止语义和 iPhone/Watch 全量本地数据切割。
+
 [iOS 语音口令打点与技术统计](../changes/2026-07-29-ios-voice-command-marking-spec.md) 已完成设计确认，但当前代码没有语音识别、语音事件或球员统计能力。
 
 ## 主要风险
@@ -36,7 +38,7 @@ ShotMarker 的 iPhone、Apple Watch、训练同步、视频准备、片段审核
 
 ## 下一步
 
-为 1.3（Build 3）生成候选 Archive 或 TestFlight Build，在真机完成核心流程、Analytics、崩溃符号化、告警和隐私披露验收，并把带日期的结果更新到 [发布状态](release.md) 与 [质量状态](quality.md)。
+先审阅可编辑集锦任务规格并单独生成实施计划；实施和验证完成前不把该架构写成代码事实。1.3（Build 3）的候选 Archive、真机、TestFlight、Analytics、崩溃符号化、告警和隐私披露验收仍未完成，执行后把带日期的结果更新到 [发布状态](release.md) 与 [质量状态](quality.md)。
 
 ## 详细入口
 

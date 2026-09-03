@@ -5,7 +5,17 @@
 
 ## 当前结论
 
-ShotMarker 当前由 iPhone App、Apple Watch App、三组测试 target 和共享同步载荷组成；训练、同步、可审核且带样式序数的集锦、日志与远端观测均按下述本地优先边界实现。
+ShotMarker 当前由 iPhone App、Apple Watch App、三组测试 target 和共享同步载荷组成；训练、同步、可审核且带样式序数的集锦、日志与远端观测均按下述本地优先边界实现。可编辑任务与独立生成执行的替代架构已经确认但尚未进入代码，当前实现差距保留在下述独立章节。
+
+## 已确认但未实现的架构
+
+- `HighlightTask` 将成为长期可编辑聚合，拥有不可变训练快照、任务视频、设置、审核片段和当前成片；`HighlightRenderExecution` 是从指定任务 revision 建立的单次不可变生成快照。
+- 点击“下一步：审核片段”时原子创建任务。任务不保留指向训练 Store 的外键；训练后续修改或删除不能影响任务，同样输入重复发起产生不同 UUID。
+- 组合级 `HighlightClipReviewStore` 将退出业务链路，所有默认和确认片段进入任务文档；审核仍直接读取原 AVAsset，不产生逐片段视频文件，离页统一释放运行时媒体资源。
+- 文件导入视频由任务目录持有，相册视频只保存稳定引用。任务配置通过 revision 和 actor Store 提交；生成执行持久化后进入全 App 串行队列。
+- 排队和生成期间只允许停止。进入后台立即停止全部执行；进程异常退出后下次启动统一规范为 stopped，不设置后台生成或自动恢复。
+- 新数据世代首次启动会清空 iPhone 与 Watch 的全部 ShotMarker 本地状态且不迁移；固定 `dataCutoverAt` 门槛负责 ACK 并丢弃切割前 Watch outbox 载荷。
+- 当前代码仍使用 `HighlightJob`、组合级确认和 `interrupted` 启动恢复，因此与上述决定存在明确实施差距。完整数据契约、事务和验证要求见 [可编辑集锦任务规格](../changes/2026-09-03-editable-highlight-task-spec.md)。
 
 ## 运行单元
 
