@@ -109,7 +109,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
         )
     }
 
-    func handleReceivedUserInfo(_ userInfo: [String: Any]) {
+    func handleReceivedUserInfo(_ userInfo: [String: Any]) async {
         guard let userInfoType = userInfo[Self.userInfoTypeKey] as? String,
               userInfoType == Self.completedTrainingSessionUserInfoType
         else {
@@ -161,7 +161,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
         )
 
         do {
-            try importer.import(payload)
+            try await importer.import(payload)
         } catch {
             lastImportErrorDescription = String(describing: error)
             logger.error(
@@ -207,7 +207,9 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
     }
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
-        handleReceivedUserInfo(userInfo)
+        Task { @MainActor [weak self] in
+            await self?.handleReceivedUserInfo(userInfo)
+        }
     }
 
     func session(

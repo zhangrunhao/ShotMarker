@@ -54,8 +54,13 @@ struct ShotMarkerApp: App {
         } else {
             analytics = NoopAnalyticsTracker()
         }
+        let reviewStore = FileHighlightClipReviewStore()
         let syncService = PhoneWatchSyncService(
-            importer: TrainingSessionImporter(store: store),
+            importer: TrainingSessionImporter(
+                store: store,
+                reviewStore: reviewStore,
+                logger: logger,
+            ),
             logger: logger,
             analytics: analytics,
         )
@@ -68,7 +73,6 @@ struct ShotMarkerApp: App {
                 logger: logger,
                 analytics: analytics,
             )
-            let reviewStore = FileHighlightClipReviewStore()
             _highlightJobManager = StateObject(wrappedValue: highlightJobManager)
             self.reviewStore = reviewStore
             highlightJobManager.load()

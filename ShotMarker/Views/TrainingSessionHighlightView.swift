@@ -388,6 +388,8 @@
             do {
                 let data = try TrainingSessionJSONTransferService(
                     store: InMemoryTrainingSessionStore(sessions: []),
+                    reviewStore: reviewStore,
+                    logger: logger,
                 )
                 .exportData(for: [session])
                 trainingSessionExportDocument = TrainingSessionJSONDocument(data: data)

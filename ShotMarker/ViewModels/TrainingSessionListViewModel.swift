@@ -46,6 +46,7 @@ final class TrainingSessionListViewModel: ObservableObject {
     @Published private(set) var selectedSessionIDs: Set<UUID> = []
 
     private let store: TrainingSessionStoreProtocol
+    private let reviewStore: any HighlightClipReviewStoring
     private let notificationCenter: NotificationCenter
     private let logger: AppLogging
     private var sessions: [TrainingSession] = []
@@ -65,10 +66,12 @@ final class TrainingSessionListViewModel: ObservableObject {
 
     init(
         store: TrainingSessionStoreProtocol,
+        reviewStore: any HighlightClipReviewStoring,
         notificationCenter: NotificationCenter = .default,
         logger: AppLogging = AppLogger.shared,
     ) {
         self.store = store
+        self.reviewStore = reviewStore
         self.notificationCenter = notificationCenter
         self.logger = logger
         trainingSessionsDidChangeObserver = notificationCenter.addObserver(
@@ -77,7 +80,7 @@ final class TrainingSessionListViewModel: ObservableObject {
             queue: nil,
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.load()
+                await self?.load()
             }
         }
     }
@@ -88,18 +91,19 @@ final class TrainingSessionListViewModel: ObservableObject {
         }
     }
 
-    func load() {
+    func load() async {
+        let loadedSessions: [TrainingSession]
         do {
-            let sessions = try store.loadTrainingSessions()
-            self.sessions = sessions
-            rows = Self.makeRows(from: sessions)
+            loadedSessions = try store.loadTrainingSessions()
+            sessions = loadedSessions
+            rows = Self.makeRows(from: loadedSessions)
             selectedSessionIDs.formIntersection(Set(rows.map(\.id)))
             errorMessage = nil
             logger.info(
                 "training.sessions.load.succeeded",
                 category: .training,
                 message: "训练记录读取成功",
-                context: ["trainingSessionCount": "\(sessions.count)"],
+                context: ["trainingSessionCount": "\(loadedSessions.count)"],
             )
         } catch {
             sessions = []
@@ -111,6 +115,29 @@ final class TrainingSessionListViewModel: ObservableObject {
                 category: .training,
                 message: "训练记录读取失败",
                 error: error,
+            )
+            return
+        }
+
+        do {
+            try await reviewStore.reconcile(
+                validTrainingIdentities: Set(
+                    loadedSessions.map {
+                        HighlightClipReviewIdentityBuilder.trainingIdentity(for: $0)
+                    },
+                ),
+            )
+        } catch {
+            errorMessage = nil
+            logger.error(
+                "highlight.review.reconcile.failed",
+                category: .video,
+                message: "片段确认记录协调失败",
+                error: nil,
+                context: [
+                    "errorCategory": Self.reviewCleanupErrorCategory(error),
+                    "trainingSessionCount": "\(loadedSessions.count)",
+                ],
             )
         }
     }
@@ -163,20 +190,24 @@ final class TrainingSessionListViewModel: ObservableObject {
         }
     }
 
-    func importTrainingSessions(from fileURL: URL) throws -> TrainingSessionJSONImportResult {
+    func importTrainingSessions(from fileURL: URL) async throws -> TrainingSessionJSONImportResult {
         let service = TrainingSessionJSONTransferService(
             store: store,
+            reviewStore: reviewStore,
             notificationCenter: notificationCenter,
+            logger: logger,
         )
-        let result = try service.importTrainingSessions(from: fileURL)
-        load()
+        let result = try await service.importTrainingSessions(from: fileURL)
+        await load()
         return result
     }
 
     func exportSelectedSessionsData() throws -> Data {
         try TrainingSessionJSONTransferService(
             store: store,
+            reviewStore: reviewStore,
             notificationCenter: notificationCenter,
+            logger: logger,
         )
         .exportData(for: selectedSessionsForExport())
     }
@@ -184,25 +215,28 @@ final class TrainingSessionListViewModel: ObservableObject {
     func exportAllSessionsData() throws -> Data {
         try TrainingSessionJSONTransferService(
             store: store,
+            reviewStore: reviewStore,
             notificationCenter: notificationCenter,
+            logger: logger,
         )
         .exportData(for: allSessionsForExport())
     }
 
-    func mergeSelectedSessions() {
+    func mergeSelectedSessions() async {
         guard canMergeSelectedSessions else {
             return
         }
 
+        let mergedSessionIDs = selectedSessionIDs
         do {
             var sessions = try store.loadTrainingSessions()
-            let selectedSessions = sessions.filter { selectedSessionIDs.contains($0.id) }
+            let selectedSessions = sessions.filter { mergedSessionIDs.contains($0.id) }
 
             guard selectedSessions.count >= 2, let mergedSession = TrainingSession.merged(selectedSessions) else {
                 return
             }
 
-            sessions.removeAll { selectedSessionIDs.contains($0.id) }
+            sessions.removeAll { mergedSessionIDs.contains($0.id) }
             sessions.append(mergedSession)
 
             try store.saveTrainingSessions(sessions)
@@ -229,7 +263,79 @@ final class TrainingSessionListViewModel: ObservableObject {
                 error: error,
                 context: ["selectedSessionCount": "\(selectedSessionIDs.count)"],
             )
+            return
         }
+
+        await cleanupReviewRecords(for: mergedSessionIDs)
+    }
+
+    func deleteSelectedSessions() async {
+        let deletedSessionIDs = selectedSessionIDs
+        guard !deletedSessionIDs.isEmpty else {
+            return
+        }
+
+        do {
+            var sessions = try store.loadTrainingSessions()
+            sessions.removeAll { deletedSessionIDs.contains($0.id) }
+            try store.saveTrainingSessions(sessions)
+            self.sessions = sessions
+            selectedSessionIDs = []
+            rows = Self.makeRows(from: sessions)
+            errorMessage = nil
+            logger.info(
+                "training.sessions.delete.succeeded",
+                category: .training,
+                message: "训练记录删除成功",
+                context: ["deletedTrainingSessionCount": "\(deletedSessionIDs.count)"],
+            )
+            notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
+        } catch {
+            errorMessage = "无法删除训练记录"
+            logger.error(
+                "training.sessions.delete.failed",
+                category: .training,
+                message: "训练记录删除失败",
+                error: error,
+                context: ["selectedSessionCount": "\(deletedSessionIDs.count)"],
+            )
+            return
+        }
+
+        await cleanupReviewRecords(for: deletedSessionIDs)
+    }
+
+    private func cleanupReviewRecords(for trainingSessionIDs: Set<UUID>) async {
+        var failureCategories: Set<String> = []
+        var failureCount = 0
+        for id in trainingSessionIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
+            do {
+                try await reviewStore.deleteRecords(forTrainingSessionID: id)
+            } catch {
+                failureCount += 1
+                failureCategories.insert(Self.reviewCleanupErrorCategory(error))
+            }
+        }
+
+        guard failureCount > 0 else {
+            return
+        }
+        logger.error(
+            "highlight.review.cleanup.failed",
+            category: .video,
+            message: "清理失效的片段确认记录失败",
+            error: nil,
+            context: [
+                "errorCategory": failureCategories.count == 1
+                    ? failureCategories.first ?? "reviewStoreIO"
+                    : "multipleReviewStoreFailures",
+                "affectedTrainingCount": "\(failureCount)",
+            ],
+        )
+    }
+
+    private nonisolated static func reviewCleanupErrorCategory(_ error: Error) -> String {
+        error is HighlightClipReviewStoreError ? "reviewStoreContract" : "reviewStoreIO"
     }
 
     private static func makeRows(from sessions: [TrainingSession]) -> [TrainingSessionRowViewData] {

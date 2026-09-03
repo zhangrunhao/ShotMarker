@@ -3,7 +3,77 @@ import Combine
 import XCTest
 
 final class TrainingSessionListViewModelTests: XCTestCase {
-    func testLoadSortsTrainingSessionsNewestFirst() throws {
+    @MainActor
+    func testSuccessfulLoadReconcilesCompleteCurrentTrainingIdentities() async throws {
+        let sessions = [
+            try makeSession(id: "00000000-0000-0000-0000-000000000901"),
+            try makeSession(id: "00000000-0000-0000-0000-000000000902"),
+        ]
+        let reviewStore = InMemoryHighlightClipReviewStore()
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: sessions),
+            reviewStore: reviewStore,
+        )
+
+        await viewModel.load()
+        let reconciled = await reviewStore.lastValidTrainingIdentities
+
+        XCTAssertEqual(
+            reconciled,
+            Set(sessions.map { HighlightClipReviewIdentityBuilder.trainingIdentity(for: $0) }),
+        )
+    }
+
+    @MainActor
+    func testDeletingSelectionSavesTrainingFirstThenDeletesEverySelectedID() async throws {
+        let first = try makeSession(id: "00000000-0000-0000-0000-000000000911")
+        let second = try makeSession(id: "00000000-0000-0000-0000-000000000912")
+        let trainingStore = InMemoryTrainingSessionStore(sessions: [first, second])
+        let reviewStore = InMemoryHighlightClipReviewStore()
+        let viewModel = TrainingSessionListViewModel(
+            store: trainingStore,
+            reviewStore: reviewStore,
+        )
+        await viewModel.load()
+        viewModel.beginSelection(with: first.id)
+
+        await viewModel.deleteSelectedSessions()
+        let deletedIDs = await reviewStore.deletedTrainingSessionIDs
+
+        XCTAssertEqual(try trainingStore.loadTrainingSessions(), [second])
+        XCTAssertEqual(deletedIDs, [first.id])
+    }
+
+    @MainActor
+    func testMergeDeletesReviewRecordsForEverySelectedIDIncludingRetainedID() async throws {
+        let first = try makeSession(
+            id: "00000000-0000-0000-0000-000000000921",
+            startedAt: Date(timeIntervalSince1970: 2_000),
+        )
+        let second = try makeSession(
+            id: "00000000-0000-0000-0000-000000000922",
+            startedAt: Date(timeIntervalSince1970: 3_000),
+        )
+        let reviewStore = InMemoryHighlightClipReviewStore()
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: [first, second]),
+            reviewStore: reviewStore,
+        )
+        await viewModel.load()
+        viewModel.beginSelection(with: first.id)
+        viewModel.toggleSelection(for: second.id)
+
+        await viewModel.mergeSelectedSessions()
+        let deletedIDs = await reviewStore.deletedTrainingSessionIDs
+
+        XCTAssertEqual(
+            Set(deletedIDs),
+            Set([first.id, second.id]),
+        )
+        XCTAssertEqual(viewModel.rows.count, 1)
+    }
+
+    func testLoadSortsTrainingSessionsNewestFirst() async throws {
         let older = try TrainingSession(
             id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001")),
             startedAt: Date(timeIntervalSince1970: 1000),
@@ -16,23 +86,27 @@ final class TrainingSessionListViewModelTests: XCTestCase {
             endedAt: Date(timeIntervalSince1970: 2300),
             events: [],
         )
-        let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: [older, newer]))
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: [older, newer]),
+            reviewStore: InMemoryHighlightClipReviewStore(),
+        )
 
-        viewModel.load()
+        await viewModel.load()
 
         XCTAssertEqual(viewModel.rows.map(\.id), [newer.id, older.id])
     }
 
-    func testLoadLogsSuccessfulTrainingSessionCount() throws {
+    func testLoadLogsSuccessfulTrainingSessionCount() async throws {
         let first = try makeSession(id: "00000000-0000-0000-0000-000000000501")
         let second = try makeSession(id: "00000000-0000-0000-0000-000000000502")
         let logger = SpyAppLogger()
         let viewModel = TrainingSessionListViewModel(
             store: InMemoryTrainingSessionStore(sessions: [first, second]),
+            reviewStore: InMemoryHighlightClipReviewStore(),
             logger: logger,
         )
 
-        viewModel.load()
+        await viewModel.load()
 
         let entry = logger.entry(named: "training.sessions.load.succeeded")
         XCTAssertEqual(entry?.level, .info)
@@ -40,14 +114,15 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertEqual(entry?.context["trainingSessionCount"], "2")
     }
 
-    func testLoadLogsFailure() {
+    func testLoadLogsFailure() async {
         let logger = SpyAppLogger()
         let viewModel = TrainingSessionListViewModel(
             store: ThrowingTrainingSessionStore(loadError: TrainingSessionListStoreError.failed),
+            reviewStore: InMemoryHighlightClipReviewStore(),
             logger: logger,
         )
 
-        viewModel.load()
+        await viewModel.load()
 
         let entry = logger.entry(named: "training.sessions.load.failed")
         XCTAssertEqual(entry?.level, .error)
@@ -55,7 +130,7 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertNotNil(entry?.errorDescription)
     }
 
-    func testLoadMapsTrainingSessionStateIntoRows() throws {
+    func testLoadMapsTrainingSessionStateIntoRows() async throws {
         let marker = try ShotMarkerEvent(
             id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000003")),
             markedAt: Date(timeIntervalSince1970: 2100),
@@ -66,9 +141,12 @@ final class TrainingSessionListViewModelTests: XCTestCase {
             endedAt: Date(timeIntervalSince1970: 2300),
             events: [marker],
         )
-        let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: [session]))
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: [session]),
+            reviewStore: InMemoryHighlightClipReviewStore(),
+        )
 
-        viewModel.load()
+        await viewModel.load()
 
         XCTAssertEqual(viewModel.rows, [
             TrainingSessionRowViewData(
@@ -83,21 +161,24 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isEmpty)
     }
 
-    func testSessionReturnsLoadedSessionForRowID() throws {
+    func testSessionReturnsLoadedSessionForRowID() async throws {
         let session = try TrainingSession(
             id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000005")),
             startedAt: Date(timeIntervalSince1970: 2000),
             endedAt: Date(timeIntervalSince1970: 2300),
             events: [],
         )
-        let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: [session]))
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: [session]),
+            reviewStore: InMemoryHighlightClipReviewStore(),
+        )
 
-        viewModel.load()
+        await viewModel.load()
 
         XCTAssertEqual(viewModel.session(for: session.id), session)
     }
 
-    func testLoadMapsRowTitleDateAndDescriptionRangeFromEarliestAndLatestMarkers() throws {
+    func testLoadMapsRowTitleDateAndDescriptionRangeFromEarliestAndLatestMarkers() async throws {
         let firstMarker = try ShotMarkerEvent(
             id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000201")),
             markedAt: Date(timeIntervalSince1970: 2200),
@@ -115,32 +196,38 @@ final class TrainingSessionListViewModelTests: XCTestCase {
                 firstMarker,
             ],
         )
-        let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: [session]))
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: [session]),
+            reviewStore: InMemoryHighlightClipReviewStore(),
+        )
 
-        viewModel.load()
+        await viewModel.load()
 
         XCTAssertEqual(viewModel.rows.first?.titleDate, firstMarker.markedAt)
         XCTAssertEqual(viewModel.rows.first?.descriptionStartedAt, firstMarker.markedAt)
         XCTAssertEqual(viewModel.rows.first?.descriptionEndedAt, lastMarker.markedAt)
     }
 
-    func testLoadFallsBackToSessionRangeWhenRowHasNoMarkers() throws {
+    func testLoadFallsBackToSessionRangeWhenRowHasNoMarkers() async throws {
         let session = try TrainingSession(
             id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000204")),
             startedAt: Date(timeIntervalSince1970: 2000),
             endedAt: Date(timeIntervalSince1970: 2800),
             events: [],
         )
-        let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: [session]))
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: [session]),
+            reviewStore: InMemoryHighlightClipReviewStore(),
+        )
 
-        viewModel.load()
+        await viewModel.load()
 
         XCTAssertEqual(viewModel.rows.first?.titleDate, session.startedAt)
         XCTAssertEqual(viewModel.rows.first?.descriptionStartedAt, session.startedAt)
         XCTAssertEqual(viewModel.rows.first?.descriptionEndedAt, session.endedAt)
     }
 
-    func testMergeSelectedSessionsCombinesSelectedRowsIntoOneSession() throws {
+    func testMergeSelectedSessionsCombinesSelectedRowsIntoOneSession() async throws {
         let firstSession = try TrainingSession(
             id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000301")),
             startedAt: Date(timeIntervalSince1970: 2000),
@@ -174,12 +261,15 @@ final class TrainingSessionListViewModelTests: XCTestCase {
             events: [],
         )
         let store = InMemoryTrainingSessionStore(sessions: [firstSession, secondSession, unselectedSession])
-        let viewModel = TrainingSessionListViewModel(store: store)
+        let viewModel = TrainingSessionListViewModel(
+            store: store,
+            reviewStore: InMemoryHighlightClipReviewStore(),
+        )
 
-        viewModel.load()
+        await viewModel.load()
         viewModel.beginSelection(with: firstSession.id)
         viewModel.toggleSelection(for: secondSession.id)
-        viewModel.mergeSelectedSessions()
+        await viewModel.mergeSelectedSessions()
 
         let savedSessions = try store.loadTrainingSessions()
         XCTAssertEqual(savedSessions.count, 2)
@@ -198,7 +288,7 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertTrue(savedSessions.contains(unselectedSession))
     }
 
-    func testMergeRequiresAtLeastTwoSelectedSessions() throws {
+    func testMergeRequiresAtLeastTwoSelectedSessions() async throws {
         let session = try TrainingSession(
             id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000401")),
             startedAt: Date(timeIntervalSince1970: 2000),
@@ -206,18 +296,21 @@ final class TrainingSessionListViewModelTests: XCTestCase {
             events: [],
         )
         let store = InMemoryTrainingSessionStore(sessions: [session])
-        let viewModel = TrainingSessionListViewModel(store: store)
+        let viewModel = TrainingSessionListViewModel(
+            store: store,
+            reviewStore: InMemoryHighlightClipReviewStore(),
+        )
 
-        viewModel.load()
+        await viewModel.load()
         viewModel.beginSelection(with: session.id)
-        viewModel.mergeSelectedSessions()
+        await viewModel.mergeSelectedSessions()
 
         XCTAssertEqual(try store.loadTrainingSessions(), [session])
         XCTAssertTrue(viewModel.isSelectionMode)
         XCTAssertFalse(viewModel.canMergeSelectedSessions)
     }
 
-    func testSelectedSessionsForExportReturnsSelectedSessionsInVisibleRowOrder() throws {
+    func testSelectedSessionsForExportReturnsSelectedSessionsInVisibleRowOrder() async throws {
         let older = try makeSession(
             id: "00000000-0000-0000-0000-000000000801",
             startedAt: Date(timeIntervalSince1970: 1000),
@@ -232,16 +325,17 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         )
         let viewModel = TrainingSessionListViewModel(
             store: InMemoryTrainingSessionStore(sessions: [older, newer, unselected]),
+            reviewStore: InMemoryHighlightClipReviewStore(),
         )
 
-        viewModel.load()
+        await viewModel.load()
         viewModel.beginSelection(with: older.id)
         viewModel.toggleSelection(for: newer.id)
 
         XCTAssertEqual(viewModel.selectedSessionsForExport(), [newer, older])
     }
 
-    func testAllSessionsForExportReturnsAllSessionsInVisibleRowOrder() throws {
+    func testAllSessionsForExportReturnsAllSessionsInVisibleRowOrder() async throws {
         let older = try makeSession(
             id: "00000000-0000-0000-0000-000000000804",
             startedAt: Date(timeIntervalSince1970: 1000),
@@ -252,14 +346,15 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         )
         let viewModel = TrainingSessionListViewModel(
             store: InMemoryTrainingSessionStore(sessions: [older, newer]),
+            reviewStore: InMemoryHighlightClipReviewStore(),
         )
 
-        viewModel.load()
+        await viewModel.load()
 
         XCTAssertEqual(viewModel.allSessionsForExport(), [newer, older])
     }
 
-    func testExportAllSessionsDataEncodesAllVisibleSessions() throws {
+    func testExportAllSessionsDataEncodesAllVisibleSessions() async throws {
         let older = try makeSession(
             id: "00000000-0000-0000-0000-000000000806",
             startedAt: Date(timeIntervalSince1970: 1000),
@@ -270,9 +365,10 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         )
         let viewModel = TrainingSessionListViewModel(
             store: InMemoryTrainingSessionStore(sessions: [older, newer]),
+            reviewStore: InMemoryHighlightClipReviewStore(),
         )
 
-        viewModel.load()
+        await viewModel.load()
         let data = try viewModel.exportAllSessionsData()
 
         XCTAssertEqual(try JSONDecoder().decode([TrainingSession].self, from: data), [newer, older])
@@ -376,19 +472,20 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertTrue(presentation.includesDateInTimeRange)
     }
 
-    func testMergeSelectedSessionsLogsSuccess() throws {
+    func testMergeSelectedSessionsLogsSuccess() async throws {
         let firstSession = try makeSession(id: "00000000-0000-0000-0000-000000000601")
         let secondSession = try makeSession(id: "00000000-0000-0000-0000-000000000602")
         let logger = SpyAppLogger()
         let viewModel = TrainingSessionListViewModel(
             store: InMemoryTrainingSessionStore(sessions: [firstSession, secondSession]),
+            reviewStore: InMemoryHighlightClipReviewStore(),
             logger: logger,
         )
 
-        viewModel.load()
+        await viewModel.load()
         viewModel.beginSelection(with: firstSession.id)
         viewModel.toggleSelection(for: secondSession.id)
-        viewModel.mergeSelectedSessions()
+        await viewModel.mergeSelectedSessions()
 
         let entry = logger.entry(named: "training.sessions.merge.succeeded")
         XCTAssertEqual(entry?.level, .info)
@@ -397,7 +494,7 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertEqual(entry?.context["trainingSessionId"], firstSession.id.uuidString)
     }
 
-    func testMergeSelectedSessionsLogsFailure() throws {
+    func testMergeSelectedSessionsLogsFailure() async throws {
         let firstSession = try makeSession(id: "00000000-0000-0000-0000-000000000701")
         let secondSession = try makeSession(id: "00000000-0000-0000-0000-000000000702")
         let logger = SpyAppLogger()
@@ -406,13 +503,14 @@ final class TrainingSessionListViewModelTests: XCTestCase {
                 sessions: [firstSession, secondSession],
                 saveError: TrainingSessionListStoreError.failed,
             ),
+            reviewStore: InMemoryHighlightClipReviewStore(),
             logger: logger,
         )
 
-        viewModel.load()
+        await viewModel.load()
         viewModel.beginSelection(with: firstSession.id)
         viewModel.toggleSelection(for: secondSession.id)
-        viewModel.mergeSelectedSessions()
+        await viewModel.mergeSelectedSessions()
 
         let entry = logger.entry(named: "training.sessions.merge.failed")
         XCTAssertEqual(entry?.level, .error)
@@ -420,20 +518,24 @@ final class TrainingSessionListViewModelTests: XCTestCase {
         XCTAssertNotNil(entry?.errorDescription)
     }
 
-    func testLoadShowsEmptyStateWhenNoTrainingSessionsExist() {
-        let viewModel = TrainingSessionListViewModel(store: InMemoryTrainingSessionStore(sessions: []))
+    func testLoadShowsEmptyStateWhenNoTrainingSessionsExist() async {
+        let viewModel = TrainingSessionListViewModel(
+            store: InMemoryTrainingSessionStore(sessions: []),
+            reviewStore: InMemoryHighlightClipReviewStore(),
+        )
 
-        viewModel.load()
+        await viewModel.load()
 
         XCTAssertTrue(viewModel.rows.isEmpty)
         XCTAssertTrue(viewModel.isEmpty)
     }
 
-    func testRowsRefreshWhenTrainingSessionsDidChangeNotificationIsPosted() throws {
+    func testRowsRefreshWhenTrainingSessionsDidChangeNotificationIsPosted() async throws {
         let store = InMemoryTrainingSessionStore(sessions: [])
         let notificationCenter = NotificationCenter()
         let viewModel = TrainingSessionListViewModel(
             store: store,
+            reviewStore: InMemoryHighlightClipReviewStore(),
             notificationCenter: notificationCenter,
         )
         let session = try TrainingSession(
@@ -459,13 +561,13 @@ final class TrainingSessionListViewModelTests: XCTestCase {
             }
             .store(in: &cancellables)
 
-        viewModel.load()
+        await viewModel.load()
         XCTAssertTrue(viewModel.rows.isEmpty)
 
         try store.saveTrainingSessions([session])
         notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
 
-        wait(for: [rowsRefreshed], timeout: 1)
+        await fulfillment(of: [rowsRefreshed], timeout: 1)
         XCTAssertEqual(viewModel.rows, [
             TrainingSessionRowViewData(
                 id: session.id,

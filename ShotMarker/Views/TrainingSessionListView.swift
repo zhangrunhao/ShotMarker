@@ -57,6 +57,7 @@ struct TrainingSessionListView: View {
     @ObservedObject private var highlightJobManager: HighlightJobManager
     @State private var isImportingTrainingSessions = false
     @State private var isExportingTrainingSessions = false
+    @State private var isConfirmingTrainingSessionDeletion = false
     @State private var trainingSessionExportDocument: TrainingSessionJSONDocument?
     @State private var trainingSessionExportCount = 0
     @State private var trainingSessionTransferAlert: TrainingSessionTransferAlert?
@@ -89,7 +90,11 @@ struct TrainingSessionListView: View {
         self.reviewStore = reviewStore
         let resolvedHighlightJobManager = Self.resolvedHighlightJobManager(highlightJobManager, logger: logger)
         _highlightJobManager = ObservedObject(wrappedValue: resolvedHighlightJobManager)
-        _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(store: store, logger: logger))
+        _viewModel = StateObject(wrappedValue: TrainingSessionListViewModel(
+            store: store,
+            reviewStore: reviewStore,
+            logger: logger,
+        ))
     }
 
     @MainActor
@@ -117,8 +122,8 @@ struct TrainingSessionListView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .safeAreaInset(edge: .bottom) {
-                if viewModel.canMergeSelectedSessions {
-                    mergeActionBar
+                if viewModel.isSelectionMode {
+                    selectionActionBar
                 }
             }
             .navigationTitle("训练记录")
@@ -127,7 +132,7 @@ struct TrainingSessionListView: View {
                 destination(for: target.id)
             }
             .task {
-                viewModel.load()
+                await viewModel.load()
             }
             .toolbar {
                 if logExportService != nil {
@@ -165,7 +170,9 @@ struct TrainingSessionListView: View {
                 isPresented: $isImportingTrainingSessions,
                 allowedContentTypes: [.json],
             ) { result in
-                handleTrainingSessionImport(result)
+                Task {
+                    await handleTrainingSessionImport(result)
+                }
             }
             .fileExporter(
                 isPresented: $isExportingTrainingSessions,
@@ -179,6 +186,16 @@ struct TrainingSessionListView: View {
                 Button("好", role: .cancel) {}
             } message: {
                 Text(trainingSessionTransferAlert?.message ?? "")
+            }
+            .alert("删除训练记录？", isPresented: $isConfirmingTrainingSessionDeletion) {
+                Button("取消", role: .cancel) {}
+                Button("删除", role: .destructive) {
+                    Task {
+                        await viewModel.deleteSelectedSessions()
+                    }
+                }
+            } message: {
+                Text("将删除已选择的 \(viewModel.selectedSessionIDs.count) 条训练记录。")
             }
             #if os(iOS)
             .sheet(isPresented: exportedLogSheetBinding) {
@@ -428,15 +445,30 @@ struct TrainingSessionListView: View {
         return highlightJobManager
     }
 
-    private var mergeActionBar: some View {
-        Button {
-            viewModel.mergeSelectedSessions()
-        } label: {
-            Text("合并")
-                .fontWeight(.semibold)
-                .frame(maxWidth: .infinity)
+    private var selectionActionBar: some View {
+        HStack(spacing: 12) {
+            Button(role: .destructive) {
+                isConfirmingTrainingSessionDeletion = true
+            } label: {
+                Text("删除")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(viewModel.selectedSessionIDs.isEmpty)
+
+            Button {
+                Task {
+                    await viewModel.mergeSelectedSessions()
+                }
+            } label: {
+                Text("合并")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!viewModel.canMergeSelectedSessions)
         }
-        .buttonStyle(.borderedProminent)
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, 8)
@@ -566,7 +598,7 @@ struct TrainingSessionListView: View {
     }
 
     @MainActor
-    private func handleTrainingSessionImport(_ result: Result<URL, Error>) {
+    private func handleTrainingSessionImport(_ result: Result<URL, Error>) async {
         switch result {
         case let .success(fileURL):
             logger.info(
@@ -576,7 +608,7 @@ struct TrainingSessionListView: View {
             )
 
             do {
-                let importResult = try viewModel.importTrainingSessions(from: fileURL)
+                let importResult = try await viewModel.importTrainingSessions(from: fileURL)
                 logger.info(
                     "training.sessions.import.succeeded",
                     category: .training,
@@ -699,11 +731,13 @@ private struct TrainingSessionTransferAlert {
 
 #if DEBUG
     #Preview {
+        let reviewStore = InMemoryHighlightClipReviewStore()
         TrainingSessionListView(
             viewModel: TrainingSessionListViewModel(
                 store: InMemoryTrainingSessionStore(sessions: TrainingSession.previewSessions),
+                reviewStore: reviewStore,
             ),
-            reviewStore: InMemoryHighlightClipReviewStore(),
+            reviewStore: reviewStore,
         )
     }
 #endif
