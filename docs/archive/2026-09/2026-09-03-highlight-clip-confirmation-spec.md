@@ -1,10 +1,12 @@
 # ShotMarker 片段确认持久化与连续审核规格
 
 - 日期：2026-09-03
-- 状态：设计已确认，尚未实现
+- 状态：已实现并完成约定范围验证
 - 目标版本：不绑定发布版本；本 Change 不修改版本号或构建号
 - 设计基线：`main` / `d368622`
-- 前置实现：[集锦片段审核与范围调整](../archive/2026-09/2026-09-02-highlight-clip-review-spec.md)
+- 实现基线：`codex/highlight-clip-confirmation` / `babebb0`
+- 验证记录：[2026-09-03-highlight-clip-confirmation-validation.md](2026-09-03-highlight-clip-confirmation-validation.md)
+- 前置实现：[集锦片段审核与范围调整](2026-09-02-highlight-clip-review-spec.md)
 
 ## 背景
 

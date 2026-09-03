@@ -1,22 +1,22 @@
 # ShotMarker 质量状态
 
 - 最后复核：2026-09-03
-- 验证代码基线：main 合并结果（父提交 560223f 与 cf534bd）
+- 验证代码基线：`codex/highlight-clip-confirmation` / `babebb0`
 - 最近完整测试验证：2026-09-03
 - 最近 Release 构建验证：2026-09-03
 
 ## 当前结论
 
-当前合并结果的 iPhone、Watch 完整测试与 Release Simulator 构建均在 2026-09-03 通过。集锦片段审核按用户最终确认的范围完成 Simulator 验收和时间轴真实触控 UI 回归；片段序数样式完成自动验证和部分 Simulator 人工验收，默认收起的独立组合流程仍不记录为已通过。用户明确不要求本 Change 验证 VoiceOver，因此未执行且不记录为通过。SwiftLint 基线仍非绿色，真机与线上链路验收尚未完成。
+片段确认实现代码基线的 iPhone、Watch 完整测试与 Release Simulator 构建均在 2026-09-03 通过。逐片段持久化、同组合恢复、编辑事务、连续导航、训练生命周期清理和任务保留边界已有自动与真实媒体 Simulator 证据；片段序数样式仍沿用此前的部分人工验收结论。VoiceOver、真机与线上链路未执行且不记录为通过，SwiftLint 既有基线仍非绿色。
 
 ## 已验证
 
 | 范围 | 环境 | 最近验证 | 结果 |
 | --- | --- | --- | --- |
-| 片段审核直接受影响测试 | iPhone 17 Pro / iOS 26.5 Simulator | 2026-09-03 | 104 通过，0 失败，0 跳过 |
-| iPhone 完整测试 | iPhone 17 Pro / iOS 26.5 Simulator | 2026-09-03 | 272 通过，0 失败，0 跳过；含 4 项真实拖动 UI 测试 |
+| 片段确认直接受影响测试 | iPhone 17 Pro / iOS 26.5 Simulator | 2026-09-03 | 186 通过，0 失败，0 跳过；含 5 项确认 UI 测试 |
+| iPhone 完整测试 | iPhone 17 Pro / iOS 26.5 Simulator | 2026-09-03 | 342 通过，0 失败，0 跳过；含 5 项确认与 4 项真实拖动 UI 测试 |
 | Watch 完整测试 | Apple Watch Series 11 46mm / watchOS 26.5 Simulator | 2026-09-03 | 30 通过，0 失败，0 跳过 |
-| Release 构建 | generic iOS Simulator | 2026-09-03 | 成功；App、dSYM 和 Privacy Manifest 存在，DEBUG 时间轴测试入口未进入二进制 |
+| Release 构建 | generic iOS Simulator | 2026-09-03 | 成功；App、dSYM 和 Privacy Manifest 存在，两个 DEBUG UI 测试入口均未进入二进制 |
 | 正式 Archive | generic iOS Device，版本 1.2（Build 1） | 2026-08-19 | 自动签名 Archive 与签名校验成功 |
 | Archive dSYM | ShotMarker 与 ShotMarkerWatchApp | 2026-08-19 | 二进制 UUID 均匹配；未嵌入独立 `Sentry.framework` |
 | Organizer Validate | Xcode Organizer | 2026-08-19 | Validation succeeded；未执行上传 |
@@ -24,9 +24,22 @@
 | Plist、entitlements、privacy manifest 源文件 | 本地静态检查 | 2026-08-19 | 全部通过 plutil |
 | Git 文本检查 | git diff --check | 2026-09-03 | 通过 |
 
-测试覆盖训练记录、Watch 同步、视频准备和规划、审核范围/编号/合并/媒体/播放/状态、版本化精确片段快照、时间轴真实拖动、片段序数模型与布局、导出、集锦任务、本地日志、GlitchTip、Analytics 请求契约及 Privacy Manifest。
+测试覆盖训练记录、Watch 同步、视频准备和规划、稳定组合身份、分块摘要、版本化确认 Store、恢复规划、编辑事务、连续导航、训练清理、审核范围/编号/合并/媒体/播放/状态、版本化精确片段快照、时间轴真实拖动、片段序数模型与布局、导出、集锦任务、本地日志、GlitchTip、Analytics 请求契约及 Privacy Manifest。
 
 正式 Archive、Organizer 与线上服务的完整外部证据由私有台账维护；上表只保留理解公开质量状态所需的摘要，不据此推断当前线上状态。
+
+## 逐片段确认验收
+
+2026-09-03 在 iPhone 17 Pro / iOS 26.5 Simulator 使用两段 640×360、H.264、无音轨、各 40 秒的有序视频和一条含 4 个打点的训练完成真实媒体流程；样本同时形成普通卡片、双打点合并卡片和跨第二段视频的卡片。
+
+- 首次三张卡片均为默认且可以直接生成；调整确认后显示已确认保留，连续导航会跳过已确认卡片，并在最后一个后续默认卡片后返回图集而不循环。
+- 终止重启和原序重选恢复部分确认；反转视频顺序不命中，恢复原顺序再次命中。改变全局前置时长只重算默认卡片，两个确认范围保持不变。
+- 已确认卡片编辑时显示默认；放弃恢复旧值，再确认原子替换同一项。确认排除在重启后保留且占用关联打点，不会重新生成默认卡片。
+- 实际创建并清理集锦任务后，任务数归零而确认 Store 仍保留同一组合的三项确认。
+- 已提交 UI 回归验证四种图集状态、默认值不阻止生成、脏编辑放弃、连续导航、六个精调控件默认收起与重入复位，以及最大 Dynamic Type 下的可读和可点击状态。
+- Store 写入失败、损坏恢复、未知版本保护、并发 upsert、训练删除/替换/合并/reconciliation 与清理失败不回滚训练事实由自动测试验证。
+
+完整命令、结果包、16 项验收逐项结论、媒体时间和未执行范围见 [验证记录](../archive/2026-09/2026-09-03-highlight-clip-confirmation-validation.md)。记录不包含组合摘要、媒体标识、训练/打点 UUID、临时路径或模拟器设备标识符。
 
 ## 集锦片段审核验收
 
@@ -54,7 +67,7 @@ VoiceOver 流程未执行，也不记为已通过；用户在 2026-09-03 明确�
 
 本次片段审核验收补充覆盖了独立横屏与竖屏视频的首项完整缩略图流程。VoiceOver 仍没有当前代码基线的验收证据，但按用户决定不是本 Change 的完成门槛。
 
-片段序数“样式调整”默认收起、同页重新展开保持状态，以及重新进入后恢复本地样式的组合流程尚未完成独立人工验收；完整 iPhone 测试与 Release 构建不替代该 UI 流程。
+片段序数“样式调整”默认收起、同页重新展开保持状态，以及重新进入后恢复本地样式的组合流程尚未完成独立人工验收；本次新增的“精确范围调整”折叠 UI 回归不替代该序数样式流程。
 
 ## 静态检查
 
@@ -67,11 +80,11 @@ VoiceOver 流程未执行，也不记为已通过；用户在 2026-09-03 明确�
 
 这些问题不会否定当前测试和构建结果，但在把 lint 设为自动门禁前需要建立清理计划。
 
-2026-09-03 的 Release 构建仍报告 `HighlightClipPlaybackController` 观察者闭包缺少 Sendable 标注的并发警告；该警告不影响本次测试和构建结论，但构建并非 warning-free。
+2026-09-03 的 Release 构建仍报告 `HighlightClipPlaybackController` 观察者闭包缺少 Sendable 标注的并发警告，以及没有 AppIntents 依赖时跳过 metadata 提取的警告；这些警告不影响本次测试和构建结论，但构建并非 warning-free。
 
 ## 当前未覆盖
 
-- 只有 4 项时间轴拖动 UI Test；没有覆盖完整生成流程的 UI Test、快照测试或 XCTest Plan。
+- 仓库现有 5 项片段确认和 4 项时间轴拖动 UI Test；真实媒体生成/重启验收驱动没有保留为长期测试，仍没有快照测试或 XCTest Plan。
 - 没有仓库内 CI 配置。
 - 没有 iPad 功能验收；iPad destination 仍保留在工程配置中。
 - 没有当前代码基线的真机完整回归。
