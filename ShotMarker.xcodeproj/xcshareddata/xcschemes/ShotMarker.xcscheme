@@ -35,6 +35,20 @@
                ReferencedContainer = "container:ShotMarker.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "FF8000062FA7000000B04685"
+               BuildableName = "ShotMarkerUITests.xctest"
+               BlueprintName = "ShotMarkerUITests"
+               ReferencedContainer = "container:ShotMarker.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -52,6 +66,17 @@
                BlueprintIdentifier = "FF1000062FA4800000B04685"
                BuildableName = "ShotMarkerTests.xctest"
                BlueprintName = "ShotMarkerTests"
+               ReferencedContainer = "container:ShotMarker.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "FF8000062FA7000000B04685"
+               BuildableName = "ShotMarkerUITests.xctest"
+               BlueprintName = "ShotMarkerUITests"
                ReferencedContainer = "container:ShotMarker.xcodeproj">
             </BuildableReference>
          </TestableReference>

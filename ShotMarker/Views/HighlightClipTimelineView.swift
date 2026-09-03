@@ -178,9 +178,8 @@ struct HighlightClipTimelineView: View {
 
     private func startHandle(x: Double, width: Double, height: CGFloat) -> some View {
         timelineHandle(symbol: "chevron.right")
-            .position(x: hitRegionX(x, width: width), y: height / 2)
             .contentShape(Rectangle())
-            .gesture(startGesture(width: width))
+            .highPriorityGesture(startGesture(width: width))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("片段起点")
             .accessibilityValue(timeDescription(range.start))
@@ -190,13 +189,13 @@ struct HighlightClipTimelineView: View {
                 }
                 onAction(.setStart(range.start + delta))
             }
+            .position(x: hitRegionX(x, width: width), y: height / 2)
     }
 
     private func endHandle(x: Double, width: Double, height: CGFloat) -> some View {
         timelineHandle(symbol: "chevron.left")
-            .position(x: hitRegionX(x, width: width), y: height / 2)
             .contentShape(Rectangle())
-            .gesture(endGesture(width: width))
+            .highPriorityGesture(endGesture(width: width))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("片段终点")
             .accessibilityValue(timeDescription(range.end))
@@ -206,6 +205,7 @@ struct HighlightClipTimelineView: View {
                 }
                 onAction(.setEnd(range.end + delta))
             }
+            .position(x: hitRegionX(x, width: width), y: height / 2)
     }
 
     private func moveGrip(
@@ -225,9 +225,8 @@ struct HighlightClipTimelineView: View {
                 .background(.black.opacity(0.72), in: Capsule())
         }
         .frame(width: 52, height: 44)
-        .position(x: centerX, y: height - 22)
         .contentShape(Rectangle())
-        .gesture(moveGesture(width: width))
+        .highPriorityGesture(moveGesture(width: width))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("移动整个片段")
         .accessibilityValue(
@@ -239,6 +238,7 @@ struct HighlightClipTimelineView: View {
             }
             onAction(.moveBy(delta))
         }
+        .position(x: centerX, y: height - 22)
     }
 
     private func playheadHandle(x: Double, width: Double) -> some View {
@@ -252,9 +252,8 @@ struct HighlightClipTimelineView: View {
                 }
         }
         .frame(width: 44, height: 44)
-        .position(x: hitRegionX(x, width: width), y: 22)
         .contentShape(Rectangle())
-        .gesture(playheadGesture(width: width))
+        .highPriorityGesture(playheadGesture(width: width))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("预览位置")
         .accessibilityValue(timeDescription(playhead))
@@ -265,6 +264,7 @@ struct HighlightClipTimelineView: View {
             let time = min(max(playhead + delta, window.start), window.end)
             onAction(.preview(time))
         }
+        .position(x: hitRegionX(x, width: width), y: 22)
     }
 
     private func timelineHandle(symbol: String) -> some View {
@@ -283,7 +283,7 @@ struct HighlightClipTimelineView: View {
     }
 
     private func startGesture(width: Double) -> some Gesture {
-        DragGesture(minimumDistance: 0)
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
             .updating($startGestureRange) { _, initialRange, _ in
                 if initialRange == nil {
                     initialRange = range
@@ -302,7 +302,7 @@ struct HighlightClipTimelineView: View {
     }
 
     private func endGesture(width: Double) -> some Gesture {
-        DragGesture(minimumDistance: 0)
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
             .updating($endGestureRange) { _, initialRange, _ in
                 if initialRange == nil {
                     initialRange = range
@@ -321,7 +321,7 @@ struct HighlightClipTimelineView: View {
     }
 
     private func moveGesture(width: Double) -> some Gesture {
-        DragGesture(minimumDistance: 0)
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
             .onChanged { value in
                 let incrementalTranslation = moveDragState.incrementalTranslation(
                     for: Double(value.translation.width),
@@ -341,7 +341,7 @@ struct HighlightClipTimelineView: View {
     }
 
     private func playheadGesture(width: Double) -> some Gesture {
-        DragGesture(minimumDistance: 0)
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
             .updating($playheadGestureTime) { _, initialTime, _ in
                 if initialTime == nil {
                     initialTime = playhead
