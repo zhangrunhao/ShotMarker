@@ -97,6 +97,25 @@ final class HighlightClipReviewMediaProvider {
         }
     }
 
+    func validateSourceAvailability(for video: SelectedTrainingVideo) async throws {
+        try Task.checkCancellation()
+        guard !video.id.isEmpty else {
+            throw HighlightClipReviewMediaError.invalidRequest
+        }
+
+        do {
+            let refreshedAsset = try await loadAsset(video)
+            try Task.checkCancellation()
+            assetsByVideoID[video.id] = refreshedAsset
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as HighlightClipReviewMediaError {
+            throw error
+        } catch {
+            throw HighlightClipReviewMediaError.assetLoadFailed
+        }
+    }
+
     func frameData(
         for video: SelectedTrainingVideo,
         at time: TimeInterval,

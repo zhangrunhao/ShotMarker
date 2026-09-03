@@ -283,18 +283,27 @@ final class HighlightClipReviewViewModel: ObservableObject {
             return
         }
 
+        isSubmitting = true
+        submissionErrorMessage = nil
+        defer {
+            isSubmitting = false
+        }
+
+        do {
+            try await validateIncludedSources()
+        } catch is CancellationError {
+            return
+        } catch {
+            submissionErrorMessage = Self.userFacingMessage(for: error)
+            return
+        }
+
         let segments: [ConfirmedHighlightSegment]
         do {
             segments = try confirmedSegments()
         } catch {
             planningErrorMessage = Self.userFacingMessage(for: error)
             return
-        }
-
-        isSubmitting = true
-        submissionErrorMessage = nil
-        defer {
-            isSubmitting = false
         }
 
         do {
@@ -466,6 +475,28 @@ final class HighlightClipReviewViewModel: ObservableObject {
             throw HighlightClipReviewPlanningError.missingMarkers
         }
         return item.range
+    }
+
+    private func validateIncludedSources() async throws {
+        let includedVideoIDs = Set(items.filter(\.isIncluded).map(\.videoID))
+        for video in videos where includedVideoIDs.contains(video.id) {
+            do {
+                try await mediaProvider.validateSourceAvailability(for: video)
+            } catch {
+                if let mediaError = error as? HighlightClipReviewMediaError,
+                   mediaError == .sourceUnavailable
+                {
+                    markSourceUnavailable(videoID: video.id)
+                }
+                throw error
+            }
+        }
+    }
+
+    private func markSourceUnavailable(videoID: String) {
+        for item in items where item.videoID == videoID {
+            markSourceUnavailable(itemID: item.id)
+        }
     }
 
     private static func makeFingerprint(

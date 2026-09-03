@@ -414,6 +414,45 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testSubmitRevalidatesIncludedSourceWithoutTrustingCachedAsset() async {
+        var sourceIsAvailable = true
+        var assetLoadCount = 0
+        var submitted: [ConfirmedHighlightSegment] = []
+        let mediaProvider = HighlightClipReviewMediaProvider(
+            cacheLimit: 8,
+            loadAsset: { _ in
+                assetLoadCount += 1
+                guard sourceIsAvailable else {
+                    throw HighlightClipReviewMediaError.sourceUnavailable
+                }
+                return AVURLAsset(url: URL(fileURLWithPath: "/tmp/video.mov"))
+            },
+            generateFrame: { _, _ in Data([1]) },
+        )
+        let viewModel = makeViewModel(mediaProvider: mediaProvider) { segments in
+            submitted = segments
+        }
+        let itemID = viewModel.items[0].id
+
+        await viewModel.loadThumbnail(
+            itemID: itemID,
+            targetSize: .init(width: 160, height: 90),
+        )
+        XCTAssertEqual(assetLoadCount, 1)
+
+        sourceIsAvailable = false
+        await viewModel.submit()
+
+        XCTAssertTrue(submitted.isEmpty)
+        XCTAssertEqual(assetLoadCount, 2)
+        XCTAssertTrue(viewModel.unavailableItemIDs.contains(itemID))
+        XCTAssertEqual(
+            viewModel.submissionErrorMessage,
+            HighlightClipReviewMediaError.sourceUnavailable.errorDescription,
+        )
+    }
+
+    @MainActor
     private func makeViewModel(
         itemCount: Int = 1,
         frameResults: [Result<Data, TestError>] = [.success(Data([1]))],
