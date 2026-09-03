@@ -252,6 +252,7 @@ struct HighlightClipReviewView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityValue("视频不可用")
         } else {
             switch (item.confirmationState, item.isIncluded) {
             case (.defaultValue, _):
@@ -259,16 +260,19 @@ struct HighlightClipReviewView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityValue("默认")
             case (.confirmed, true):
                 Label("已确认 · 保留", systemImage: "checkmark.circle.fill")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.green)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityValue("已确认，保留")
             case (.confirmed, false):
                 Label("已确认 · 排除", systemImage: "minus.circle.fill")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityValue("已确认，排除")
             }
         }
     }

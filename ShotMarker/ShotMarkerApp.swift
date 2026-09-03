@@ -96,6 +96,10 @@ struct ShotMarkerApp: App {
             #if DEBUG
                 if ProcessInfo.processInfo.environment["SHOTMARKER_UI_TEST_TIMELINE"] == "1" {
                     HighlightClipTimelineUITestHarnessView()
+                } else if ProcessInfo.processInfo.environment[
+                    "SHOTMARKER_UI_TEST_CLIP_CONFIRMATION"
+                ] == "1" {
+                    HighlightClipConfirmationUITestHarnessView()
                 } else {
                     contentView
                 }
