@@ -1,5 +1,7 @@
 # ShotMarker 1.2 App Store Submission Implementation Plan
 
+> 历史计划：2026-09-29 已由 [1.3 提交计划](../../changes/2026-09-29-app-store-1-3-submission-plan.md) 接替。以下保留原始执行设想和未完成清单，不再作为当前指令，也不表示当年各项验收或发布已经完成。当前事实见 [发布状态](../../current/release.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task.
 
 **Goal:** 把 ShotMarker 1.2 从 `Prepare for Submission` 推进到经过代码、Archive、TestFlight、真机、隐私披露和商店资料验收的 App Review 提交，并在批准后以人工确认的方式发布。
@@ -8,7 +10,7 @@
 
 **Tech Stack:** Xcode 26.6、Swift 5 language mode、SwiftUI、XCTest、Swift Package Manager、Sentry Cocoa 9.26.0 `SentrySPM`、App Store Connect、TestFlight、GlitchTip CLI、`xcodebuild`、`plutil`、`dwarfdump`、`codesign`、`sips`、Git。
 
-**Spec:** 本次没有独立 spec。需求来自用户于 2026-08-21 确认的“开始准备提交并列出逐步计划”，当前事实以 [项目状态](../current/status.md)、[产品事实](../current/product.md)、[质量状态](../current/quality.md)、[发布状态](../current/release.md) 和当前代码为准。
+**Spec:** 本次没有独立 spec。需求来自用户于 2026-08-21 确认的“开始准备提交并列出逐步计划”，当前事实以 [项目状态](../../current/status.md)、[产品事实](../../current/product.md)、[质量状态](../../current/quality.md)、[发布状态](../../current/release.md) 和当前代码为准。
 
 **Global Constraints:**
 

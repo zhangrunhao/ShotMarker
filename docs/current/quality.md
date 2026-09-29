@@ -1,17 +1,18 @@
 # ShotMarker 质量状态
 
-- 最后复核：2026-09-10
-- 验证代码：`da129c1`；沿用的独立验证范围在表中注明
+- 最后复核：2026-09-29（静态检查与工具链阻塞）
+- 当前代码：`10a9f35`；最近 iPhone 运行验证代码为 `da129c1`，其他独立范围在表中注明
 - 工程版本：1.3（Build 3）
 
 ## 当前结论
 
-可编辑集锦任务、数据世代重置、停止语义、文件事务及媒体生命周期已有自动测试和真实媒体 Simulator 证据。完整 iPhone、Watch 测试及干净 Release Simulator 构建通过。真机、VoiceOver 和线上链路未验证，不记录为通过。
+可编辑集锦任务、数据世代重置、停止语义、文件事务及媒体生命周期已有 2026-09-10 的自动测试和真实媒体 Simulator 证据。2026-09-29 静态检查通过，但 Xcode 27.0 许可未接受，新的测试命令以 69 退出、未启动测试；本次没有新的构建或测试通过结论。真机、VoiceOver 和线上链路未验证，不记录为通过。
 
 ## 已验证
 
 | 范围 | 环境 | 日期 | 结果 |
 | --- | --- | --- | --- |
+| 候选配置静态检查 | `10a9f35`；plutil + Python plist 读取与断言 | 2026-09-29 | App/Watch Debug、Release 均为 1.3（3）；五类数据、三类 Required Reason API、zh-Hans 和加密标记核对通过；不等同 XCTest 或构建 |
 | iPhone 完整测试 | iPhone 17 Pro / iOS 26.5 Simulator | 2026-09-10 | 393 通过，0 失败，0 跳过；含 14 项 UI 测试 |
 | 连续确认真实媒体 UI | 真实任务 Store/Session、AVPlayer 和帧提取 | 2026-09-10 | 合并片段 1–3 → 片段 4（691.1 秒）→ 另一来源 → 返回重开均通过；定位、8 帧胶片、手柄位置及播放推进正确 |
 | Watch 完整测试 | Apple Watch Series 11 46mm / watchOS 26.5 Simulator；`1975784` | 2026-09-10 | 31 通过，0 失败，0 跳过；本次导航修复未改动 Watch 代码 |
@@ -39,6 +40,7 @@
 
 ## 现有风险和未覆盖
 
+- Xcode 已变为 27.0（27A266a），许可确认阻止 `xcrun simctl` 与 `xcodebuild test`；新工具链的兼容性、候选测试和 Archive 尚未验证。
 - 没有当前代码的真机完整回归、VoiceOver 人工验收、TestFlight 安装或 App Store Connect 当前状态验证。
 - 没有当前代码的正式签名 Archive、Release Analytics 生产验收、真机崩溃符号化及 GlitchTip 告警验收。
 - Watch 真机联机升级流程未执行；自动测试结论不代替它。

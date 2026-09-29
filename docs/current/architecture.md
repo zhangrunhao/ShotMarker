@@ -1,7 +1,7 @@
 # ShotMarker 技术架构
 
-- 最后复核：2026-09-10
-- 代码范围：`da129c1`
+- 最后复核：2026-09-29（工具链与隐私声明静态复核；运行架构沿用 2026-09-10 验证）
+- 当前代码范围：`10a9f35`；最近运行验证为 `da129c1`
 
 ## 运行单元
 
@@ -12,7 +12,7 @@
 - ShotMarkerWatchAppTests：同步、outbox、运行时和数据世代重置测试。
 - Shared：同步载荷及 `AppDataResetCoordinator`。
 
-工具链为 Xcode 26.6、Swift 6.3.3，语言模式 Swift 5；iOS 下限 26.4，watchOS 下限 26.2。主 App 不配置 macOS、Mac Catalyst 或 visionOS destination。
+最近成功验证使用 Xcode 26.6、Swift 6.3.3；2026-09-29 本机为 Xcode 27.0（27A266a），许可尚未接受，未完成新工具链构建验证。工程语言模式为 Swift 5；iOS 下限 26.4，watchOS 下限 26.2。主 App 不配置 macOS、Mac Catalyst 或 visionOS destination。
 
 ## 启动和数据世代
 
@@ -87,7 +87,8 @@ Watch outbox → transferUserInfo → PhoneWatchSyncService
 
 ## 有效隐私边界
 
-- PrivacyInfo.xcprivacy 声明 Device ID、Product Interaction、UserDefaults 和文件时间戳用途；Tracking 为 false。本 Change 不增加数据类别或后台生成声明。
+- PrivacyInfo.xcprivacy 声明 Device ID、Product Interaction（linked、Analytics）和 Crash Data、Performance Data、Other Diagnostic Data（unlinked、App Functionality）；全部 Tracking 为 false。
+- Required Reason API 覆盖 UserDefaults `CA92.1`、File Timestamp `C617.1` 和 System Boot Time `35F9.1`。2026-09-29 已静态核对；最终 Archive 内的声明仍需核验，不声明后台持续生成。
 - 任务、训练、视频、帧、来源标识、摘要、UUID、文件名和绝对路径不进入 Analytics 或 GlitchTip metadata。
 - GlitchTip 不配置用户身份，不上传训练、视频、截图或本地日志文件。客户端 DSN 可随 App 分发；管理令牌不得进入 Git。
 - 训练与任务创建后无回查、同步或级联删除关系；完整契约见 [任务规格](../archive/2026-09/2026-09-03-editable-highlight-task-spec.md)。
