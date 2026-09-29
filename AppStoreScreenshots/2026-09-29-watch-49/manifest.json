@@ -1,0 +1,15 @@
+{
+  "version": "1.3",
+  "build": "3",
+  "captureDate": "2026-09-29",
+  "device": "Apple Watch Ultra 3 (49mm) / watchOS 26.5",
+  "files": [
+    {
+      "file": "upload-ready/01-start-training.jpg",
+      "width": 422,
+      "height": 514,
+      "alpha": false,
+      "sha256": "fbc31d28aede37e7335a8713d5cb6207321d4381fc0e89da5b5fe682e267bba1"
+    }
+  ]
+}

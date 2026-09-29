@@ -1,0 +1,47 @@
+{
+  "version": "1.3",
+  "build": "3",
+  "captureDate": "2026-09-29",
+  "device": "iPad Pro 13-inch (M5) / iPadOS 26.5",
+  "files": [
+    {
+      "file": "upload-ready/01-clip-review.jpg",
+      "width": 2064,
+      "height": 2752,
+      "alpha": false,
+      "sha256": "b052cb7b9ff6e1af5b3516f9a407c02f7f84eed25a2a6a61b1804fd9f7be5ae6"
+    },
+    {
+      "file": "upload-ready/02-clip-editor.jpg",
+      "width": 2064,
+      "height": 2752,
+      "alpha": false,
+      "sha256": "9a2cada45c8375558c10277d675ccbea3f26458db1c3902fdc690cdb43b9a3d1"
+    },
+    {
+      "file": "upload-ready/03-label-style.jpg",
+      "width": 2064,
+      "height": 2752,
+      "alpha": false,
+      "sha256": "58c8302275d4f8ce5d9518dba22151fcb71f69044b4fc6b080ef8bd5fb9b363b"
+    },
+    {
+      "file": "upload-ready/02-clip-editor.png",
+      "width": 2064,
+      "height": 2752,
+      "alpha": false,
+      "sha256": "d178a323dcb3842a84bcbdd40a2e35c020142c774320555db3b5446e045db3cb",
+      "source": "upload-ready/02-clip-editor.jpg",
+      "purpose": "PNG 上传兼容版；不改变界面内容与尺寸"
+    },
+    {
+      "file": "upload-ready/03-label-style.png",
+      "width": 2064,
+      "height": 2752,
+      "alpha": false,
+      "sha256": "2cdeabc2bdbf85be37add4aafb38c3018b09f6bf8af2c7ba4eee905b93aec9e3",
+      "source": "upload-ready/03-label-style.jpg",
+      "purpose": "PNG 上传兼容版；不改变界面内容与尺寸"
+    }
+  ]
+}

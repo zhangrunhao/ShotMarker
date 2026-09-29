@@ -1,5 +1,21 @@
 # ShotMarker 1.3 App Store 提交计划
 
+> 2026-09-29 提交工作已完成并归档。以下原计划作为历史保留，不作为新的审批或验收要求。用户后续明确确认 iPhone/Watch 均能正常打开，决定跳过后续验收并授权直接提交。
+
+## 实际完成与范围调整
+
+- 用户完成 1.3（3）Archive、上传和 TestFlight 内部分发，并报告手机与 Watch 均可打开。
+- Codex 通过 Chrome 电脑控制核对 Build 3，保存实际 English (U.S.) 更新说明、描述与审核备注；披露旧本地数据清理、前台生成、权限与有限远端观测。
+- 核对商店五类隐私披露，沿用已有 iPhone/iPad/Watch 截图；未重新拍摄或声称旧截图已覆盖 1.3 新界面。
+- 执行 Add for Review，再执行 Submit for Review；后台显示 Waiting for Review。当前事实见 [发布状态](../../current/release.md)，详细私有证据由独立私有台账维护。
+- 发布方式保留审核通过后手动发布；本次未发布到商店。
+- 新自动测试、完整真机/升级/iPad/VoiceOver 验收、生产观测及最终签名/dSYM 复核没有新增通过证据。原清单中未勾选项不是已通过，也不再是本次提交的待执行前置任务。
+- 准备时测试命令因许可未接受以 69 退出；后续实际 Archive 与上传成功，旧阻塞不能继续代表当前分发状态。
+
+同日后续按用户要求拍摄新素材、撤回并重新提交，见 [商店截图记录](2026-09-29-app-store-screenshots.md)。上面的旧截图说明仅描述首次送审，不代表当前商店素材。
+
+## 原计划
+
 > **For agentic workers:** 后续执行使用 `superpowers:executing-plans`，逐项更新真实结果；本计划不是已完成发布的证明。
 
 **Goal:** 将当前 1.3 功能整理为可审阅的提交材料，并完成候选构建、分发验收和商店准备，直至用户确认实际送审。
@@ -8,7 +24,7 @@
 
 **Tech Stack:** SwiftUI、XCTest、Swift Package Manager、Xcode、App Store Connect、TestFlight、Notion。当前安装 Xcode 27.0（27A266a），许可未接受；既有验证使用 Xcode 26.6。
 
-**Spec:** 用户于 2026-09-29 确认“当前版本没啥问题了，开始准备 1.3 的提交”。产品与有效决定见 [产品事实](../current/product.md)、[发布状态](../current/release.md)；本次没有新增功能规格。
+**Spec:** 用户于 2026-09-29 确认“当前版本没啥问题了，开始准备 1.3 的提交”。产品与有效决定见 [产品事实](../../current/product.md)、[发布状态](../../current/release.md)；本次没有新增功能规格。
 
 ## 已确认范围与边界
 
@@ -140,6 +156,6 @@ xcodebuild archive -project ShotMarker.xcodeproj -scheme ShotMarker \
 - [ ] 审核问题、批准与最终发布分别按实际进展处理；“已送审”不等于“已上线”。最终发布需有用户授权。
 - [ ] 先更新公开 current，再单独同步和更新私有证据，更新 Notion 进度；完成本 Change 后将计划移至 `docs/archive/2026-09/` 并更新入口。
 
-## 当前完成界限
+## 准备阶段完成界限（历史）
 
 提交材料和静态准备已完成；测试、签名 Archive、TestFlight 和实际送审尚未完成。解除 Xcode 许可阻塞后从 Task 2 继续，不能依据用户的日常使用反馈或历史测试跳过候选验收。

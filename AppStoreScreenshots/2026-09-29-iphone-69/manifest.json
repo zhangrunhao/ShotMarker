@@ -1,0 +1,43 @@
+{
+  "version": "1.3",
+  "build": "3",
+  "captureDate": "2026-09-29",
+  "device": "iPhone 17 Pro Max / iOS 26.5",
+  "files": [
+    {
+      "file": "upload-ready/01-clip-review.jpg",
+      "width": 1320,
+      "height": 2868,
+      "alpha": false,
+      "sha256": "bb5aa098f109c8829386a7e5d1b818de28d47fa900b899d725162cbe5e055d5b"
+    },
+    {
+      "file": "upload-ready/02-clip-editor.jpg",
+      "width": 1320,
+      "height": 2868,
+      "alpha": false,
+      "sha256": "021b083e642b8ace7419e1493dfe4d68db7c061bf4b557a0af8002654fde62f1"
+    },
+    {
+      "file": "upload-ready/03-label-style.jpg",
+      "width": 1320,
+      "height": 2868,
+      "alpha": false,
+      "sha256": "d71f4f448037c774a650a8e5a68a1feeff26b4280dd2b5c3684041dc96cb6fa9"
+    },
+    {
+      "file": "upload-ready/04-task-configuration.jpg",
+      "width": 1320,
+      "height": 2868,
+      "alpha": false,
+      "sha256": "739c5ca77dc289f0e578017b41fc24ac1a8fdca1d53edd277ca0718591b58364"
+    },
+    {
+      "file": "upload-ready/05-completed-task.jpg",
+      "width": 1320,
+      "height": 2868,
+      "alpha": false,
+      "sha256": "55d0d1f53fa6eda255c807c049d7f021e7a9b7745255110522db1ee3b49bb699"
+    }
+  ]
+}

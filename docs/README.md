@@ -25,7 +25,6 @@ ShotMarker 对外网站、支持页和 how-to 由 `zhangrh.shop` 仓库维护，
 
 ## 正在进行的变更
 
-- [ShotMarker 1.3 App Store 提交](changes/2026-09-29-app-store-1-3-submission-plan.md)：提交材料已准备，候选测试、Archive、TestFlight、截图与商店验收待执行
 - [iOS 语音口令打点与技术统计](changes/2026-07-29-ios-voice-command-marking-spec.md)：设计已确认，尚未实现
 
 changes 使用扁平文件：
@@ -41,6 +40,8 @@ YYYY-MM-DD-topic-plan.md
 
 archive 保存已经结束的设计、计划、讨论、排查、发布验证和旧文档。它不是当前事实来源。
 
+- [1.3 App Store 提交](archive/2026-09/2026-09-29-app-store-1-3-submission-plan.md)：已送审；用户明确跳过的后续验收保留为未验证，审核及最终发布进展见 current。
+- [1.3 商店新截图](archive/2026-09/2026-09-29-app-store-screenshots.md)：当前界面的 5 张 iPhone、3 张 iPad 和 1 张 Watch 素材，已替换并重新送审。
 - [旧 1.2 提交计划](archive/2026-08/2026-08-21-app-store-1-2-submission-plan.md)：已由 1.3 计划接替；历史未勾选项目不表示完成，也不直接作为当前待办。
 - 可编辑集锦任务与生成执行：[规格](archive/2026-09/2026-09-03-editable-highlight-task-spec.md)、[实施计划](archive/2026-09/2026-09-10-editable-highlight-task-plan.md)、[验证记录](archive/2026-09/2026-09-10-editable-highlight-task-validation.md)、[连续导航修复验证](archive/2026-09/2026-09-10-clip-review-navigation-validation.md)
 - 片段确认持久化与连续审核：[规格](archive/2026-09/2026-09-03-highlight-clip-confirmation-spec.md)、[实施计划](archive/2026-09/2026-09-03-highlight-clip-confirmation-plan.md)、[验证记录](archive/2026-09/2026-09-03-highlight-clip-confirmation-validation.md)

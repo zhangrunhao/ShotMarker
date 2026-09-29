@@ -753,6 +753,7 @@
 				GLITCHTIP_DSN = "https://2e48a3b0682a4d4e9eeab13c653b0238@glitchtip.zhangrh.shop/4";
 				INFOPLIST_FILE = "Config/ShotMarker-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ShotMarker;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将生成的训练集锦保存到相册。";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ShotMarker 会读取所选训练视频的拍摄时间和片段内容，用于生成训练集锦。";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -799,6 +800,7 @@
 				GLITCHTIP_DSN = "https://2e48a3b0682a4d4e9eeab13c653b0238@glitchtip.zhangrh.shop/4";
 				INFOPLIST_FILE = "Config/ShotMarker-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ShotMarker;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ShotMarker 会将生成的训练集锦保存到相册。";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ShotMarker 会读取所选训练视频的拍摄时间和片段内容，用于生成训练集锦。";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;

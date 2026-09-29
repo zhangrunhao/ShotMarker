@@ -8,7 +8,5 @@
 	</array>
 	<key>GLITCHTIP_DSN</key>
 	<string>$(GLITCHTIP_DSN)</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 </dict>
 </plist>

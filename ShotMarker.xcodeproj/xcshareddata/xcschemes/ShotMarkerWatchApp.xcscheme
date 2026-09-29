@@ -72,7 +72,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "FF2000062FA5000000B04685"
             BuildableName = "ShotMarkerWatchApp.app"
-            BlueprintName = "ShotMarkerWatchApp"
             ReferencedContainer = "container:ShotMarker.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -89,7 +88,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "FF2000062FA5000000B04685"
             BuildableName = "ShotMarkerWatchApp.app"
-            BlueprintName = "ShotMarkerWatchApp"
             ReferencedContainer = "container:ShotMarker.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
