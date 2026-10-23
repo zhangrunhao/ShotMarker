@@ -27,7 +27,7 @@ ShotMarker 已覆盖 iPhone/Watch 训练同步、视频准备、长期可编辑�
 
 ## 已确认但未实现
 
-[iOS 语音口令打点与技术统计](../changes/2026-07-29-ios-voice-command-marking-spec.md) 已完成设计确认；当前没有语音识别、语音事件或球员统计能力。
+[iOS 语音口令打点与技术统计](../changes/2026-07-29-ios-voice-command-marking-spec.md) 已完成设计确认；当前没有语音识别、语音事件或球员统计能力。实施优先级排在个人投篮训练的现有剪辑体验完善之后，见[产品决定](product.md#有效产品决定)。
 
 ## 后续与未覆盖范围
 
