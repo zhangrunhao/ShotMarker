@@ -1,14 +1,16 @@
 # ShotMarker 质量状态
 
-- 最后复核：2026-10-23（片段审核交互与完整 iPhone 自动测试）
-- 本地测试范围：`ea9516d` 加片段审核交互改动；此范围不代表已分发产物，最终 Archive 源码映射未独立核验
+- 最后复核：2026-10-23（片段审核交互、完整 iPhone 自动测试与开发签名真机构建）
+- 本地验证代码：`ca7b956`，已快进合并到 main；此范围不代表商店分发产物，最终 Archive 源码映射未独立核验
 - 工程版本：1.3（Build 3）
 
 ## 当前结论
 
 2026-10-23 完整 iPhone 自动测试 420 项通过，包括 405 项单元测试和 15 项 UI 测试，无失败或跳过。覆盖直接保留/排除、相邻导航、稳定编号、关系提示、持久化撤销和迟到媒体加载；精确范围调整面板已移除，原有时间轴拖动回归通过。
 
-分发与启动反馈最近核验于 2026-09-29，当前外部状态未复核；当日用户决定跳过后续验收并直接送审。该决定不扩大测试覆盖，也不将真机完整回归、iPad、VoiceOver、签名/dSYM 或生产链路记为通过。
+同一代码的 Debug 真机构建和本地签名验证通过，开发签名安装及启动已验证；这不等于完整真机功能验收。设备验证的权威记录见[私有发布状态](../private.local/shotmarker/current/release.md)。
+
+App Store / TestFlight 分发与启动反馈最近核验于 2026-09-29，当前商店状态未复核；当日用户决定跳过后续验收并直接送审。该决定不扩大测试覆盖，也不将真机完整回归、iPad、VoiceOver、正式 Archive 签名/dSYM 或生产链路记为通过。
 
 ## 已验证
 
@@ -18,6 +20,7 @@
 | 商店截图构建 | Xcode 27.0；当前工作副本；全新 DerivedData；generic iOS Simulator Debug | 2026-09-29 | 构建成功，App/Watch 均为 1.3（3）；没有生成或上传新 Archive；仍有 Sendable、链接器及 AppIntents 提示 |
 | 商店截图与演示 | 专用 iPhone 17 Pro Max、iPad Pro 13-inch (M5)、Watch Ultra 3 Simulator；系统 26.5 | 2026-09-29 | 普通 App 入口拍摄 5/3/1 张原生截图；iPhone 调整并确认片段、排除片段、实际生成 38.5 秒合成演示集锦；检查 iPad 审核/编辑/样式及 Watch 起始画面；上传 JPEG/PNG 尺寸和无 Alpha 检查通过，不等同完整功能验收 |
 | iPhone 完整测试 | Xcode 27.1（27A9275）；iPhone 17 Pro / iOS 26.5 Simulator | 2026-10-23 | 420 通过，0 失败，0 跳过；含 405 项单元测试、15 项 UI 测试；Debug 测试构建成功 |
+| iOS 开发签名构建 | Xcode 27.1；main `ca7b956`；Debug iphoneos | 2026-10-23 | 构建退出码 0；App 为 1.3（3），codesign 深度严格验证通过；不是分发 Archive |
 | 连续审核与撤销真实媒体 UI | 真实任务 Store/Session、AVPlayer 和帧提取；合成 H.264 文件 | 2026-10-23 | 候选 1 → 2（691.1 秒）→ 跨来源候选 3 → 返回重开通过；撤销后迟到的旧加载不能覆盖恢复范围；定位、8 帧胶片、手柄与播放推进正确 |
 | Watch 完整测试 | Apple Watch Series 11 46mm / watchOS 26.5 Simulator；`1975784` | 2026-09-10 | 31 通过，0 失败，0 跳过；2026-10-23 未重跑 Watch 测试，未修改 Watch 代码 |
 | Release 构建 | generic iOS Simulator；当日增量构建 | 2026-09-10 | 成功；主 App/Watch 均为 1.3（3），dSYM UUID 对应；全新 DerivedData 构建的最近验证代码为 `1975784` |
@@ -47,7 +50,7 @@
 
 ## 现有风险和未覆盖
 
-- 本次只验证本地 Debug Simulator，未生成新的 Release、Archive 或分发构建；不能据此推断已上传候选状态。
+- 本次验证 Debug Simulator、开发签名真机构建及安装启动，未生成新的 Release、Archive 或商店分发构建；不能据此推断已上传候选状态。
 - TestFlight 安装启动仅有 2026-09-29 用户反馈；本次没有真机完整回归或 VoiceOver 人工验收。
 - 2026-09-29 记录的 1.3 Archive 已由 Apple 接收，但其签名、dSYM UUID 和 Validate 日志未独立复核；Release Analytics 生产、真机崩溃符号化及 GlitchTip 告警无新增验收。
 - Watch 真机联机升级流程未执行；自动测试结论不代替它。
