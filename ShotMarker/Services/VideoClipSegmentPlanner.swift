@@ -35,6 +35,7 @@ struct HighlightClipSegment: Equatable {
     let duration: TimeInterval
     let markerNumberRange: ClosedRange<Int>
     let markerTotalCount: Int
+    let framing: ClipFraming
 
     init(
         markerIDs: [UUID],
@@ -43,6 +44,7 @@ struct HighlightClipSegment: Equatable {
         duration: TimeInterval,
         markerNumber: Int = 1,
         markerTotalCount: Int = 1,
+        framing: ClipFraming = .original,
     ) {
         self.init(
             markerIDs: markerIDs,
@@ -51,6 +53,7 @@ struct HighlightClipSegment: Equatable {
             duration: duration,
             markerNumberRange: markerNumber...markerNumber,
             markerTotalCount: markerTotalCount,
+            framing: framing,
         )
     }
 
@@ -61,6 +64,7 @@ struct HighlightClipSegment: Equatable {
         duration: TimeInterval,
         markerNumberRange: ClosedRange<Int>,
         markerTotalCount: Int,
+        framing: ClipFraming = .original,
     ) {
         self.markerIDs = markerIDs
         self.videoID = videoID
@@ -68,6 +72,7 @@ struct HighlightClipSegment: Equatable {
         self.duration = duration
         self.markerNumberRange = markerNumberRange
         self.markerTotalCount = markerTotalCount
+        self.framing = framing
     }
 
     var coveredMarkerCount: Int {
@@ -181,6 +186,7 @@ enum VideoClipSegmentPlanner {
         segments.reduce(into: []) { mergedSegments, segment in
             guard let previousSegment = mergedSegments.last,
                   previousSegment.videoID == segment.videoID,
+                  previousSegment.framing == segment.framing,
                   segment.start <= previousSegment.end + segmentMergeGapTolerance
             else {
                 mergedSegments.append(segment)
@@ -234,6 +240,7 @@ private extension HighlightClipSegment {
             duration: duration,
             markerNumber: markerNumber,
             markerTotalCount: markerTotalCount,
+            framing: framing,
         )
     }
 
@@ -250,6 +257,7 @@ private extension HighlightClipSegment {
             duration: mergedEnd - mergedStart,
             markerNumberRange: mergedNumberRange,
             markerTotalCount: markerTotalCount,
+            framing: framing,
         )
     }
 }

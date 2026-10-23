@@ -61,7 +61,7 @@ enum HighlightTaskPlanner {
             kept.append(PersistedHighlightTaskClip(id: confirmation.id, videoID: video.id,
                 markerIDs: confirmation.markerIDs, defaultStart: start, defaultDuration: normalized(end - start),
                 start: confirmation.start, duration: confirmation.duration, isIncluded: confirmation.isIncluded,
-                confirmationState: .confirmed))
+                confirmationState: .confirmed, framing: confirmation.framing))
             occupied.formUnion(group)
         }
 
@@ -100,7 +100,7 @@ enum HighlightTaskPlanner {
                     return HighlightClipMarkerReference(id: id, markedAt: marker.markedAt,
                         timeInVideo: marker.markedAt.timeIntervalSince(video.recordedStartAt), originalMatchedNumber: number)
                 }, defaultStart: item.defaultStart, defaultDuration: item.defaultDuration,
-                start: item.start, duration: item.duration, isIncluded: item.isIncluded, confirmationState: item.confirmationState)
+                start: item.start, duration: item.duration, isIncluded: item.isIncluded, confirmationState: item.confirmationState, framing: item.framing)
         }
         return HighlightClipReviewDraft(selectedVideoCount: task.videos.count,
             totalMarkerCount: task.trainingSnapshot.markers.count, items: items)
@@ -121,7 +121,7 @@ enum HighlightTaskPlanner {
         guard let videoID = UUID(uuidString: item.videoID) else { throw HighlightTaskError.invalidTask }
         return PersistedHighlightTaskClip(id: item.id, videoID: videoID, markerIDs: item.markerReferences.map(\.id),
             defaultStart: item.defaultStart, defaultDuration: item.defaultDuration, start: item.start,
-            duration: item.duration, isIncluded: item.isIncluded, confirmationState: item.confirmationState)
+            duration: item.duration, isIncluded: item.isIncluded, confirmationState: item.confirmationState, framing: item.framing)
     }
 
     private static func defaultItems(snapshot: HighlightTaskTrainingSnapshot, videos: [HighlightTaskVideo],

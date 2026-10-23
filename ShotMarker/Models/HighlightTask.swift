@@ -3,7 +3,7 @@ import Foundation
 nonisolated struct HighlightTaskStoreDocument: Codable, Equatable, Sendable {
     let schemaVersion: Int
     var tasks: [HighlightTask]
-    static let empty = Self(schemaVersion: 1, tasks: [])
+    static let empty = Self(schemaVersion: 2, tasks: [])
 }
 
 nonisolated struct HighlightTask: Identifiable, Codable, Equatable, Sendable {
@@ -55,6 +55,7 @@ nonisolated struct PersistedHighlightTaskClip: Identifiable, Codable, Equatable,
     var duration: TimeInterval
     var isIncluded: Bool
     var confirmationState: HighlightClipConfirmationState
+    var framing: ClipFraming? = nil
 }
 
 nonisolated struct HighlightRenderSnapshot: Codable, Equatable, Sendable {

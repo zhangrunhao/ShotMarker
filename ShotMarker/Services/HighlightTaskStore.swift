@@ -168,12 +168,12 @@ actor HighlightTaskStore: HighlightTaskStoring {
         let data: Data
         do { data = try Data(contentsOf: fileURL) } catch { throw HighlightTaskError.persistence }
         struct Header: Decodable { let schemaVersion: Int }
-        if let header = try? JSONDecoder().decode(Header.self, from: data), header.schemaVersion > 1 {
+        if let header = try? JSONDecoder().decode(Header.self, from: data), header.schemaVersion > 2 {
             throw HighlightTaskError.unsupportedSchema
         }
         do {
             let document = try JSONDecoder().decode(HighlightTaskStoreDocument.self, from: data)
-            guard document.schemaVersion == 1, Set(document.tasks.map(\.id)).count == document.tasks.count else {
+            guard (1...2).contains(document.schemaVersion), Set(document.tasks.map(\.id)).count == document.tasks.count else {
                 throw HighlightTaskError.invalidTask
             }
             for task in document.tasks { try HighlightTaskValidation.validate(task) }
@@ -192,7 +192,7 @@ actor HighlightTaskStore: HighlightTaskStoring {
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
-            try atomicWrite(encoder.encode(document), fileURL)
+            try atomicWrite(encoder.encode(HighlightTaskStoreDocument(schemaVersion: 2, tasks: document.tasks)), fileURL)
         } catch { throw HighlightTaskError.persistence }
     }
 }

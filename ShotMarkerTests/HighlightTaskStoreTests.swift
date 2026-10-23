@@ -2,6 +2,93 @@
 import XCTest
 
 final class HighlightTaskStoreTests: XCTestCase {
+    func testFramingOnlyCommitChangesRevisionAndPreservesOldOutputAndNilDistinction() async throws {
+        let fixture = try TaskStoreFixture()
+        defer { fixture.cleanup() }
+        var task = try HighlightTaskTestFixture.task()
+        task.currentOutput = HighlightTaskTestFixture.output(task: task)
+        let legacy = try JSONEncoder().encode(HighlightTaskStoreDocument(schemaVersion: 1, tasks: [task]))
+        try legacy.write(to: fixture.fileURL)
+        var items = task.reviewItems
+        items[0].framing = .original
+        let updated = try await fixture.store.updateConfiguration(id: task.id, expectedRevision: 1,
+            videos: task.videos, settings: task.clipSettings, items: items)
+        XCTAssertEqual(updated.configurationRevision, 2)
+        XCTAssertEqual(updated.currentOutput, task.currentOutput)
+        XCTAssertTrue(updated.outputIsOutdated)
+        let restored = try await HighlightTaskStore(fileURL: fixture.fileURL).load()
+        XCTAssertEqual(restored[0].reviewItems[0].framing, .original)
+        XCTAssertNil(restored[0].reviewItems[1].framing)
+        var invalid = items
+        invalid[0].framing = ClipFraming(scale: 2.25, centerX: 0.5, centerY: 0.5)
+        let before = try Data(contentsOf: fixture.fileURL)
+        do {
+            _ = try await fixture.store.updateConfiguration(id: task.id, expectedRevision: 2,
+                videos: task.videos, settings: task.clipSettings, items: invalid)
+            XCTFail("Noncanonical persisted framing must be rejected")
+        } catch { XCTAssertEqual(error as? HighlightTaskError, .invalidTask) }
+        XCTAssertEqual(try Data(contentsOf: fixture.fileURL), before)
+    }
+
+    func testFailedSchemaOneUpgradePreservesOriginalBytes() async throws {
+        let fixture = try TaskStoreFixture()
+        defer { fixture.cleanup() }
+        let task = try HighlightTaskTestFixture.task()
+        let legacy = try JSONEncoder().encode(HighlightTaskStoreDocument(schemaVersion: 1, tasks: [task]))
+        try legacy.write(to: fixture.fileURL)
+        let failing = HighlightTaskStore(fileURL: fixture.fileURL,
+            atomicWrite: { _, _ in throw CocoaError(.fileWriteOutOfSpace) })
+        var items = task.reviewItems
+        items[0].framing = ClipFraming(scale: 2.2, centerX: 0.5, centerY: 0.5)
+        do {
+            _ = try await failing.updateConfiguration(id: task.id, expectedRevision: 1,
+                videos: task.videos, settings: task.clipSettings, items: items)
+            XCTFail("Expected write failure")
+        } catch { XCTAssertEqual(error as? HighlightTaskError, .persistence) }
+        XCTAssertEqual(try Data(contentsOf: fixture.fileURL), legacy)
+    }
+
+    func testSchemaOneLoadAndNoopPreserveBytesAndSuccessfulEditUpgradesToTwo() async throws {
+        let fixture = try TaskStoreFixture()
+        defer { fixture.cleanup() }
+        let task = try HighlightTaskTestFixture.task()
+        let legacy = try JSONEncoder().encode(HighlightTaskStoreDocument(schemaVersion: 1, tasks: [task]))
+        try legacy.write(to: fixture.fileURL)
+        let loaded = try await fixture.store.loadForLaunch()
+        XCTAssertEqual(loaded, [task])
+        XCTAssertEqual(try Data(contentsOf: fixture.fileURL), legacy)
+        _ = try await fixture.store.updateConfiguration(id: task.id, expectedRevision: 1,
+            videos: task.videos, settings: task.clipSettings, items: task.reviewItems)
+        XCTAssertEqual(try Data(contentsOf: fixture.fileURL), legacy)
+        var items = task.reviewItems
+        items[0].isIncluded = false
+        let updated = try await fixture.store.updateConfiguration(id: task.id, expectedRevision: 1,
+            videos: task.videos, settings: task.clipSettings, items: items)
+        XCTAssertEqual(updated.configurationRevision, 2)
+        let document = try JSONDecoder().decode(HighlightTaskStoreDocument.self, from: Data(contentsOf: fixture.fileURL))
+        XCTAssertEqual(document.schemaVersion, 2)
+        XCTAssertEqual(document.tasks[0].reviewItems, items)
+    }
+
+    func testInvalidStoredFramingIsQuarantinedRatherThanIgnored() async throws {
+        let fixture = try TaskStoreFixture()
+        defer { fixture.cleanup() }
+        let task = try HighlightTaskTestFixture.task()
+        let encoded = try JSONEncoder().encode(HighlightTaskStoreDocument(schemaVersion: 1, tasks: [task]))
+        var root = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var tasks = try XCTUnwrap(root["tasks"] as? [[String: Any]])
+        var items = try XCTUnwrap(tasks[0]["reviewItems"] as? [[String: Any]])
+        items[0]["framing"] = ["scale": 99, "centerX": 0.5, "centerY": 0.5]
+        tasks[0]["reviewItems"] = items
+        root["tasks"] = tasks
+        try JSONSerialization.data(withJSONObject: root).write(to: fixture.fileURL)
+        do {
+            _ = try await fixture.store.load()
+            XCTFail("Invalid framing must not be silently discarded")
+        } catch { XCTAssertEqual(error as? HighlightTaskError, .corruptDocument) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.fileURL.path))
+    }
+
     func testOutputCommitWriteFailurePreservesPriorOutputAndActiveExecutionForFailureHandling() async throws {
         let fixture = try TaskStoreFixture()
         defer { fixture.cleanup() }
@@ -57,7 +144,7 @@ final class HighlightTaskStoreTests: XCTestCase {
         let loaded = try await HighlightTaskStore(fileURL: fixture.fileURL).loadForLaunch()
         XCTAssertEqual(loaded, [task])
         let root = try JSONDecoder().decode(HighlightTaskStoreDocument.self, from: Data(contentsOf: fixture.fileURL))
-        XCTAssertEqual(root.schemaVersion, 1)
+        XCTAssertEqual(root.schemaVersion, 2)
         XCTAssertEqual(root.tasks[0].trainingSnapshot.markers.map(\.sourceOrder), [0, 1, 2])
         XCTAssertTrue(Set(task.trainingSnapshot.markers.map(\.id)).isDisjoint(with: HighlightTaskTestFixture.session.events.map(\.id)))
     }
@@ -122,7 +209,7 @@ final class HighlightTaskStoreTests: XCTestCase {
     func testUnknownSchemaAndCorruptDocumentStayProtectedAcrossInstances() async throws {
         let fixture = try TaskStoreFixture()
         defer { fixture.cleanup() }
-        let future = Data(#"{"schemaVersion":2,"tasks":[]}"#.utf8)
+        let future = Data(#"{"schemaVersion":3,"tasks":[]}"#.utf8)
         try future.write(to: fixture.fileURL)
         do { _ = try await fixture.store.loadForLaunch(); XCTFail("Must protect future schema") } catch {}
         XCTAssertEqual(try Data(contentsOf: fixture.fileURL), future)

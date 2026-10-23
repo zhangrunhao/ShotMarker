@@ -29,6 +29,7 @@ struct HighlightClipReviewItem: Identifiable, Equatable {
     var duration: TimeInterval
     var isIncluded: Bool
     var confirmationState: HighlightClipConfirmationState
+    var framing: ClipFraming?
 
     init(
         id: UUID,
@@ -40,6 +41,7 @@ struct HighlightClipReviewItem: Identifiable, Equatable {
         duration: TimeInterval,
         isIncluded: Bool,
         confirmationState: HighlightClipConfirmationState = .defaultValue,
+        framing: ClipFraming? = nil,
     ) {
         self.id = id
         self.videoID = videoID
@@ -50,6 +52,7 @@ struct HighlightClipReviewItem: Identifiable, Equatable {
         self.duration = duration
         self.isIncluded = isIncluded
         self.confirmationState = confirmationState
+        self.framing = framing
     }
 
     var range: HighlightClipRange {
@@ -80,6 +83,39 @@ nonisolated struct ConfirmedHighlightSegment: Identifiable, Codable, Equatable, 
     let markerNumberLowerBound: Int
     let markerNumberUpperBound: Int
     let markerTotalCount: Int
+    let framing: ClipFraming
+
+    init(id: UUID, videoID: String, markerIDs: [UUID], start: TimeInterval, duration: TimeInterval,
+         markerNumberLowerBound: Int, markerNumberUpperBound: Int, markerTotalCount: Int,
+         framing: ClipFraming = .original) {
+        self.id = id
+        self.videoID = videoID
+        self.markerIDs = markerIDs
+        self.start = start
+        self.duration = duration
+        self.markerNumberLowerBound = markerNumberLowerBound
+        self.markerNumberUpperBound = markerNumberUpperBound
+        self.markerTotalCount = markerTotalCount
+        self.framing = framing
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, videoID, markerIDs, start, duration
+        case markerNumberLowerBound, markerNumberUpperBound, markerTotalCount, framing
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        videoID = try values.decode(String.self, forKey: .videoID)
+        markerIDs = try values.decode([UUID].self, forKey: .markerIDs)
+        start = try values.decode(TimeInterval.self, forKey: .start)
+        duration = try values.decode(TimeInterval.self, forKey: .duration)
+        markerNumberLowerBound = try values.decode(Int.self, forKey: .markerNumberLowerBound)
+        markerNumberUpperBound = try values.decode(Int.self, forKey: .markerNumberUpperBound)
+        markerTotalCount = try values.decode(Int.self, forKey: .markerTotalCount)
+        framing = try values.contains(.framing) ? values.decode(ClipFraming.self, forKey: .framing) : .original
+    }
 }
 
 struct HighlightClipReviewDraft: Equatable {

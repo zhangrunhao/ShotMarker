@@ -158,6 +158,9 @@ enum HighlightClipReviewPlanner {
         var itemIDs = Set<UUID>()
         var markerIDs = Set<UUID>()
         for item in items {
+            guard item.framing?.isValid ?? true else {
+                throw HighlightClipReviewPlanningError.invalidFraming
+            }
             guard itemIDs.insert(item.id).inserted else {
                 throw HighlightClipReviewPlanningError.duplicateIdentity
             }
@@ -229,11 +232,13 @@ enum HighlightClipReviewPlanner {
                 markerNumberLowerBound: numberRange.lowerBound,
                 markerNumberUpperBound: numberRange.upperBound,
                 markerTotalCount: includedMarkerCount,
+                framing: item.framing ?? .original,
             )
 
             if previousOriginalItemWasIncluded,
                let previousSegment = finalSegments.last,
                previousSegment.videoID == segment.videoID,
+               previousSegment.framing == segment.framing,
                gap(between: previousSegment, and: segment) <= mergeGapTolerance
             {
                 let mergedStart = min(previousSegment.start, segment.start)
@@ -250,6 +255,7 @@ enum HighlightClipReviewPlanner {
                     markerNumberLowerBound: previousSegment.markerNumberLowerBound,
                     markerNumberUpperBound: segment.markerNumberUpperBound,
                     markerTotalCount: includedMarkerCount,
+                    framing: previousSegment.framing,
                 )
                 if let previousIncludedItemID {
                     mergingItemIDs.insert(previousIncludedItemID)
@@ -298,6 +304,9 @@ enum HighlightClipReviewPlanner {
         var segmentIDs = Set<UUID>()
         var expectedLowerBound = 1
         for segment in segments {
+            guard segment.framing.isValid else {
+                throw HighlightClipReviewPlanningError.invalidFraming
+            }
             guard segmentIDs.insert(segment.id).inserted else {
                 throw HighlightClipReviewPlanningError.duplicateIdentity
             }
@@ -374,6 +383,7 @@ extension ConfirmedHighlightSegment {
             duration: duration,
             markerNumberRange: markerNumberLowerBound ... markerNumberUpperBound,
             markerTotalCount: markerTotalCount,
+            framing: framing,
         )
     }
 }
@@ -382,6 +392,7 @@ enum HighlightClipReviewPlanningError: LocalizedError, Equatable {
     case emptySelection
     case sourceVideoMissing
     case invalidRange
+    case invalidFraming
     case missingMarkers
     case inconsistentNumbering
     case duplicateIdentity
@@ -394,6 +405,8 @@ enum HighlightClipReviewPlanningError: LocalizedError, Equatable {
             "找不到片段使用的视频，请重新选择视频。"
         case .invalidRange:
             "片段范围无效，请恢复默认范围后再试。"
+        case .invalidFraming:
+            "片段取景无效，请恢复原画面后再试。"
         case .missingMarkers:
             "片段缺少关联打点，请重新创建任务。"
         case .inconsistentNumbering:
