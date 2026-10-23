@@ -90,3 +90,11 @@ xcrun xcresulttool get test-results summary \
 - 没有新真机安装或用户原始训练视频验收；没有 VoiceOver 人工朗读、完整 iPad、Watch 联机、Release/Archive、App Store、生产 Analytics 或 GlitchTip 验收。
 - 当前 BGRA SDR 路径；HDR/广色域保真未验收。测试源为全画幅方形像素 H.264，非方形像素、非零 clean aperture、任意斜切变换未新增支持或验收。
 - 本记录与临时日志反映本次代码与环境，不代表分发版本，也不替代未来手机实用反馈。
+
+## 同日后续：合并与开发签名构建
+
+用户随后明确要求合并主分支并在当前连接手机运行。主仓库与功能工作树均干净，main 从 `9d078a5` 快进到 `291a0a4`；与 `b744efa` 比较产品、单元/UI 测试和工程目录无差异，因此保留上面的完整测试证据，没有重复运行相同代码的模拟器 suite。
+
+main `291a0a4` 的 Debug iphoneos 构建退出 0，日志 `/tmp/shotmarker-framing-device-build.log`；产物为 `com.heji.ShotMarker` 1.3（3）。`codesign --verify --deep --strict` 退出 0，日志 `/tmp/shotmarker-framing-device-signature.log`。构建仍有播放回调 handler 的 Sendable 警告及 AppIntents metadata 提示，不声明零警告。
+
+开发签名安装启动已完成。设备与进程验证的权威记录见[私有发布状态](../../private.local/shotmarker/current/release.md)；没有新增完整训练/剪辑验收或分发 Archive。本节补充前文实现阶段结束后发生的操作，不把后续证据倒填到先前验证范围。
