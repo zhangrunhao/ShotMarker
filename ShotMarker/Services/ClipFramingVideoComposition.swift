@@ -104,10 +104,10 @@ nonisolated private final class ClipFramingVideoInstruction: NSObject, AVVideoCo
 /// AVFoundation converts unsupported HDR/wide-color input to SDR before supplying these BGRA frames.
 /// Rendering and label selection use immutable instruction data, never a mutable task or editor.
 nonisolated final class ClipFramingVideoCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
-    let sourcePixelBufferAttributes: [String: Any]? = [
+    let sourcePixelBufferAttributes: [String: any Sendable]? = [
         kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
     ]
-    let requiredPixelBufferAttributesForRenderContext: [String: Any] = [
+    let requiredPixelBufferAttributesForRenderContext: [String: any Sendable] = [
         kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
     ]
     private let queue = DispatchQueue(label: "ShotMarker.clip-framing-render")
