@@ -39,4 +39,4 @@ xcodebuild test -project ShotMarker.xcodeproj -scheme ShotMarker \
 
 独立代码审查检查完整本轮差异、现有导航路径及同片段清理边界，无未解决问题。文档先更新 current 再保存本完成记录；旧取景规格保留为历史，当前优先级以 product 和本记录为准。
 
-本轮尚未安装到手机；设备工具当次显示未连接，已告知用户重新连接。此前安装成功的 `b5aa379` 不代表本轮优先级修改已在设备上运行。
+本轮已合并到本地 main `3d79e72`，产品及测试目录与 `3fe813f` 一致；generic iOS Debug 构建退出码 0、codesign 深度严格验证通过，App 为 1.3（3）。日志 `/tmp/shotmarker-framing-priority-device-build.log` 和 `/tmp/shotmarker-framing-priority-signing.log`。本轮尚未安装到手机；设备工具在构建前后均显示未连接，已告知用户重新连接。此前安装成功的 `b5aa379` 不代表本轮优先级修改已在设备上运行。
