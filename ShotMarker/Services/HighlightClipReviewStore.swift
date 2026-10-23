@@ -20,7 +20,7 @@ nonisolated enum HighlightClipReviewStoreError: LocalizedError, Equatable {
         case .unsupportedSchemaVersion:
             "片段确认数据来自更新版本，请更新 App 后再确认。"
         case .invalidConfirmation:
-            "片段确认数据无效，请恢复默认范围后再试。"
+            "片段确认数据无效，请重新调整片段后再试。"
         case .duplicateMarkerAssignment:
             "片段关联打点冲突，请重新进入审核。"
         }
