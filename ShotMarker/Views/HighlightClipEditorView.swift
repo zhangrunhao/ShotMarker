@@ -14,6 +14,7 @@ struct HighlightClipEditorView: View {
     @ObservedObject var playbackController: HighlightClipPlaybackController
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var window: HighlightClipTimelineWindow
     @State private var editorErrorMessage: String?
@@ -177,6 +178,9 @@ struct HighlightClipEditorView: View {
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.bordered)
+                .tint(colorScheme == .dark
+                    ? Color(red: 0.95, green: 0.48, blue: 0.45)
+                    : Color(red: 0.68, green: 0.20, blue: 0.18))
                 .accessibilityIdentifier("ClipExclude")
                 Button {
                     confirmWorkingCopy(isIncluded: true)
@@ -185,6 +189,7 @@ struct HighlightClipEditorView: View {
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Color(red: 0.16, green: 0.45, blue: 0.32))
                 .disabled(reviewViewModel.unavailableItemIDs.contains(item.id))
                 .accessibilityIdentifier("ClipKeep")
             }
@@ -347,6 +352,7 @@ struct HighlightClipEditorView: View {
             .frame(minWidth: 132, minHeight: 44)
         }
         .buttonStyle(.borderedProminent)
+        .tint(Color(white: 0.25))
         .disabled(playbackController.isLoading || playbackController.loadError != nil)
     }
 
@@ -393,6 +399,7 @@ struct HighlightClipEditorView: View {
                 .accessibilityIdentifier("ClipFramingRestore")
                 .disabled(editorViewModel.effectiveFraming == .original)
             }
+            .tint(Color(uiColor: .label).opacity(0.8))
             .disabled(!canAdjustFraming)
         }
     }
