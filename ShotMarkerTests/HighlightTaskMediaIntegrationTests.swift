@@ -33,9 +33,18 @@ final class HighlightTaskMediaIntegrationTests: XCTestCase {
         let draft = try HighlightTaskPlanner.reviewDraft(for: task)
         var excluded = draft.items[0]
         excluded.isIncluded = false
-        let changed = try await manager.confirmClip(taskID: task.id, expectedRevision: 1, item: excluded)
+        var changed = try await manager.confirmClip(taskID: task.id, expectedRevision: 1, item: excluded)
         XCTAssertEqual(changed.state, .modified)
         XCTAssertEqual(changed.currentOutput, old)
+        var reframed = draft.items[1]
+        reframed.framing = ClipFraming(scale: 2.2, centerX: 0.7, centerY: 0.3)
+        changed = try await manager.confirmClip(taskID: task.id, expectedRevision: changed.configurationRevision, item: reframed)
+        XCTAssertEqual(changed.currentOutput, old)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: oldURL.path))
+        let frozen = try HighlightTaskPlanner.execution(for: changed)
+        XCTAssertEqual(frozen.snapshot.segments.first?.framing, reframed.framing)
+        reframed.framing = .original
+        XCTAssertEqual(frozen.snapshot.segments.first?.framing, ClipFraming(scale: 2.2, centerX: 0.7, centerY: 0.3))
         try await manager.start(taskID: task.id, expectedRevision: changed.configurationRevision)
         await manager.waitUntilIdle()
         let newURL = try manager.playbackURL(taskID: task.id)
@@ -45,7 +54,8 @@ final class HighlightTaskMediaIntegrationTests: XCTestCase {
         XCTAssertEqual(newDuration, 26, accuracy: 0.1)
         let reloaded = try await HighlightTaskStore(fileURL: fixture.fileURL).loadForLaunch()
         XCTAssertEqual(reloaded[0].state, .completed)
-        XCTAssertEqual(reloaded[0].currentOutput?.configurationRevision, 2)
+        XCTAssertEqual(reloaded[0].reviewItems[1].framing, ClipFraming(scale: 2.2, centerX: 0.7, centerY: 0.3))
+        XCTAssertEqual(reloaded[0].currentOutput?.configurationRevision, 3)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: fixture.directory.appendingPathComponent("tmp").path), [])
         try await manager.delete(taskID: task.id)
         XCTAssertTrue(manager.tasks.isEmpty)

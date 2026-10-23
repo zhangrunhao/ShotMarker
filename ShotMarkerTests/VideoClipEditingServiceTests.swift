@@ -318,8 +318,11 @@ final class VideoClipEditingServiceTests: XCTestCase {
         let markerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000002601"))
         let exportStarted = XCTestExpectation(description: "export started")
         let exportCancelled = XCTestExpectation(description: "export cancelled")
+        let partialOutput = temporaryDirectory.appendingPathComponent("cancelled.mov")
         let service = VideoClipEditingService(
-            exportAsset: { _, _, _ in
+            outputURL: partialOutput,
+            exportAsset: { _, output, _ in
+                try Data("partial export".utf8).write(to: output)
                 exportStarted.fulfill()
                 try await Task.sleep(for: .seconds(10))
             },
@@ -350,6 +353,7 @@ final class VideoClipEditingServiceTests: XCTestCase {
             XCTFail("Expected cancellation")
         } catch is CancellationError {
             await fulfillment(of: [exportCancelled], timeout: 5)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: partialOutput.path))
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -421,7 +425,7 @@ final class VideoClipEditingServiceTests: XCTestCase {
         XCTAssertEqual(outputDuration.seconds, 2, accuracy: 0.2)
         XCTAssertEqual(
             logger.entry(named: "video.export.started")?.context["usesVideoComposition"],
-            "false",
+            "true",
         )
     }
 

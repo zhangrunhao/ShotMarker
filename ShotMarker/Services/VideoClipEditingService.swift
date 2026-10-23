@@ -1,5 +1,4 @@
 import AVFoundation
-import CoreImage
 import Foundation
 #if canImport(UIKit)
     import UIKit
@@ -235,9 +234,8 @@ struct VideoClipEditingService {
         var compositionAudioTrack: AVMutableCompositionTrack?
 
         var insertionTime = CMTime.zero
-        var didSetPreferredTransform = false
-        var assetsByVideoID: [String: AVAsset] = [:]
-        var overlayRanges: [HighlightClipOverlayRange] = []
+        var sourcesByVideoID: [String: HighlightClipSource] = [:]
+        var videoSegments: [ClipFramingVideoSegment] = []
         let assetRequestsByVideoID = Self.assetRequestsByVideoID(for: validSegments)
         let totalMarkerCount = validSegments.reduce(0) { $0 + $1.coveredMarkerCount }
         logger.info(
@@ -259,22 +257,23 @@ struct VideoClipEditingService {
         )
 
         for (index, segment) in validSegments.enumerated() {
-            let asset: AVAsset
-            if let cachedAsset = assetsByVideoID[segment.videoID] {
-                asset = cachedAsset
+            try Task.checkCancellation()
+            let source: HighlightClipSource
+            if let cachedSource = sourcesByVideoID[segment.videoID] {
+                source = cachedSource
             } else {
-                asset = try await assetProvider(assetRequestsByVideoID[segment.videoID]!)
-                assetsByVideoID[segment.videoID] = asset
-            }
-
-            let sourceVideoTracks = try await asset.loadTracks(withMediaType: .video)
-            guard let sourceVideoTrack = sourceVideoTracks.first else {
-                throw VideoClipEditingError.missingVideoTrack
-            }
-
-            if !didSetPreferredTransform {
-                compositionVideoTrack.preferredTransform = try await sourceVideoTrack.load(.preferredTransform)
-                didSetPreferredTransform = true
+                let asset = try await assetProvider(assetRequestsByVideoID[segment.videoID]!)
+                guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
+                    throw VideoClipEditingError.missingVideoTrack
+                }
+                source = HighlightClipSource(
+                    asset: asset,
+                    videoTrack: videoTrack,
+                    audioTrack: try await asset.loadTracks(withMediaType: .audio).first,
+                    naturalSize: try await videoTrack.load(.naturalSize),
+                    preferredTransform: try await videoTrack.load(.preferredTransform)
+                )
+                sourcesByVideoID[segment.videoID] = source
             }
 
             let segmentDuration = CMTime(seconds: segment.duration, preferredTimescale: 600)
@@ -284,9 +283,9 @@ struct VideoClipEditingService {
             )
             let outputTimeRange = CMTimeRange(start: insertionTime, duration: segmentDuration)
 
-            try compositionVideoTrack.insertTimeRange(timeRange, of: sourceVideoTrack, at: insertionTime)
+            try compositionVideoTrack.insertTimeRange(timeRange, of: source.videoTrack, at: insertionTime)
 
-            if let sourceAudioTrack = try await asset.loadTracks(withMediaType: .audio).first {
+            if let sourceAudioTrack = source.audioTrack {
                 if compositionAudioTrack == nil {
                     compositionAudioTrack = composition.addMutableTrack(
                         withMediaType: .audio,
@@ -301,7 +300,13 @@ struct VideoClipEditingService {
                 try compositionAudioTrack.insertTimeRange(timeRange, of: sourceAudioTrack, at: insertionTime)
             }
 
-            overlayRanges.append(HighlightClipOverlayRange(timeRange: outputTimeRange, label: segment.markerLabel))
+            videoSegments.append(ClipFramingVideoSegment(
+                timeRange: outputTimeRange,
+                naturalSize: source.naturalSize,
+                preferredTransform: source.preferredTransform,
+                framing: segment.framing,
+                label: segment.markerLabel
+            ))
 
             insertionTime = CMTimeAdd(insertionTime, segmentDuration)
             logger.info(
@@ -319,9 +324,10 @@ struct VideoClipEditingService {
         return try await export(
             composition,
             outputNamePrefix: "ShotMarker-Highlight",
-            videoComposition: try await Self.markerLabelVideoComposition(
+            videoComposition: try await ClipFramingVideoComposition.make(
                 for: composition,
-                overlayRanges: overlayRanges,
+                track: compositionVideoTrack,
+                segments: videoSegments,
                 style: markerLabelStyle,
             ),
             progressTotalMarkerCount: totalMarkerCount,
@@ -496,69 +502,6 @@ struct VideoClipEditingService {
         String(format: "%.3f", value)
     }
 
-    private static func markerLabelVideoComposition(
-        for asset: AVAsset,
-        overlayRanges: [HighlightClipOverlayRange],
-        style: MarkerLabelStyle,
-    ) async throws -> AVVideoComposition? {
-        #if canImport(UIKit)
-            guard !overlayRanges.isEmpty else {
-                return nil
-            }
-
-            let normalizedStyle = style.normalized
-            guard normalizedStyle.textOpacity > 0 || normalizedStyle.backgroundOpacity > 0 else {
-                return nil
-            }
-
-            let renderSize = try await markerLabelRenderSize(for: asset)
-            let metrics = try HighlightClipMarkerLabelOverlayMetrics.make(
-                renderSize: renderSize,
-                style: normalizedStyle,
-            )
-            let overlayImagesByLabel = Dictionary(
-                uniqueKeysWithValues: Set(overlayRanges.map(\.label)).compactMap { label in
-                    makeMarkerLabelOverlayImage(
-                        text: label,
-                        metrics: metrics,
-                    ).map { (label, $0) }
-                },
-            )
-
-            guard !overlayImagesByLabel.isEmpty else {
-                return nil
-            }
-
-            return try await AVVideoComposition(applyingFiltersTo: asset) { parameters in
-                guard let overlayRange = overlayRanges.first(where: { $0.timeRange.containsTime(parameters.compositionTime) }),
-                      let overlayImage = overlayImagesByLabel[overlayRange.label]
-                else {
-                    return AVCIImageFilteringResult(resultImage: parameters.sourceImage)
-                }
-
-                let sourceImage = parameters.sourceImage
-                let origin = markerLabelCoreImageOrigin(
-                    style: normalizedStyle,
-                    overlaySize: overlayImage.extent.size,
-                    imageExtent: sourceImage.extent,
-                )
-                let translatedOverlay = overlayImage.transformed(
-                    by: CGAffineTransform(
-                        translationX: origin.x - overlayImage.extent.minX,
-                        y: origin.y - overlayImage.extent.minY,
-                    ),
-                )
-                let outputImage = translatedOverlay
-                    .composited(over: sourceImage)
-                    .cropped(to: sourceImage.extent)
-
-                return AVCIImageFilteringResult(resultImage: outputImage)
-            }
-        #else
-            return nil
-        #endif
-    }
-
     nonisolated static func markerLabelCoreImageOrigin(
         style: MarkerLabelStyle,
         overlaySize: CGSize,
@@ -576,35 +519,10 @@ struct VideoClipEditingService {
     }
 
     #if canImport(UIKit)
-        private static func markerLabelRenderSize(for asset: AVAsset) async throws -> CGSize {
-            let videoTracks = try await asset.loadTracks(withMediaType: .video)
-            guard let videoTrack = videoTracks.first else {
-                throw VideoClipEditingError.missingVideoTrack
-            }
-
-            let naturalSize = try await videoTrack.load(.naturalSize)
-            let preferredTransform = try await videoTrack.load(.preferredTransform)
-            let transformedRect = CGRect(origin: .zero, size: naturalSize)
-                .applying(preferredTransform)
-            let renderSize = CGSize(
-                width: abs(transformedRect.width),
-                height: abs(transformedRect.height),
-            )
-            guard renderSize.width.isFinite,
-                  renderSize.height.isFinite,
-                  renderSize.width > 0,
-                  renderSize.height > 0
-            else {
-                throw VideoClipEditingError.missingVideoTrack
-            }
-
-            return renderSize
-        }
-
-        private static func makeMarkerLabelOverlayImage(
+        static func makeMarkerLabelOverlayImage(
             text: String,
             metrics: HighlightClipMarkerLabelOverlayMetrics,
-        ) -> CIImage? {
+        ) -> CGImage? {
             let font = UIFont.monospacedDigitSystemFont(ofSize: metrics.fontSize, weight: .black)
             let paragraphStyle = NSMutableParagraphStyle()
             paragraphStyle.alignment = .center
@@ -633,14 +551,17 @@ struct VideoClipEditingService {
                 text.draw(in: textRect, withAttributes: attributes)
             }
 
-            return CIImage(image: image)
+            return image.cgImage
         }
     #endif
 }
 
-private struct HighlightClipOverlayRange {
-    let timeRange: CMTimeRange
-    let label: String
+private struct HighlightClipSource {
+    let asset: AVAsset
+    let videoTrack: AVAssetTrack
+    let audioTrack: AVAssetTrack?
+    let naturalSize: CGSize
+    let preferredTransform: CGAffineTransform
 }
 
 nonisolated private final class VideoClipExportCancellationBox: @unchecked Sendable {
