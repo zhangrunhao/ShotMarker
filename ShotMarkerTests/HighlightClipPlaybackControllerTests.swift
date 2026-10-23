@@ -167,6 +167,43 @@ final class HighlightClipPlaybackControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testOptionalMetadataFailureKeepsFakePlaybackAvailableWithoutFraming() async {
+        let engine = SpyHighlightClipPlaybackEngine()
+        let controller = HighlightClipPlaybackController(engine: engine, loadAsset: { _ in AVMutableComposition() }, loadUprightSize: { _ in throw PlaybackTestError.loadFailed })
+        await controller.load(video: makeVideo(), range: .init(start: 4, duration: 3))
+        XCTAssertNil(controller.uprightVideoSize)
+        XCTAssertNil(controller.loadError)
+        XCTAssertFalse(controller.isLoading)
+        XCTAssertEqual(controller.currentTime, 4)
+        controller.play()
+        XCTAssertTrue(controller.isPlaying)
+    }
+
+    @MainActor
+    func testLateMetadataCannotReplaceNewSourceSizeOrPlaybackAfterReset() async {
+        let gate = FramingMetadataGate()
+        let engine = SpyHighlightClipPlaybackEngine()
+        var request = 0
+        let controller = HighlightClipPlaybackController(engine: engine, loadAsset: { _ in AVMutableComposition() }, loadUprightSize: { _ in
+            request += 1
+            if request == 1 { return await gate.wait() }
+            return CGSize(width: 90, height: 160)
+        })
+        let old = Task { await controller.load(video: makeVideo(id: "old"), range: .init(start: 4, duration: 3)) }
+        await gate.waitUntilEntered()
+        controller.reset()
+        await controller.load(video: makeVideo(id: "new"), range: .init(start: 10, duration: 2))
+        XCTAssertEqual(controller.uprightVideoSize, CGSize(width: 90, height: 160))
+        await gate.release(CGSize(width: 160, height: 90))
+        await old.value
+        XCTAssertEqual(controller.uprightVideoSize, CGSize(width: 90, height: 160))
+        XCTAssertEqual(controller.currentTime, 10)
+        XCTAssertEqual(engine.replacedAssetCount, 1)
+        controller.reset()
+        XCTAssertNil(controller.uprightVideoSize)
+    }
+
+    @MainActor
     private func makeController(
         engine: SpyHighlightClipPlaybackEngine,
         loadAsset: @escaping (SelectedTrainingVideo) async throws -> AVAsset = { _ in
@@ -257,5 +294,25 @@ private final class SpyHighlightClipPlaybackEngine: HighlightClipPlaybackEngine 
 
     func fireBoundaryObserver() {
         boundaryHandler?()
+    }
+}
+
+private actor FramingMetadataGate {
+    private var entered = false
+    private var enteredContinuation: CheckedContinuation<Void, Never>?
+    private var continuation: CheckedContinuation<CGSize, Never>?
+    func wait() async -> CGSize {
+        entered = true
+        enteredContinuation?.resume()
+        enteredContinuation = nil
+        return await withCheckedContinuation { continuation = $0 }
+    }
+    func waitUntilEntered() async {
+        if entered { return }
+        await withCheckedContinuation { enteredContinuation = $0 }
+    }
+    func release(_ size: CGSize) {
+        continuation?.resume(returning: size)
+        continuation = nil
     }
 }

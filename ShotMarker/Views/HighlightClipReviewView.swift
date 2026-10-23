@@ -83,8 +83,8 @@ struct HighlightClipReviewView: View {
                     viewModel.cancelFilmstripLoading(itemID: destination.id)
                     destination.playbackController.reset()
                     switch navigation {
-                    case let .open(itemID):
-                        openEditor(itemID: itemID)
+                    case .open, .continueReview:
+                        openEditor(navigation: navigation)
                     case .returnToReview:
                         editorDestination = nil
                         viewModel.closeEditor()
@@ -292,9 +292,9 @@ struct HighlightClipReviewView: View {
             switch viewModel.thumbnailStates[item.id] ?? .idle {
             case let .loaded(data):
                 if let image = UIImage(data: data) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
+                    ClipFramingViewport(sourceSize: image.size, framing: item.framing ?? .original) {
+                        Image(uiImage: image).resizable().scaledToFit()
+                    }
                 } else {
                     thumbnailPlaceholder
                 }
@@ -382,13 +382,17 @@ struct HighlightClipReviewView: View {
     }
 
     private func openEditor(itemID: UUID) {
+        openEditor(navigation: .open(itemID: itemID))
+    }
+
+    private func openEditor(navigation: HighlightClipConfirmationNavigation) {
         guard !viewModel.isUndoingDecision, !viewModel.isSavingDecision,
-              let editorViewModel = viewModel.makeEditorViewModel(itemID: itemID)
+              let editorViewModel = viewModel.makeEditorViewModel(navigation: navigation)
         else {
             return
         }
         editorDestination = HighlightClipEditorDestination(
-            id: itemID,
+            id: editorViewModel.workingItem.id,
             editorViewModel: editorViewModel,
             playbackController: makePlaybackController(),
         )

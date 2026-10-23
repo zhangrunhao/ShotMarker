@@ -33,7 +33,7 @@ struct HighlightTaskReviewView: View {
                 }
             }
         } message: {
-            Text("所有人工确认、调整和排除状态都将被覆盖，重新使用当前默认时长。")
+            Text("所有人工确认、范围调整、取景和排除状态都将被覆盖，恢复原画面并重新使用当前默认时长。")
         }
         .alert("无法重置片段", isPresented: Binding(get: { resetError != nil }, set: { if !$0 { resetError = nil } })) {
             Button("好", role: .cancel) {}

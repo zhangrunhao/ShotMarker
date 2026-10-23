@@ -118,7 +118,10 @@ struct HighlightClipNavigationStrip: View {
     @ViewBuilder
     private func thumbnail(_ item: HighlightClipReviewItem) -> some View {
         if case let .loaded(data) = viewModel.thumbnailStates[item.id], let image = UIImage(data: data) {
-            Image(uiImage: image).resizable().scaledToFit()
+            ClipFramingViewport(sourceSize: image.size, framing: item.framing ?? .original) {
+                Image(uiImage: image).resizable().scaledToFit()
+            }
+            .background(.black)
         } else {
             Rectangle().fill(Color(uiColor: .secondarySystemFill))
                 .overlay { Image(systemName: "film").foregroundStyle(.secondary) }

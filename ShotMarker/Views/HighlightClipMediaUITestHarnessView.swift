@@ -35,7 +35,8 @@
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             let first = root.appendingPathComponent("landscape.mov")
             let second = root.appendingPathComponent("portrait.mov")
-            try await makeVideo(at: first, width: 160, height: 90, duration: 720)
+            try await makeVideo(at: first, width: 160, height: 90, duration: 720,
+                rotated: ProcessInfo.processInfo.environment["SHOTMARKER_UI_TEST_ROTATED_CLIP_SOURCE"] == "1")
             try await makeVideo(at: second, width: 90, height: 160, duration: 40)
             let files = HighlightTaskFileStore(baseDirectory: root, temporaryDirectory: root.appendingPathComponent("tmp"))
             let media = HighlightTaskMedia(fileStore: files)
@@ -56,13 +57,16 @@
             return try HighlightReviewSession(task: task, manager: manager)
         }
 
-        private func makeVideo(at url: URL, width: Int, height: Int, duration: Int) async throws {
+        private func makeVideo(at url: URL, width: Int, height: Int, duration: Int, rotated: Bool = false) async throws {
             let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
             let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
                 AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: width, AVVideoHeightKey: height,
             ])
             let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input,
                 sourcePixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+            if rotated {
+                input.transform = CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: CGFloat(height), ty: 0)
+            }
             writer.add(input)
             guard writer.startWriting() else { throw HighlightClipReviewMediaError.assetLoadFailed }
             writer.startSession(atSourceTime: .zero)
@@ -72,11 +76,21 @@
             else { throw HighlightClipReviewMediaError.assetLoadFailed }
             CVPixelBufferLockBaseAddress(buffer, [])
             let pixels = CVPixelBufferGetBaseAddress(buffer)!.assumingMemoryBound(to: UInt8.self)
-            for offset in stride(from: 0, to: CVPixelBufferGetDataSize(buffer), by: 4) {
-                pixels[offset] = width > height ? 40 : 220
-                pixels[offset + 1] = 100
-                pixels[offset + 2] = width > height ? 220 : 40
-                pixels[offset + 3] = 255
+            let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
+            for y in 0..<height {
+                for x in 0..<width {
+                    let offset = y * rowBytes + x * 4
+                    // Marker positions describe upright coordinates for both encoded orientations.
+                    let nx = rotated ? 1 - Double(y) / Double(height) : Double(x) / Double(width)
+                    let ny = rotated ? Double(x) / Double(width) : Double(y) / Double(height)
+                    let color: (UInt8, UInt8, UInt8) = nx < 0.2 ? (220, 30, 30)
+                        : nx > 0.8 ? (30, 30, 220)
+                        : (nx > 0.44 && nx < 0.56 && ny > 0.44 && ny < 0.56 ? (230, 230, 20) : (30, 180, 30))
+                    pixels[offset] = color.2
+                    pixels[offset + 1] = color.1
+                    pixels[offset + 2] = color.0
+                    pixels[offset + 3] = 255
+                }
             }
             CVPixelBufferUnlockBaseAddress(buffer, [])
             for second in 0..<duration {

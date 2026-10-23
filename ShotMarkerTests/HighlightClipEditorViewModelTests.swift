@@ -57,15 +57,15 @@ final class HighlightClipEditorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.displayedConfirmationState, .defaultValue)
     }
 
-    func testChangingThenReturningToOpenedValuesStaysDirtyUntilConfirmOrDiscard() throws {
+    func testChangingThenReturningToOpenedValuesClearsDirty() throws {
         let viewModel = makeViewModel(item: makeItem(state: .confirmed))
 
         try viewModel.moveRange(by: 1)
         try viewModel.moveRange(by: -1)
 
         XCTAssertEqual(viewModel.workingItem.range, HighlightClipRange(start: 10, duration: 2))
-        XCTAssertTrue(viewModel.hasChanges)
-        XCTAssertEqual(viewModel.displayedConfirmationState, .defaultValue)
+        XCTAssertFalse(viewModel.hasChanges)
+        XCTAssertEqual(viewModel.displayedConfirmationState, .confirmed)
     }
 
     func testDiscardRestoresOpenedValueAndClearsError() async throws {
@@ -183,6 +183,17 @@ final class HighlightClipEditorViewModelTests: XCTestCase {
         XCTAssertNotNil(viewModel.saveErrorMessage)
     }
 
+    func testConfirmationSavesExplicitOriginalFramingWithDecision() async {
+        let recorder = ConfirmationRecorder(result: .success(.returnToReview))
+        let viewModel = makeViewModel(item: makeItem(), confirm: recorder.confirm)
+
+        _ = await viewModel.confirm(isIncluded: false)
+
+        let submitted = await recorder.items()
+        XCTAssertEqual(submitted.first?.framing, .original)
+        XCTAssertEqual(viewModel.workingItem.framing, .original)
+    }
+
     func testConcurrentButtonActionsInvokeConfirmationOnce() async {
         let gate = ConfirmationGate()
         let viewModel = makeViewModel(item: makeItem(), confirm: gate.confirm)
@@ -223,6 +234,7 @@ final class HighlightClipEditorViewModelTests: XCTestCase {
 
         var confirmedSubmittedItem = submittedItem
         confirmedSubmittedItem.confirmationState = .confirmed
+        confirmedSubmittedItem.framing = .original
         XCTAssertEqual(viewModel.workingItem, confirmedSubmittedItem)
         XCTAssertEqual(viewModel.displayedConfirmationState, .confirmed)
         XCTAssertFalse(viewModel.hasChanges)

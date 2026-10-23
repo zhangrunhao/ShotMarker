@@ -39,12 +39,14 @@ final class HighlightTaskReviewTests: XCTestCase {
         editor.setIncluded(false)
         XCTAssertTrue(session.viewModel.items[0].isIncluded)
         let navigation = await editor.confirm()
-        XCTAssertEqual(navigation, .open(itemID: task.reviewItems[1].id))
+        XCTAssertEqual(navigation, .continueReview(itemID: task.reviewItems[1].id,
+            sourceVideoID: session.viewModel.items[0].videoID, framing: .original))
         XCTAssertEqual(fixture.manager.task(task.id)?.configurationRevision, 2)
         XCTAssertFalse(session.viewModel.items[0].isIncluded)
         let loaded = try await fixture.storeFixture.store.load()
         XCTAssertEqual(loaded[0].reviewItems[0].confirmationState, .confirmed)
         XCTAssertFalse(loaded[0].reviewItems[0].isIncluded)
+        XCTAssertEqual(loaded[0].reviewItems[0].framing, .original)
     }
 
     func testUndoRestoresDefaultRangeInclusionAndConfirmationOnDisk() async throws {

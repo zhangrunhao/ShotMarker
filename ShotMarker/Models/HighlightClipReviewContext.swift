@@ -19,6 +19,7 @@ struct HighlightClipNeighborRelationship: Equatable, Identifiable {
     let isIncluded: Bool
     let separation: Separation
     let willMerge: Bool
+    let hasDifferentFraming: Bool
 
     var id: UUID {
         itemID
@@ -95,6 +96,9 @@ struct HighlightClipReviewContext {
                 isIncluded: neighbor.isIncluded,
                 separation: separation,
                 willMerge: willMerge,
+                hasDifferentFraming: workingItem.isIncluded && neighbor.isIncluded
+                    && workingItem.videoID == neighbor.videoID
+                    && (workingItem.framing ?? .original).normalized != (neighbor.framing ?? .original).normalized,
             )
         }
     }

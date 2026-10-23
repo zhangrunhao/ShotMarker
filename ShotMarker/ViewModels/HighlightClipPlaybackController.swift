@@ -87,6 +87,10 @@ final class AVPlayerHighlightClipPlaybackEngine: HighlightClipPlaybackEngine {
 
 @MainActor
 final class HighlightClipPlaybackController: ObservableObject {
+    typealias LoadUprightSize = (AVAsset) async throws -> CGSize
+
+    @Published private(set) var uprightVideoSize: CGSize?
+
     typealias LoadAsset = (SelectedTrainingVideo) async throws -> AVAsset
 
     static let timescale: CMTimeScale = 600
@@ -101,6 +105,7 @@ final class HighlightClipPlaybackController: ObservableObject {
 
     private let engine: HighlightClipPlaybackEngine
     private let loadAsset: LoadAsset
+    private let loadUprightSize: LoadUprightSize
     private var activeRange: HighlightClipRange?
     private var periodicObserverToken: Any?
     private var boundaryObserverToken: Any?
@@ -110,9 +115,11 @@ final class HighlightClipPlaybackController: ObservableObject {
     init(
         engine: HighlightClipPlaybackEngine,
         loadAsset: @escaping LoadAsset,
+        loadUprightSize: LoadUprightSize? = nil,
     ) {
         self.engine = engine
         self.loadAsset = loadAsset
+        self.loadUprightSize = loadUprightSize ?? Self.loadSourceSize
         player = engine.player
     }
 
@@ -141,6 +148,7 @@ final class HighlightClipPlaybackController: ObservableObject {
         let generation = loadGeneration
         releaseLoadedItem()
         activeRange = nil
+        uprightVideoSize = nil
         currentTime = 0
         isLoading = true
         isPlaying = false
@@ -166,6 +174,13 @@ final class HighlightClipPlaybackController: ObservableObject {
 
         guard generation == loadGeneration else {
             return
+        }
+
+        let sourceSize = try? await loadUprightSize(asset)
+        guard generation == loadGeneration else { return }
+        if let sourceSize, sourceSize.width.isFinite, sourceSize.height.isFinite,
+           sourceSize.width > 0, sourceSize.height > 0 {
+            uprightVideoSize = sourceSize
         }
 
         engine.replaceCurrentItem(with: asset)
@@ -272,6 +287,7 @@ final class HighlightClipPlaybackController: ObservableObject {
         loadGeneration &+= 1
         releaseLoadedItem()
         activeRange = nil
+        uprightVideoSize = nil
         currentTime = 0
         isPlaying = false
         isLoading = false
@@ -343,10 +359,20 @@ final class HighlightClipPlaybackController: ObservableObject {
     }
 
     private func publishLoadFailure(_ error: HighlightClipReviewMediaError) {
+        uprightVideoSize = nil
         isLoading = false
         isPlaying = false
         loadError = error
         errorMessage = error.errorDescription
+    }
+
+    private static func loadSourceSize(_ asset: AVAsset) async throws -> CGSize {
+        guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+            throw HighlightClipReviewMediaError.assetLoadFailed
+        }
+        let naturalSize = try await track.load(.naturalSize)
+        let transform = try await track.load(.preferredTransform)
+        return ClipFramingGeometry.uprightBounds(naturalSize: naturalSize, preferredTransform: transform).size
     }
 
     private static func isValid(

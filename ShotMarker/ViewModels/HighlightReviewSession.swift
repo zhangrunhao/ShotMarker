@@ -47,7 +47,7 @@ final class HighlightReviewSession: ObservableObject {
         release()
         revision.task = updated
         viewModel = try Self.makeViewModel(revision: revision, manager: manager,
-            provider: viewModel.mediaProvider, notice: "已按当前默认时长重置全部片段。", onExit: onExit)
+            provider: viewModel.mediaProvider, notice: "已重置全部片段的范围、取景与审核状态。", onExit: onExit)
         observeViewModel()
     }
 

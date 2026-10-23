@@ -98,7 +98,8 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
 
         let navigation = await editor.confirm()
 
-        XCTAssertEqual(navigation, .open(itemID: fixture.viewModel.items[1].id))
+        XCTAssertEqual(navigation, .continueReview(itemID: fixture.viewModel.items[1].id,
+            sourceVideoID: fixture.viewModel.items[0].videoID, framing: .original))
         XCTAssertEqual(fixture.viewModel.editingItemID, fixture.viewModel.items[1].id)
     }
 
@@ -113,7 +114,8 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
 
         let navigation = await editor.confirm()
 
-        XCTAssertEqual(navigation, .open(itemID: fixture.viewModel.items[1].id))
+        XCTAssertEqual(navigation, .continueReview(itemID: fixture.viewModel.items[1].id,
+            sourceVideoID: fixture.viewModel.items[0].videoID, framing: .original))
         XCTAssertEqual(fixture.viewModel.editingItemID, fixture.viewModel.items[1].id)
     }
 
@@ -144,7 +146,8 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
 
         let navigation = await first.confirm()
 
-        XCTAssertEqual(navigation, .open(itemID: fixture.viewModel.items[1].id))
+        XCTAssertEqual(navigation, .continueReview(itemID: fixture.viewModel.items[1].id,
+            sourceVideoID: fixture.viewModel.items[0].videoID, framing: .original))
         XCTAssertFalse(fixture.viewModel.items[1].isIncluded)
     }
 

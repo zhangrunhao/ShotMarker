@@ -3,6 +3,7 @@ import Foundation
 
 enum HighlightClipConfirmationNavigation: Equatable {
     case open(itemID: UUID)
+    case continueReview(itemID: UUID, sourceVideoID: String, framing: ClipFraming)
     case returnToReview
 }
 
@@ -18,17 +19,39 @@ final class HighlightClipEditorViewModel: ObservableObject {
 
     let video: SelectedTrainingVideo
     private var openedItem: HighlightClipReviewItem
+    private var entryItem: HighlightClipReviewItem
+    @Published private(set) var isUsingInheritedFraming = false
     private let confirmWorkingCopy: ConfirmWorkingCopy
 
     init(
         item: HighlightClipReviewItem,
         video: SelectedTrainingVideo,
+        inheritedFraming: ClipFraming? = nil,
         confirmWorkingCopy: @escaping ConfirmWorkingCopy,
     ) {
         openedItem = item
-        workingItem = item
+        var initialItem = item
+        if let inheritedFraming {
+            initialItem.framing = inheritedFraming.normalized
+        }
+        workingItem = initialItem
+        entryItem = initialItem
+        isUsingInheritedFraming = inheritedFraming != nil
         self.video = video
         self.confirmWorkingCopy = confirmWorkingCopy
+    }
+
+    var effectiveFraming: ClipFraming { (workingItem.framing ?? .original).normalized }
+
+    func setFraming(_ framing: ClipFraming) {
+        guard !isSaving else { return }
+        var editedItem = workingItem
+        editedItem.framing = framing.normalized
+        applyEffectiveChange(editedItem)
+    }
+
+    func restoreOriginalFraming() {
+        setFraming(.original)
     }
 
     var displayedConfirmationState: HighlightClipConfirmationState {
@@ -84,7 +107,7 @@ final class HighlightClipEditorViewModel: ObservableObject {
         guard !isSaving else {
             return
         }
-        workingItem = openedItem
+        workingItem = entryItem
         hasChanges = false
         saveErrorMessage = nil
     }
@@ -93,6 +116,8 @@ final class HighlightClipEditorViewModel: ObservableObject {
         guard !isSaving, item.id == workingItem.id, item.videoID == video.id else { return }
         workingItem = item
         openedItem = item
+        entryItem = item
+        isUsingInheritedFraming = false
         hasChanges = false
         saveErrorMessage = nil
     }
@@ -109,7 +134,8 @@ final class HighlightClipEditorViewModel: ObservableObject {
         }
 
         isSaving = true
-        let submittedItem = workingItem
+        var submittedItem = workingItem
+        submittedItem.framing = effectiveFraming
         defer {
             isSaving = false
         }
@@ -120,6 +146,8 @@ final class HighlightClipEditorViewModel: ObservableObject {
             confirmedItem.confirmationState = .confirmed
             workingItem = confirmedItem
             openedItem = confirmedItem
+            entryItem = confirmedItem
+            isUsingInheritedFraming = false
             hasChanges = false
             saveErrorMessage = nil
             return navigation
@@ -135,6 +163,9 @@ final class HighlightClipEditorViewModel: ObservableObject {
             return
         }
         workingItem = editedItem
-        hasChanges = true
+        hasChanges = workingItem.start != entryItem.start
+            || workingItem.duration != entryItem.duration
+            || workingItem.isIncluded != entryItem.isIncluded
+            || effectiveFraming != (entryItem.framing ?? .original).normalized
     }
 }

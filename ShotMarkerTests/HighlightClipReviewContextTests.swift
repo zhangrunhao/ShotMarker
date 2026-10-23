@@ -176,6 +176,17 @@ final class HighlightClipReviewContextTests: XCTestCase {
         XCTAssertFalse(relation.willMerge)
     }
 
+    func testOverlappingDifferentFramingExplainsWhyTheClipsStaySeparate() throws {
+        let first = makeItem(number: 1, start: 0, duration: 4)
+        let second = makeItem(number: 2, start: 3, duration: 2)
+        var working = second
+        working.framing = ClipFraming(scale: 2, centerX: 0.5, centerY: 0.5)
+        let relationship = try XCTUnwrap(makeContext(items: [first, second], workingItem: working).relationships.first)
+        XCTAssertEqual(relationship.separation, .overlap(seconds: 1))
+        XCTAssertFalse(relationship.willMerge)
+        XCTAssertTrue(relationship.hasDifferentFraming)
+    }
+
     private func makeContext(
         items: [HighlightClipReviewItem],
         workingItem: HighlightClipReviewItem,

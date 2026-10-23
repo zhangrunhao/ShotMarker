@@ -1,5 +1,6 @@
 import AVKit
 import SwiftUI
+import UIKit
 
 private enum PendingEditorExitAction: Equatable {
     case review
@@ -54,6 +55,7 @@ struct HighlightClipEditorView: View {
             VStack(spacing: 14) {
                 confirmationStatus
                 playbackArea(item: item)
+                framingControls
                 timeReadout(item: item)
                 timeline(item: item)
                 playbackButton
@@ -94,9 +96,6 @@ struct HighlightClipEditorView: View {
                 .disabled(isBusy)
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            clipNavigation
-        }
         .safeAreaInset(edge: .bottom) {
             confirmationAction
         }
@@ -109,7 +108,7 @@ struct HighlightClipEditorView: View {
                 performPendingExit()
             }
         } message: {
-            Text("未确认的范围与保留状态更改不会保存。")
+            Text("未确认的范围、取景与保留状态更改不会保存。")
         }
         .onChange(of: playbackController.loadError) { _, error in
             if error == .sourceUnavailable {
@@ -273,8 +272,12 @@ struct HighlightClipEditorView: View {
     private func playbackArea(item: HighlightClipReviewItem) -> some View {
         ZStack {
             Color.black
-            VideoPlayer(player: playbackController.player)
-                .disabled(true)
+            ClipFramingPlaybackView(player: playbackController.player,
+                sourceSize: playbackController.uprightVideoSize,
+                framing: editorViewModel.effectiveFraming,
+                isEnabled: canAdjustFraming,
+                onInteractionBegan: playbackController.pause,
+                onChange: editorViewModel.setFraming)
 
             if playbackController.isLoading {
                 ProgressView("正在载入视频…")
@@ -396,34 +399,68 @@ struct HighlightClipEditorView: View {
         .disabled(playbackController.isLoading || playbackController.loadError != nil)
     }
 
-    private var clipNavigation: some View {
-        HStack(spacing: 12) {
-            Button {
-                if let previous = context.previousItem { requestExit(.clip(previous.id)) }
-            } label: {
-                Label("上一段", systemImage: "chevron.left")
-                    .frame(minWidth: 44, minHeight: 44)
+    private var canAdjustFraming: Bool {
+        playbackController.uprightVideoSize != nil && !playbackController.isLoading
+            && playbackController.loadError == nil && !isBusy
+    }
+
+    private var framingControls: some View {
+        VStack(spacing: 6) {
+            if editorViewModel.isUsingInheritedFraming {
+                Text("沿用上一段取景")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-            .disabled(context.previousItem == nil)
-            .accessibilityIdentifier("ClipPrevious")
-            Spacer(minLength: 0)
-            Text("\(context.candidateNumber ?? 1) / \(context.candidateCount)")
-                .monospacedDigit()
-                .accessibilityLabel("第 \(context.candidateNumber ?? 1) 段，共 \(context.candidateCount) 段")
-            Spacer(minLength: 0)
-            Button {
-                if let next = context.nextItem { requestExit(.clip(next.id)) }
-            } label: {
-                Label("下一段", systemImage: "chevron.right")
-                    .frame(minWidth: 44, minHeight: 44)
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: 8))
+                : AnyLayout(HStackLayout(spacing: 12))
+            layout {
+                HStack(spacing: 16) {
+                    Button { changeScale(by: -0.1) } label: {
+                        Image(systemName: "minus.magnifyingglass").frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("缩小取景")
+                    .accessibilityIdentifier("ClipFramingDecrease")
+                    .disabled(editorViewModel.effectiveFraming.scale <= 1)
+                    Text(String(format: "%.1f×", editorViewModel.effectiveFraming.scale))
+                        .font(.body.monospacedDigit())
+                        .accessibilityLabel("取景倍率")
+                        .accessibilityValue(String(format: "%.1f 倍", editorViewModel.effectiveFraming.scale))
+                        .accessibilityIdentifier("ClipFramingScale")
+                        .accessibilityAdjustableAction { direction in
+                            guard canAdjustFraming else { return }
+                            changeScale(by: direction == .increment ? 0.1 : -0.1)
+                        }
+                    Button { changeScale(by: 0.1) } label: {
+                        Image(systemName: "plus.magnifyingglass").frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("放大取景")
+                    .accessibilityIdentifier("ClipFramingIncrease")
+                    .disabled(editorViewModel.effectiveFraming.scale >= 4)
+                }
+                Button {
+                    playbackController.pause()
+                    editorViewModel.restoreOriginalFraming()
+                } label: {
+                    Text("恢复原画面").frame(minHeight: 44)
+                }
+                .accessibilityIdentifier("ClipFramingRestore")
+                .disabled(editorViewModel.effectiveFraming == .original)
             }
-            .disabled(context.nextItem == nil)
-            .accessibilityIdentifier("ClipNext")
+            .disabled(!canAdjustFraming)
         }
-        .font(.subheadline)
-        .padding(.horizontal)
-        .background(.regularMaterial)
-        .disabled(isBusy)
+    }
+
+    private func changeScale(by delta: Double) {
+        guard canAdjustFraming else { return }
+        playbackController.pause()
+        let current = editorViewModel.effectiveFraming
+        let updated = ClipFraming(scale: current.scale + delta,
+            centerX: current.centerX, centerY: current.centerY).normalized
+        editorViewModel.setFraming(updated)
+        if updated == current {
+            UIAccessibility.post(notification: .announcement, argument: delta > 0 ? "已到最大倍率 4 倍" : "已到最小倍率 1 倍")
+        }
     }
 
     private var clipStrip: some View {
@@ -454,13 +491,15 @@ struct HighlightClipEditorView: View {
         case let .gap(seconds): "间隔 \(shortTime(seconds))"
         }
         let effect = relationship.willMerge ? "，生成时合并"
-            : (!relationship.isIncluded ? "，已排除" : "")
+            : (relationship.hasDifferentFraming ? "，取景不同，分别保留"
+                : (!relationship.isIncluded ? "，已排除" : ""))
         return "\(prefix)：\(detail)\(effect)"
     }
 
     private var restoreControl: some View {
-        Button("恢复默认范围") { restoreDefaultRange() }
-            .frame(minHeight: 44)
+        Button { restoreDefaultRange() } label: {
+            Text("恢复默认范围").frame(minHeight: 44)
+        }
             .disabled(item.range == item.defaultRange)
     }
 

@@ -188,7 +188,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
         )
     }
 
-    func makeEditorViewModel(itemID: UUID) -> HighlightClipEditorViewModel? {
+    func makeEditorViewModel(itemID: UUID, inheritedFraming: ClipFraming? = nil) -> HighlightClipEditorViewModel? {
         guard !isSavingDecision, !isUndoingDecision, !isSubmitting,
               let item = items.first(where: { $0.id == itemID }),
               let video = videos.first(where: { $0.id == item.videoID })
@@ -199,6 +199,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
         return HighlightClipEditorViewModel(
             item: item,
             video: video,
+            inheritedFraming: inheritedFraming,
             confirmWorkingCopy: { [weak self] workingItem in
                 guard let self else {
                     throw CancellationError()
@@ -206,6 +207,18 @@ final class HighlightClipReviewViewModel: ObservableObject {
                 return try await self.confirmWorkingCopy(workingItem)
             },
         )
+    }
+
+    func makeEditorViewModel(navigation: HighlightClipConfirmationNavigation) -> HighlightClipEditorViewModel? {
+        switch navigation {
+        case let .open(itemID):
+            return makeEditorViewModel(itemID: itemID)
+        case let .continueReview(itemID, sourceVideoID, framing):
+            guard items.contains(where: { $0.id == itemID && $0.videoID == sourceVideoID }) else { return nil }
+            return makeEditorViewModel(itemID: itemID, inheritedFraming: framing)
+        case .returnToReview:
+            return nil
+        }
     }
 
     func closeEditor() {
@@ -260,6 +273,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
             candidate.duration = normalizedDuration
             candidate.isIncluded = workingItem.isIncluded
             candidate.confirmationState = .confirmed
+            candidate.framing = (workingItem.framing ?? .original).normalized
 
             var sourceValidationSucceeded = false
             if candidate.isIncluded {
@@ -309,6 +323,10 @@ final class HighlightClipReviewViewModel: ObservableObject {
 
             if let nextItem = items.dropFirst(index + 1).first {
                 editingItemID = nextItem.id
+                if nextItem.videoID == candidate.videoID {
+                    return .continueReview(itemID: nextItem.id, sourceVideoID: candidate.videoID,
+                        framing: candidate.framing ?? .original)
+                }
                 return .open(itemID: nextItem.id)
             }
 
