@@ -42,7 +42,7 @@ xcodebuild test -project ShotMarker.xcodeproj -scheme ShotMarker \
 
 独立审查完整 `7cd8eb3..111303d` 变更及周边配置、持久化、规划和导航代码，最终无未解决问题。修正了仍推荐“恢复默认范围”的两处旧错误提示，以及 current 中一条旧正值范围说明。审查没有把此前的 460 项结果冒充本轮验证；随后本轮完整 475 项回归通过。
 
-本轮完整测试与文档收尾已完成，合并和开发签名安装启动尚待执行；上一版的设备记录不代表本轮已安装。
+本地 main 从 `7cd8eb3` 快进至 `b5aa379`；产品及测试目录与 `111303d` 无差异。同日 main `b5aa379` 的 Debug iphoneos 构建退出码 0，App 为 1.3（3），codesign 深度严格验证通过。安装、正常前台启动及后续同一进程存活均已核实；没有使用测试启动参数。构建日志 `/tmp/shotmarker-simplify-device-build.log`，签名日志 `/tmp/shotmarker-simplify-device-signing.log`。
 
 设备安装详情由私有仓库当前发布状态及 `2026-10-23-clip-editor-simplify-iphone-install.md` 维护。公开仓库不保存设备标识、原始用户数据或凭据。没有远程推送、商店提交或新分发 Archive。
 
