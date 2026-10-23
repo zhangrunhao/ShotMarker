@@ -79,6 +79,11 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         app.buttons["ClipKeep"].tap()
         assertLoadedClip(title: "片段 2 / 3", start: 691.1)
         XCTAssertEqual(element(label: "取景倍率").value as? String, "2.2 倍")
+        selectClip(2)
+        assertLoadedClip(title: "片段 2 / 3", start: 691.1)
+        scrollToPreview()
+        XCTAssertEqual(element(label: "取景倍率").value as? String, "1.0 倍")
+        assertPlaybackAdvances(after: 691.1)
         selectClip(1)
         XCTAssertFalse(app.alerts["放弃本次调整？"].exists)
         assertLoadedClip(title: "片段 1 / 3", start: 1)
@@ -100,7 +105,7 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         XCTAssertEqual(seconds(element(label: "片段起点")), 1, accuracy: 0.11)
         app.buttons["ClipKeep"].tap()
         assertLoadedClip(title: "片段 2 / 3", start: 691.1)
-        XCTAssertEqual(element(label: "取景倍率").value as? String, "1.0 倍")
+        XCTAssertEqual(element(label: "取景倍率").value as? String, "2.0 倍")
     }
 
     func testPortraitPreviewCropsOnlySourcePixelsAndGesturesStayPaused() {

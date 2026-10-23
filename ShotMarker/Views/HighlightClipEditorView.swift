@@ -20,6 +20,7 @@ struct HighlightClipEditorView: View {
     @State private var playbackLoadAttempt = 0
     @State private var isShowingDiscardConfirmation = false
     @State private var pendingExitAction: PendingEditorExitAction?
+    @State private var hasReleasedMedia = false
 
     private let loadsMedia: Bool
     private let onRequestVideoReselection: () -> Void
@@ -114,8 +115,7 @@ struct HighlightClipEditorView: View {
             }
         }
         .onDisappear {
-            reviewViewModel.cancelFilmstripLoading(itemID: item.id)
-            playbackController.reset()
+            releaseMedia()
         }
     }
 
@@ -204,6 +204,7 @@ struct HighlightClipEditorView: View {
         playbackController.pause()
         Task { @MainActor in
             guard let navigation = await editorViewModel.confirm(isIncluded: isIncluded) else { return }
+            releaseMedia()
             onConfirmationNavigation(navigation)
         }
     }
@@ -227,8 +228,7 @@ struct HighlightClipEditorView: View {
     }
 
     private func performExit(_ action: PendingEditorExitAction) {
-        reviewViewModel.cancelFilmstripLoading(itemID: item.id)
-        playbackController.reset()
+        releaseMedia()
         switch action {
         case let .clip(itemID):
             onConfirmationNavigation(.open(itemID: itemID))
@@ -238,6 +238,13 @@ struct HighlightClipEditorView: View {
             dismiss()
             onRequestVideoReselection()
         }
+    }
+
+    private func releaseMedia() {
+        guard !hasReleasedMedia else { return }
+        hasReleasedMedia = true
+        reviewViewModel.cancelFilmstripLoading(itemID: item.id)
+        playbackController.reset()
     }
 
     private func playbackArea(item: HighlightClipReviewItem) -> some View {
@@ -404,7 +411,6 @@ struct HighlightClipEditorView: View {
 
     private var clipStrip: some View {
         HighlightClipNavigationStrip(viewModel: reviewViewModel, currentItemID: item.id, loadsMedia: loadsMedia) { itemID in
-            guard itemID != item.id else { return }
             requestExit(.clip(itemID))
         }
     }

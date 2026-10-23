@@ -31,14 +31,14 @@ final class HighlightClipEditorViewModel: ObservableObject {
     ) {
         openedItem = item
         var initialItem = item
-        if let inheritedFraming {
+        if item.framing == nil, let inheritedFraming {
             initialItem.framing = inheritedFraming.normalized
         }
         workingItem = initialItem
         entryItem = initialItem
-        isUsingInheritedFraming = inheritedFraming != nil
         self.video = video
         self.confirmWorkingCopy = confirmWorkingCopy
+        isUsingInheritedFraming = item.framing == nil && inheritedFraming != nil
     }
 
     var effectiveFraming: ClipFraming { (workingItem.framing ?? .original).normalized }

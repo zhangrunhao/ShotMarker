@@ -35,26 +35,39 @@ final class HighlightClipFramingEditorTests: XCTestCase {
         XCTAssertEqual(next.effectiveFraming, target)
     }
 
-    func testInheritedFramingOverridesSavedTargetTemporarilyAndManualReopenRestoresSavedValue() throws {
-        let saved = ClipFraming(scale: 3, centerX: 0.4, centerY: 0.6)
-        let vm = makeReview(secondFraming: saved)
-        let targetID = vm.items[1].id
-        let inherited = try XCTUnwrap(vm.makeEditorViewModel(itemID: targetID, inheritedFraming: zoom))
-        XCTAssertEqual(inherited.effectiveFraming, zoom)
-        XCTAssertTrue(inherited.isUsingInheritedFraming)
-        XCTAssertFalse(inherited.hasChanges)
-        XCTAssertEqual(vm.items[1].framing, saved)
-        let manual = try XCTUnwrap(vm.makeEditorViewModel(itemID: targetID))
-        XCTAssertEqual(manual.effectiveFraming, saved)
-        XCTAssertFalse(manual.isUsingInheritedFraming)
+    func testAutomaticKeepAndExcludePreserveTargetsSavedZoomOrExplicitOriginal() async throws {
+        for saved in [ClipFraming.original, ClipFraming(scale: 3, centerX: 0.4, centerY: 0.6)] {
+            for included in [true, false] {
+                var writes: [HighlightClipReviewItem] = []
+                let vm = makeReview(secondFraming: saved) { writes.append($0) }
+                let first = try XCTUnwrap(vm.makeEditorViewModel(itemID: vm.items[0].id))
+                first.setFraming(zoom)
+                let result = await first.confirm(isIncluded: included)
+                let navigation = try XCTUnwrap(result)
+                let target = try XCTUnwrap(vm.makeEditorViewModel(navigation: navigation))
+                XCTAssertEqual(target.effectiveFraming, saved)
+                XCTAssertFalse(target.isUsingInheritedFraming)
+                XCTAssertFalse(target.hasChanges)
+                XCTAssertEqual(vm.items[1].framing, saved)
+                _ = await target.confirm()
+                XCTAssertEqual(writes.last?.framing, saved)
+                XCTAssertEqual(vm.items[1].framing, saved)
+            }
+        }
     }
 
-    func testManualReopenOfUnsavedTargetUsesOriginalAndDoesNotReceiveLastFraming() async throws {
-        let vm = makeReview()
-        let first = try XCTUnwrap(vm.makeEditorViewModel(itemID: vm.items[0].id))
-        first.setFraming(zoom)
-        _ = await first.confirm()
-        XCTAssertEqual(vm.makeEditorViewModel(itemID: vm.items[1].id)?.effectiveFraming, .original)
+    func testManualNavigationUsesOnlyTargetsSavedFramingOrOriginal() async throws {
+        for saved in [nil, ClipFraming.original, ClipFraming(scale: 3, centerX: 0.4, centerY: 0.6)] {
+            let vm = makeReview(secondFraming: saved)
+            let first = try XCTUnwrap(vm.makeEditorViewModel(itemID: vm.items[0].id))
+            first.setFraming(zoom)
+            _ = await first.confirm()
+            let target = try XCTUnwrap(vm.makeEditorViewModel(navigation: .open(itemID: vm.items[1].id)))
+            XCTAssertEqual(target.effectiveFraming, saved ?? .original)
+            XCTAssertFalse(target.isUsingInheritedFraming)
+            XCTAssertFalse(target.hasChanges)
+            XCTAssertEqual(vm.items[1].framing, saved)
+        }
     }
 
     func testReturningAllEditsToInheritedBaselineClearsDirtyAndRangeResetPreservesFraming() throws {

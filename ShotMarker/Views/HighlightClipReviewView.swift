@@ -69,8 +69,6 @@ struct HighlightClipReviewView: View {
                 loadsMedia: loadsMedia,
                 onRequestVideoReselection: onRequestVideoReselection,
                 onConfirmationNavigation: { navigation in
-                    viewModel.cancelFilmstripLoading(itemID: destination.id)
-                    destination.playbackController.reset()
                     switch navigation {
                     case .open, .continueReview:
                         openEditor(navigation: navigation)
@@ -80,10 +78,10 @@ struct HighlightClipReviewView: View {
                     }
                 },
             )
-            // Continuous confirmation must recreate the timeline state and media-loading tasks.
+            // Every open, including tapping the current clip, starts fresh editor and media state.
             .id(destination.id)
         }
-        .onChange(of: editorDestination?.id) { previousID, currentID in
+        .onChange(of: editorDestination?.itemID) { previousID, currentID in
             guard let previousID, currentID == nil else {
                 return
             }
@@ -381,7 +379,7 @@ struct HighlightClipReviewView: View {
             return
         }
         editorDestination = HighlightClipEditorDestination(
-            id: editorViewModel.workingItem.id,
+            itemID: editorViewModel.workingItem.id,
             editorViewModel: editorViewModel,
             playbackController: makePlaybackController(),
         )
@@ -430,7 +428,8 @@ struct HighlightClipReviewView: View {
 }
 
 private struct HighlightClipEditorDestination: Identifiable, Hashable {
-    let id: UUID
+    let id = UUID()
+    let itemID: UUID
     let editorViewModel: HighlightClipEditorViewModel
     let playbackController: HighlightClipPlaybackController
 
