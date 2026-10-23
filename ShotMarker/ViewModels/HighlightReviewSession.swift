@@ -67,8 +67,8 @@ final class HighlightReviewSession: ObservableObject {
         let task = revision.task
         return HighlightClipReviewViewModel(draft: try HighlightTaskPlanner.reviewDraft(for: task),
             videos: task.videos.map(\.selectedTrainingVideo), clipSettings: task.clipSettings,
-            persistConfirmation: { item in
-                revision.task = try await manager.confirmClip(taskID: task.id,
+            persistReviewItem: { item in
+                revision.task = try await manager.saveClipReview(taskID: task.id,
                     expectedRevision: revision.task.configurationRevision, item: item)
             }, recoveryNoticeMessage: notice, mediaProvider: provider,
             submitSegments: { _ in

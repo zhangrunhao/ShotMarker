@@ -79,15 +79,6 @@
                     confirmationState: .confirmed,
                 ),
             ]
-            let session = TrainingSession(
-                id: fixedUUID(80_001),
-                startedAt: video.recordedStartAt,
-                endedAt: video.recordedEndAt,
-                events: items.flatMap(\.markerReferences).map {
-                    ShotMarkerEvent(id: $0.id, markedAt: $0.markedAt)
-                },
-            )
-            let reviewStore = InMemoryHighlightClipReviewStore()
             let viewModel = HighlightClipReviewViewModel(
                 draft: HighlightClipReviewDraft(
                     selectedVideoCount: 1,
@@ -96,11 +87,7 @@
                 ),
                 videos: [video],
                 clipSettings: .default,
-                combinationKey: try! HighlightClipReviewIdentityBuilder.combinationKey(
-                    for: session,
-                    videos: [video],
-                ),
-                reviewStore: reviewStore,
+                persistReviewItem: { _ in },
                 mediaProvider: HighlightClipReviewMediaProvider(
                     cacheLimit: 0,
                     loadAsset: { _ in AVMutableComposition() },

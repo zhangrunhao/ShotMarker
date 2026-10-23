@@ -121,6 +121,68 @@ final class HighlightClipEditorViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isSaving)
     }
 
+    func testReloadAfterUndoReplacesWorkingAndOpenedSnapshotsAndClearsError() async throws {
+        let viewModel = makeViewModel(item: makeItem(state: .confirmed),
+            confirm: { _ in throw TestError.saveFailed })
+        try viewModel.moveRange(by: 1)
+        _ = await viewModel.confirm()
+        let restored = makeItem(start: 8, duration: 5, included: false)
+
+        viewModel.reloadSavedItem(restored)
+
+        XCTAssertEqual(viewModel.workingItem, restored)
+        XCTAssertEqual(viewModel.displayedConfirmationState, .defaultValue)
+        XCTAssertFalse(viewModel.hasChanges)
+        XCTAssertNil(viewModel.saveErrorMessage)
+        try viewModel.moveRange(by: 1)
+        viewModel.discardChanges()
+        XCTAssertEqual(viewModel.workingItem, restored)
+    }
+
+    func testReloadForDifferentCandidateDoesNotDiscardWorkingCopy() throws {
+        let viewModel = makeViewModel(item: makeItem())
+        try viewModel.moveRange(by: 1)
+        let edited = viewModel.workingItem
+
+        viewModel.reloadSavedItem(makeItem(id: UUID(), start: 8, included: false))
+
+        XCTAssertEqual(viewModel.workingItem, edited)
+        XCTAssertTrue(viewModel.hasChanges)
+        viewModel.discardChanges()
+        XCTAssertEqual(viewModel.workingItem.start, 10)
+    }
+
+    func testDirectExcludeConfirmsCurrentAdjustedRangeAndInclusionTogether() async throws {
+        let recorder = ConfirmationRecorder(result: .success(.returnToReview))
+        let viewModel = makeViewModel(item: makeItem(), confirm: recorder.confirm)
+        try viewModel.moveRange(by: 1)
+
+        let navigation = await viewModel.confirm(isIncluded: false)
+        let submitted = await recorder.items()
+
+        XCTAssertEqual(navigation, .returnToReview)
+        XCTAssertEqual(submitted.count, 1)
+        XCTAssertEqual(submitted.first?.start, 11)
+        XCTAssertEqual(submitted.first?.duration, 2)
+        XCTAssertEqual(submitted.first?.isIncluded, false)
+        XCTAssertFalse(viewModel.workingItem.isIncluded)
+        XCTAssertFalse(viewModel.hasChanges)
+    }
+
+    func testFailedDirectRetainKeepsSelectedDecisionAndRangeForRetry() async throws {
+        let viewModel = makeViewModel(item: makeItem(included: false, state: .confirmed),
+            confirm: { _ in throw TestError.saveFailed })
+        try viewModel.moveRange(by: 1)
+
+        let navigation = await viewModel.confirm(isIncluded: true)
+
+        XCTAssertNil(navigation)
+        XCTAssertTrue(viewModel.workingItem.isIncluded)
+        XCTAssertEqual(viewModel.workingItem.start, 11)
+        XCTAssertTrue(viewModel.hasChanges)
+        XCTAssertNotNil(viewModel.saveErrorMessage)
+    }
+
     func testConcurrentButtonActionsInvokeConfirmationOnce() async {
         let gate = ConfirmationGate()
         let viewModel = makeViewModel(item: makeItem(), confirm: gate.confirm)
@@ -151,6 +213,7 @@ final class HighlightClipEditorViewModelTests: XCTestCase {
         viewModel.setIncluded(false)
         viewModel.restoreDefault()
         viewModel.discardChanges()
+        viewModel.reloadSavedItem(makeItem(start: 8, duration: 5))
 
         XCTAssertEqual(viewModel.workingItem, submittedItem)
         XCTAssertTrue(viewModel.hasChanges)
@@ -186,6 +249,7 @@ private func makeViewModel(
 }
 
 private func makeItem(
+    id: UUID? = nil,
     defaultStart: TimeInterval = 10,
     defaultDuration: TimeInterval = 2,
     start: TimeInterval = 10,
@@ -197,7 +261,7 @@ private func makeItem(
         uuidString: "00000000-0000-0000-0000-000000000501",
     )!
     return HighlightClipReviewItem(
-        id: markerID,
+        id: id ?? markerID,
         videoID: "runtime-video",
         markerReferences: [
             HighlightClipMarkerReference(

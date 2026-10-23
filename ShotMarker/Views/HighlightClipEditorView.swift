@@ -4,6 +4,8 @@ import SwiftUI
 private enum PendingEditorExitAction: Equatable {
     case review
     case videoSelection
+    case clip(UUID)
+    case undo
 }
 
 struct HighlightClipEditorView: View {
@@ -12,10 +14,10 @@ struct HighlightClipEditorView: View {
     @ObservedObject var playbackController: HighlightClipPlaybackController
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var window: HighlightClipTimelineWindow
     @State private var editorErrorMessage: String?
     @State private var playbackLoadAttempt = 0
-    @State private var isFineTuningExpanded = false
     @State private var isShowingDiscardConfirmation = false
     @State private var pendingExitAction: PendingEditorExitAction?
 
@@ -32,7 +34,7 @@ struct HighlightClipEditorView: View {
         loadsMedia: Bool = true,
         onRequestVideoReselection: @escaping () -> Void = {},
         onConfirmationNavigation:
-            @escaping (HighlightClipConfirmationNavigation) -> Void = { _ in },
+        @escaping (HighlightClipConfirmationNavigation) -> Void = { _ in },
     ) {
         self.reviewViewModel = reviewViewModel
         self.editorViewModel = editorViewModel
@@ -49,19 +51,20 @@ struct HighlightClipEditorView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 18) {
+            VStack(spacing: 14) {
                 confirmationStatus
                 playbackArea(item: item)
                 timeReadout(item: item)
                 timeline(item: item)
                 playbackButton
-                fineTuneControls(item: item, video: video)
-                inclusionAndRestore(item: item)
+                relationshipHints
+                clipStrip
+                restoreControl
                 errorMessages(itemID: item.id)
             }
             .padding()
         }
-        .disabled(editorViewModel.isSaving)
+        .disabled(isBusy)
         .task(id: playbackLoadAttempt) {
             guard loadsMedia else {
                 return
@@ -88,8 +91,11 @@ struct HighlightClipEditorView: View {
                     requestExit(.review)
                 }
                 .frame(minWidth: 44, minHeight: 44)
-                .disabled(editorViewModel.isSaving)
+                .disabled(isBusy)
             }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            clipNavigation
         }
         .safeAreaInset(edge: .bottom) {
             confirmationAction
@@ -124,80 +130,92 @@ struct HighlightClipEditorView: View {
         editorViewModel.video
     }
 
-    private var navigationTitle: String {
-        return "片段 \(displayNumber(for: item))"
+    private var context: HighlightClipReviewContext {
+        HighlightClipReviewContext(items: reviewViewModel.items, workingItem: item, videos: reviewViewModel.videos)
     }
 
-    @ViewBuilder
+    private var isBusy: Bool {
+        editorViewModel.isSaving || reviewViewModel.isUndoingDecision || reviewViewModel.isSavingDecision
+    }
+
+    private var navigationTitle: String {
+        "片段 \(context.candidateNumber ?? 1) / \(context.candidateCount)"
+    }
+
     private var confirmationStatus: some View {
         HStack {
-            switch editorViewModel.displayedConfirmationState {
-            case .defaultValue:
-                Label("默认", systemImage: "circle.dashed")
+            if editorViewModel.hasChanges {
+                Label("调整未保存", systemImage: "pencil.circle")
                     .foregroundStyle(.orange)
-            case .confirmed:
-                Label("已确认", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+            } else {
+                HighlightClipStateLabel(item: item)
             }
             Spacer()
+            if let numbers = item.originalNumberRange {
+                Text(numbers.lowerBound == numbers.upperBound
+                    ? "打点 \(numbers.lowerBound)"
+                    : "打点 \(numbers.lowerBound)–\(numbers.upperBound)")
+                    .foregroundStyle(.secondary)
+            }
         }
-        .font(.subheadline.weight(.semibold))
-        .accessibilityElement(children: .combine)
+        .font(.subheadline)
     }
 
     private var confirmationAction: some View {
         VStack(spacing: 8) {
+            HighlightClipDecisionNotice(viewModel: reviewViewModel) {
+                requestExit(.undo)
+            }
             if let message = editorViewModel.saveErrorMessage {
                 Text(message)
                     .font(.footnote)
                     .foregroundStyle(.red)
                     .accessibilityLabel("保存失败，\(message)")
             }
-            Button {
-                confirmWorkingCopy()
-            } label: {
-                HStack {
-                    if editorViewModel.isSaving {
-                        ProgressView()
-                    }
-                    Text(confirmButtonTitle)
-                        .fontWeight(.semibold)
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: 8))
+                : AnyLayout(HStackLayout(spacing: 12))
+            layout {
+                Button {
+                    confirmWorkingCopy(isIncluded: false)
+                } label: {
+                    Label(context.nextItem == nil ? "排除并完成" : "排除并下一段", systemImage: "minus.circle")
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("ClipExclude")
+                Button {
+                    confirmWorkingCopy(isIncluded: true)
+                } label: {
+                    Label(context.nextItem == nil ? "保留并完成" : "保留并下一段", systemImage: "checkmark.circle")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(reviewViewModel.unavailableItemIDs.contains(item.id))
+                .accessibilityIdentifier("ClipKeep")
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(editorViewModel.isSaving || cannotConfirmIncludedUnavailableSource)
+            .font(.subheadline.weight(.semibold))
+            if editorViewModel.isSaving {
+                ProgressView("正在保存…")
+            }
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.vertical, 8)
         .background(.regularMaterial)
+        .disabled(isBusy)
     }
 
-    private var cannotConfirmIncludedUnavailableSource: Bool {
-        editorViewModel.workingItem.isIncluded
-            && reviewViewModel.unavailableItemIDs.contains(editorViewModel.workingItem.id)
-    }
-
-    private var confirmButtonTitle: String {
-        if editorViewModel.isSaving {
-            return "正在保存…"
-        }
-        return editorViewModel.workingItem.isIncluded
-            ? "确认片段"
-            : "排除并确认片段"
-    }
-
-    private func confirmWorkingCopy() {
+    private func confirmWorkingCopy(isIncluded: Bool) {
+        guard !isBusy else { return }
         playbackController.pause()
         Task { @MainActor in
-            guard let navigation = await editorViewModel.confirm() else {
-                return
-            }
+            guard let navigation = await editorViewModel.confirm(isIncluded: isIncluded) else { return }
             onConfirmationNavigation(navigation)
         }
     }
 
     private func requestExit(_ action: PendingEditorExitAction) {
-        guard !editorViewModel.isSaving else {
+        guard !isBusy else {
             return
         }
         guard editorViewModel.hasChanges else {
@@ -215,11 +233,40 @@ struct HighlightClipEditorView: View {
     }
 
     private func performExit(_ action: PendingEditorExitAction) {
-        reviewViewModel.cancelFilmstripLoading(itemID: editorViewModel.workingItem.id)
+        if action == .undo {
+            undoDecision()
+            return
+        }
+        reviewViewModel.cancelFilmstripLoading(itemID: item.id)
         playbackController.reset()
-        dismiss()
-        if action == .videoSelection {
+        switch action {
+        case let .clip(itemID):
+            onConfirmationNavigation(.open(itemID: itemID))
+        case .review:
+            dismiss()
+        case .videoSelection:
+            dismiss()
             onRequestVideoReselection()
+        case .undo:
+            break
+        }
+    }
+
+    private func undoDecision() {
+        playbackController.pause()
+        Task { @MainActor in
+            guard let restoredID = await reviewViewModel.undoLastDecision() else { return }
+            if restoredID == item.id,
+               let restored = reviewViewModel.items.first(where: { $0.id == restoredID })
+            {
+                editorViewModel.reloadSavedItem(restored)
+                window = HighlightClipTimelineGeometry.makeWindow(range: restored.range, videoDuration: video.duration)
+                // Invalidate a pending load that may still hold the undone range.
+                playbackController.reset()
+                playbackLoadAttempt += 1
+            } else {
+                onConfirmationNavigation(.open(itemID: restoredID))
+            }
         }
     }
 
@@ -245,10 +292,9 @@ struct HighlightClipEditorView: View {
         .accessibilityLabel("片段播放预览")
     }
 
-    @ViewBuilder
     private func playbackErrorOverlay(
         _ error: HighlightClipReviewMediaError,
-        item: HighlightClipReviewItem,
+        item _: HighlightClipReviewItem,
     ) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -259,9 +305,8 @@ struct HighlightClipEditorView: View {
                 .foregroundStyle(.white)
 
             if error == .sourceUnavailable {
-                Button("排除并确认片段") {
-                    editorViewModel.setIncluded(false)
-                    confirmWorkingCopy()
+                Button("排除此片段") {
+                    confirmWorkingCopy(isIncluded: false)
                 }
                 .buttonStyle(.borderedProminent)
 
@@ -282,18 +327,27 @@ struct HighlightClipEditorView: View {
         .background(.black.opacity(0.78))
     }
 
+    @ViewBuilder
     private func timeReadout(item: HighlightClipReviewItem) -> some View {
-        Grid(horizontalSpacing: 18, verticalSpacing: 8) {
-            GridRow {
+        if dynamicTypeSize.isAccessibilitySize {
+            Grid(horizontalSpacing: 18, verticalSpacing: 8) {
+                GridRow {
+                    timeValue(title: "当前位置", value: playbackController.currentTime)
+                    timeValue(title: "起点", value: item.start)
+                }
+                GridRow {
+                    timeValue(title: "终点", value: item.range.end)
+                    timeValue(title: "时长", value: item.duration)
+                }
+            }
+        } else {
+            HStack(spacing: 8) {
                 timeValue(title: "当前位置", value: playbackController.currentTime)
                 timeValue(title: "起点", value: item.start)
-            }
-            GridRow {
                 timeValue(title: "终点", value: item.range.end)
                 timeValue(title: "时长", value: item.duration)
             }
         }
-        .frame(maxWidth: .infinity)
     }
 
     private func timeValue(title: String, value: TimeInterval) -> some View {
@@ -318,6 +372,7 @@ struct HighlightClipEditorView: View {
             markerReferences: item.markerReferences,
             reviewNumbersByMarkerID: reviewNumbers(for: item),
             frames: filmstripFrames,
+            neighbors: context.relationships,
         ) { action in
             performTimelineAction(action)
         }
@@ -341,120 +396,72 @@ struct HighlightClipEditorView: View {
         .disabled(playbackController.isLoading || playbackController.loadError != nil)
     }
 
-    private func fineTuneControls(
-        item: HighlightClipReviewItem,
-        video: SelectedTrainingVideo,
-    ) -> some View {
-        DisclosureGroup(
-            "精确范围调整",
-            isExpanded: $isFineTuningExpanded,
-        ) {
-            VStack(alignment: .leading, spacing: 14) {
-                fineTuneGroup(
-                    title: "起点",
-                    negativeLabel: "-0.5s 更早",
-                    positiveLabel: "+0.5s 更晚",
-                    negativeDisabled: item.start <= 0,
-                    positiveDisabled: item.duration <= 1,
-                    negativeDisabledReason: "已到达视频起点",
-                    positiveDisabledReason: "片段已达到最短时长",
-                    negativeAction: .setStart(item.start - 0.5),
-                    positiveAction: .setStart(item.start + 0.5),
-                )
-                fineTuneGroup(
-                    title: "终点",
-                    negativeLabel: "-0.5s 更早",
-                    positiveLabel: "+0.5s 更晚",
-                    negativeDisabled: item.duration <= 1,
-                    positiveDisabled: item.range.end >= video.duration,
-                    negativeDisabledReason: "片段已达到最短时长",
-                    positiveDisabledReason: "已到达视频终点",
-                    negativeAction: .setEnd(item.range.end - 0.5),
-                    positiveAction: .setEnd(item.range.end + 0.5),
-                )
-                fineTuneGroup(
-                    title: "整体",
-                    negativeLabel: "-0.5s 向前",
-                    positiveLabel: "+0.5s 向后",
-                    negativeDisabled: item.start <= 0,
-                    positiveDisabled: item.range.end >= video.duration,
-                    negativeDisabledReason: "已到达视频起点",
-                    positiveDisabledReason: "已到达视频终点",
-                    negativeAction: .moveBy(-0.5),
-                    positiveAction: .moveBy(0.5),
-                )
+    private var clipNavigation: some View {
+        HStack(spacing: 12) {
+            Button {
+                if let previous = context.previousItem { requestExit(.clip(previous.id)) }
+            } label: {
+                Label("上一段", systemImage: "chevron.left")
+                    .frame(minWidth: 44, minHeight: 44)
             }
-            .padding(.top, 10)
+            .disabled(context.previousItem == nil)
+            .accessibilityIdentifier("ClipPrevious")
+            Spacer(minLength: 0)
+            Text("\(context.candidateNumber ?? 1) / \(context.candidateCount)")
+                .monospacedDigit()
+                .accessibilityLabel("第 \(context.candidateNumber ?? 1) 段，共 \(context.candidateCount) 段")
+            Spacer(minLength: 0)
+            Button {
+                if let next = context.nextItem { requestExit(.clip(next.id)) }
+            } label: {
+                Label("下一段", systemImage: "chevron.right")
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .disabled(context.nextItem == nil)
+            .accessibilityIdentifier("ClipNext")
         }
-        .padding()
-        .background(Color(uiColor: .secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .accessibilityValue(isFineTuningExpanded ? "已展开" : "已收起")
+        .font(.subheadline)
+        .padding(.horizontal)
+        .background(.regularMaterial)
+        .disabled(isBusy)
     }
 
-    private func fineTuneGroup(
-        title: String,
-        negativeLabel: String,
-        positiveLabel: String,
-        negativeDisabled: Bool,
-        positiveDisabled: Bool,
-        negativeDisabledReason: String,
-        positiveDisabledReason: String,
-        negativeAction: HighlightClipTimelineAction,
-        positiveAction: HighlightClipTimelineAction,
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-            HStack {
-                fineTuneButton(
-                    negativeLabel,
-                    disabled: negativeDisabled,
-                    disabledReason: negativeDisabledReason,
-                    action: negativeAction,
-                )
-                fineTuneButton(
-                    positiveLabel,
-                    disabled: positiveDisabled,
-                    disabledReason: positiveDisabledReason,
-                    action: positiveAction,
-                )
-            }
+    private var clipStrip: some View {
+        HighlightClipNavigationStrip(viewModel: reviewViewModel, currentItemID: item.id, loadsMedia: loadsMedia) { itemID in
+            guard itemID != item.id else { return }
+            requestExit(.clip(itemID))
         }
     }
 
-    private func fineTuneButton(
-        _ title: String,
-        disabled: Bool,
-        disabledReason: String,
-        action: HighlightClipTimelineAction,
-    ) -> some View {
-        Button(title) {
-            performTimelineAction(action)
+    private var relationshipHints: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(context.relationships) { relationship in
+                Label(relationshipText(relationship), systemImage: relationship.willMerge ? "arrow.triangle.merge" : "film")
+                    .font(.footnote)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
-        .buttonStyle(.bordered)
-        .frame(maxWidth: .infinity, minHeight: 44)
-        .disabled(disabled)
-        .accessibilityHint(disabled ? disabledReason : "调整后立即预览")
+        .foregroundStyle(.secondary)
+        .accessibilityIdentifier("ClipRelationships")
     }
 
-    private func inclusionAndRestore(item: HighlightClipReviewItem) -> some View {
-        VStack(spacing: 10) {
-            Toggle(
-                "保留此片段",
-                isOn: Binding(
-                    get: { item.isIncluded },
-                    set: { editorViewModel.setIncluded($0) },
-                ),
-            )
-            .frame(minHeight: 44)
+    private func relationshipText(_ relationship: HighlightClipNeighborRelationship) -> String {
+        let direction = relationship.position == .previous ? "上一段" : "下一段"
+        let prefix = "\(direction)（\(relationship.candidateNumber)）"
+        let detail = switch relationship.separation {
+        case .differentVideo: "来自另一视频"
+        case let .overlap(seconds): "重叠 \(shortTime(seconds))"
+        case let .gap(seconds): "间隔 \(shortTime(seconds))"
+        }
+        let effect = relationship.willMerge ? "，生成时合并"
+            : (!relationship.isIncluded ? "，已排除" : "")
+        return "\(prefix)：\(detail)\(effect)"
+    }
 
-            Button("恢复默认范围") {
-                restoreDefaultRange()
-            }
+    private var restoreControl: some View {
+        Button("恢复默认范围") { restoreDefaultRange() }
             .frame(minHeight: 44)
             .disabled(item.range == item.defaultRange)
-        }
     }
 
     @ViewBuilder
@@ -497,19 +504,19 @@ struct HighlightClipEditorView: View {
         Task { @MainActor in
             do {
                 switch action {
-                case .setStart(let start):
+                case let .setStart(start):
                     try editorViewModel.apply(.setStart(start))
                     playbackController.updateRange(item.range)
                     await playbackController.previewStart(of: item.range)
-                case .setEnd(let end):
+                case let .setEnd(end):
                     try editorViewModel.apply(.setEnd(end))
                     playbackController.updateRange(item.range)
                     await playbackController.previewEnd(of: item.range)
-                case .moveBy(let delta):
+                case let .moveBy(delta):
                     try editorViewModel.apply(.moveBy(delta))
                     playbackController.updateRange(item.range)
                     await playbackController.previewStart(of: item.range)
-                case .preview(let time):
+                case let .preview(time):
                     let previewTime = min(max(time, 0), video.duration)
                     await playbackController.preview(at: previewTime)
                 }
@@ -543,26 +550,7 @@ struct HighlightClipEditorView: View {
     }
 
     private func reviewNumbers(for item: HighlightClipReviewItem) -> [UUID: Int] {
-        let numberRange = reviewViewModel.summary.displayNumberRangesByItemID[item.id]
-            ?? item.originalNumberRange
-        guard let lowerBound = numberRange?.lowerBound else {
-            return [:]
-        }
-        return Dictionary(uniqueKeysWithValues: item.markerReferences.enumerated().map {
-            (index, reference) in
-            (reference.id, lowerBound + index)
-        })
-    }
-
-    private func displayNumber(for item: HighlightClipReviewItem) -> String {
-        let range = reviewViewModel.summary.displayNumberRangesByItemID[item.id]
-            ?? item.originalNumberRange
-        guard let range else {
-            return "—"
-        }
-        return range.lowerBound == range.upperBound
-            ? "\(range.lowerBound)"
-            : "\(range.lowerBound)–\(range.upperBound)"
+        Dictionary(uniqueKeysWithValues: item.markerReferences.map { ($0.id, $0.originalMatchedNumber) })
     }
 
     private func shortTime(_ time: TimeInterval) -> String {

@@ -47,6 +47,150 @@ final class HighlightTaskReviewTests: XCTestCase {
         XCTAssertFalse(loaded[0].reviewItems[0].isIncluded)
     }
 
+    func testUndoRestoresDefaultRangeInclusionAndConfirmationOnDisk() async throws {
+        let fixture = try TaskManagerFixture()
+        defer { fixture.cleanup() }
+        let task = try await fixture.create()
+        let session = try HighlightReviewSession(task: task, manager: fixture.manager, mediaProvider: provider())
+        let original = session.viewModel.items[0]
+        let editor = try XCTUnwrap(session.viewModel.makeEditorViewModel(itemID: original.id))
+        try editor.moveRange(by: 1)
+        editor.setIncluded(false)
+        _ = await editor.confirm()
+        XCTAssertEqual(session.viewModel.lastDecision?.itemID, original.id)
+        XCTAssertEqual(session.viewModel.lastDecision?.isIncluded, false)
+
+        let restoredID = await session.viewModel.undoLastDecision()
+
+        XCTAssertEqual(restoredID, original.id)
+        XCTAssertEqual(session.viewModel.items[0], original)
+        XCTAssertEqual(session.viewModel.editingItemID, original.id)
+        XCTAssertNil(session.viewModel.lastDecision)
+        XCTAssertNil(session.viewModel.undoErrorMessage)
+        let reloaded = try await HighlightTaskStore(fileURL: fixture.storeFixture.fileURL).load()
+        XCTAssertEqual(reloaded[0].configurationRevision, 3)
+        XCTAssertEqual(reloaded[0].reviewItems[0], task.reviewItems[0])
+        let reopened = try HighlightReviewSession(task: reloaded[0], manager: fixture.manager, mediaProvider: provider())
+        XCTAssertEqual(reopened.viewModel.items[0], original)
+        XCTAssertNil(reopened.viewModel.lastDecision)
+    }
+
+    func testUndoRestoresPriorConfirmedDecisionAndAdjustedRange() async throws {
+        let fixture = try TaskManagerFixture()
+        defer { fixture.cleanup() }
+        let task = try await fixture.create()
+        let session = try HighlightReviewSession(task: task, manager: fixture.manager, mediaProvider: provider())
+        let itemID = task.reviewItems[0].id
+        let first = try XCTUnwrap(session.viewModel.makeEditorViewModel(itemID: itemID))
+        try first.moveRange(by: 1)
+        first.setIncluded(false)
+        _ = await first.confirm()
+        let priorDecision = session.viewModel.items[0]
+        let second = try XCTUnwrap(session.viewModel.makeEditorViewModel(itemID: itemID))
+        try second.moveRange(by: 2)
+        second.setIncluded(true)
+        _ = await second.confirm()
+
+        let restoredID = await session.viewModel.undoLastDecision()
+
+        XCTAssertEqual(restoredID, itemID)
+        XCTAssertEqual(session.viewModel.items[0], priorDecision)
+        XCTAssertEqual(session.viewModel.items[0].confirmationState, .confirmed)
+        XCTAssertFalse(session.viewModel.items[0].isIncluded)
+        let reloaded = try await fixture.storeFixture.store.load()
+        XCTAssertEqual(reloaded[0].reviewItems[0].start, priorDecision.start)
+        XCTAssertEqual(reloaded[0].reviewItems[0].duration, priorDecision.duration)
+        XCTAssertEqual(reloaded[0].reviewItems[0].confirmationState, .confirmed)
+        XCTAssertFalse(reloaded[0].reviewItems[0].isIncluded)
+    }
+
+    func testUndoOnlyRevertsLatestDecisionAndDoesNotCreateAnotherUndo() async throws {
+        let fixture = try TaskManagerFixture()
+        defer { fixture.cleanup() }
+        let task = try await fixture.create()
+        let session = try HighlightReviewSession(task: task, manager: fixture.manager, mediaProvider: provider())
+        for item in session.viewModel.items {
+            let editor = try XCTUnwrap(session.viewModel.makeEditorViewModel(itemID: item.id))
+            editor.setIncluded(false)
+            _ = await editor.confirm()
+        }
+        XCTAssertNil(session.viewModel.editingItemID)
+
+        let restoredID = await session.viewModel.undoLastDecision()
+        let secondUndo = await session.viewModel.undoLastDecision()
+
+        XCTAssertEqual(restoredID, task.reviewItems[1].id)
+        XCTAssertNil(secondUndo)
+        XCTAssertEqual(session.viewModel.items[0].confirmationState, .confirmed)
+        XCTAssertFalse(session.viewModel.items[0].isIncluded)
+        XCTAssertEqual(session.viewModel.items[1].confirmationState, .defaultValue)
+        XCTAssertTrue(session.viewModel.items[1].isIncluded)
+        XCTAssertNil(session.viewModel.lastDecision)
+    }
+
+    func testFailedUndoPreservesDecisionEditorAndDiskThenAllowsRetry() async throws {
+        let storage = try TaskStoreFixture()
+        defer { storage.cleanup() }
+        let writes = ReviewWriteControl()
+        let store = HighlightTaskStore(fileURL: storage.fileURL, atomicWrite: writes.write)
+        let manager = HighlightTaskManager(store: store, fileStore: HighlightTaskFileStore(baseDirectory: storage.directory),
+            runner: ControlledHighlightRenderRunner(), validateSource: { _ in })
+        let task = try await manager.createTask(session: HighlightTaskTestFixture.session,
+            selectedVideos: TaskManagerFixture.videos, settings: .default)
+        let session = try HighlightReviewSession(task: task, manager: manager, mediaProvider: provider())
+        let first = try XCTUnwrap(session.viewModel.makeEditorViewModel(itemID: task.reviewItems[0].id))
+        first.setIncluded(false)
+        _ = await first.confirm()
+        let savedItems = session.viewModel.items
+        let savedBytes = try Data(contentsOf: storage.fileURL)
+        writes.setFailing(true)
+
+        let failedID = await session.viewModel.undoLastDecision()
+
+        XCTAssertNil(failedID)
+        XCTAssertEqual(session.viewModel.items, savedItems)
+        XCTAssertEqual(session.viewModel.editingItemID, task.reviewItems[1].id)
+        XCTAssertEqual(session.viewModel.lastDecision?.itemID, task.reviewItems[0].id)
+        XCTAssertNotNil(session.viewModel.undoErrorMessage)
+        XCTAssertFalse(session.viewModel.isUndoingDecision)
+        XCTAssertEqual(try Data(contentsOf: storage.fileURL), savedBytes)
+        writes.setFailing(false)
+
+        let retriedID = await session.viewModel.undoLastDecision()
+
+        XCTAssertEqual(retriedID, task.reviewItems[0].id)
+        XCTAssertNil(session.viewModel.lastDecision)
+        XCTAssertNil(session.viewModel.undoErrorMessage)
+        let reloaded = try await store.load()
+        XCTAssertEqual(reloaded[0].reviewItems[0], task.reviewItems[0])
+    }
+
+    func testFailedNewConfirmationKeepsPreviousUndoDecision() async throws {
+        let storage = try TaskStoreFixture()
+        defer { storage.cleanup() }
+        let writes = ReviewWriteControl()
+        let store = HighlightTaskStore(fileURL: storage.fileURL, atomicWrite: writes.write)
+        let manager = HighlightTaskManager(store: store, fileStore: HighlightTaskFileStore(baseDirectory: storage.directory),
+            runner: ControlledHighlightRenderRunner(), validateSource: { _ in })
+        let task = try await manager.createTask(session: HighlightTaskTestFixture.session,
+            selectedVideos: TaskManagerFixture.videos, settings: .default)
+        let session = try HighlightReviewSession(task: task, manager: manager, mediaProvider: provider())
+        let first = try XCTUnwrap(session.viewModel.makeEditorViewModel(itemID: task.reviewItems[0].id))
+        first.setIncluded(false)
+        _ = await first.confirm()
+        writes.setFailing(true)
+        let second = try XCTUnwrap(session.viewModel.makeEditorViewModel(itemID: task.reviewItems[1].id))
+        second.setIncluded(false)
+
+        let failedNavigation = await second.confirm()
+
+        XCTAssertNil(failedNavigation)
+        XCTAssertEqual(session.viewModel.lastDecision?.itemID, task.reviewItems[0].id)
+        XCTAssertEqual(session.viewModel.editingItemID, task.reviewItems[1].id)
+        XCTAssertTrue(second.hasChanges)
+        XCTAssertTrue(session.viewModel.items[1].isIncluded)
+    }
+
     func testStaleReviewRetainsWorkingCopyWithoutPublishing() async throws {
         let fixture = try TaskManagerFixture()
         defer { fixture.cleanup() }
@@ -83,5 +227,23 @@ final class HighlightTaskReviewTests: XCTestCase {
 
     private func provider() -> HighlightClipReviewMediaProvider {
         HighlightClipReviewMediaProvider(loadAsset: { _ in AVMutableComposition() }, generateFrame: { _, _ in Data([1]) })
+    }
+}
+
+private nonisolated final class ReviewWriteControl: @unchecked Sendable {
+    private let lock = NSLock()
+    private var shouldFail = false
+
+    func setFailing(_ value: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        shouldFail = value
+    }
+
+    func write(_ data: Data, to url: URL) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        if shouldFail { throw CocoaError(.fileWriteOutOfSpace) }
+        try data.write(to: url, options: .atomic)
     }
 }

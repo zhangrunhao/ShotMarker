@@ -9,6 +9,12 @@ enum HighlightClipThumbnailState: Equatable {
     case placeholder
 }
 
+struct HighlightClipReviewDecision: Equatable {
+    let itemID: UUID
+    let isIncluded: Bool
+    fileprivate let previousItem: HighlightClipReviewItem
+}
+
 @MainActor
 final class HighlightClipReviewViewModel: ObservableObject {
     typealias SubmitSegments = ([ConfirmedHighlightSegment]) async throws -> Void
@@ -27,12 +33,18 @@ final class HighlightClipReviewViewModel: ObservableObject {
     @Published private(set) var submissionErrorMessage: String?
     @Published private(set) var recoveryNoticeMessage: String?
 
+    @Published private(set) var lastDecision: HighlightClipReviewDecision?
+    @Published private(set) var isSavingDecision = false
+    @Published private(set) var isUndoingDecision = false
+    @Published private(set) var undoErrorMessage: String?
+
     let mediaProvider: HighlightClipReviewMediaProvider
     private(set) var videos: [SelectedTrainingVideo]
 
     private let combinationKey: HighlightClipReviewCombinationKey?
     private let reviewStore: (any HighlightClipReviewStoring)?
     private let persistConfirmation: ((HighlightClipReviewItem) async throws -> Void)?
+    private let persistReviewItem: ((HighlightClipReviewItem) async throws -> Void)?
     private let now: () -> Date
     private let inputFingerprint: HighlightClipReviewInputFingerprint
     private let submitSegments: SubmitSegments
@@ -50,6 +62,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
         combinationKey: HighlightClipReviewCombinationKey? = nil,
         reviewStore: (any HighlightClipReviewStoring)? = nil,
         persistConfirmation: ((HighlightClipReviewItem) async throws -> Void)? = nil,
+        persistReviewItem: ((HighlightClipReviewItem) async throws -> Void)? = nil,
         recoveryNoticeMessage: String? = nil,
         mediaProvider: HighlightClipReviewMediaProvider,
         now: @escaping () -> Date = Date.init,
@@ -61,6 +74,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
         self.combinationKey = combinationKey
         self.reviewStore = reviewStore
         self.persistConfirmation = persistConfirmation
+        self.persistReviewItem = persistReviewItem
         self.recoveryNoticeMessage = recoveryNoticeMessage
         self.mediaProvider = mediaProvider
         self.now = now
@@ -91,7 +105,9 @@ final class HighlightClipReviewViewModel: ObservableObject {
     var canConfirm: Bool {
         guard !summary.finalSegments.isEmpty,
               planningErrorMessage == nil,
-              !isSubmitting
+              !isSubmitting,
+              !isSavingDecision,
+              !isUndoingDecision
         else {
             return false
         }
@@ -173,7 +189,8 @@ final class HighlightClipReviewViewModel: ObservableObject {
     }
 
     func makeEditorViewModel(itemID: UUID) -> HighlightClipEditorViewModel? {
-        guard let item = items.first(where: { $0.id == itemID }),
+        guard !isSavingDecision, !isUndoingDecision, !isSubmitting,
+              let item = items.first(where: { $0.id == itemID }),
               let video = videos.first(where: { $0.id == item.videoID })
         else {
             return nil
@@ -192,12 +209,19 @@ final class HighlightClipReviewViewModel: ObservableObject {
     }
 
     func closeEditor() {
+        guard !isSavingDecision, !isUndoingDecision else { return }
         editingItemID = nil
     }
 
     private func confirmWorkingCopy(
         _ workingItem: HighlightClipReviewItem,
     ) async throws -> HighlightClipConfirmationNavigation {
+        guard !isSavingDecision, !isUndoingDecision, !isSubmitting else {
+            throw HighlightTaskError.busy
+        }
+        isSavingDecision = true
+        defer { isSavingDecision = false }
+
         do {
             guard let index = items.firstIndex(where: { $0.id == workingItem.id }) else {
                 throw HighlightClipReviewPlanningError.missingMarkers
@@ -235,6 +259,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
             candidate.start = normalizedStart
             candidate.duration = normalizedDuration
             candidate.isIncluded = workingItem.isIncluded
+            candidate.confirmationState = .confirmed
 
             var sourceValidationSucceeded = false
             if candidate.isIncluded {
@@ -242,7 +267,9 @@ final class HighlightClipReviewViewModel: ObservableObject {
                 sourceValidationSucceeded = true
             }
 
-            if let persistConfirmation {
+            if let persistReviewItem {
+                try await persistReviewItem(candidate)
+            } else if let persistConfirmation {
                 try await persistConfirmation(candidate)
             } else if let combinationKey, let reviewStore {
                 let videoIdentity = try HighlightClipReviewIdentityBuilder.videoIdentity(for: video)
@@ -267,8 +294,12 @@ final class HighlightClipReviewViewModel: ObservableObject {
                 throw HighlightTaskError.persistence
             }
 
-            candidate.confirmationState = .confirmed
             items[index] = candidate
+            lastDecision = persistReviewItem.map { _ in
+                HighlightClipReviewDecision(itemID: candidate.id,
+                    isIncluded: candidate.isIncluded, previousItem: currentItem)
+            }
+            undoErrorMessage = nil
             if sourceValidationSucceeded {
                 unavailableItemIDs.remove(candidate.id)
                 itemErrorMessages[candidate.id] = nil
@@ -276,9 +307,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
             refreshSummary()
             scheduleThumbnailRefreshIfNeeded(itemID: candidate.id)
 
-            if let nextItem = items.dropFirst(index + 1).first(where: {
-                $0.confirmationState == .defaultValue
-            }) {
+            if let nextItem = items.dropFirst(index + 1).first {
                 editingItemID = nextItem.id
                 return .open(itemID: nextItem.id)
             }
@@ -291,6 +320,35 @@ final class HighlightClipReviewViewModel: ObservableObject {
             throw HighlightClipReviewConfirmationFailure(
                 message: Self.confirmationMessage(for: error),
             )
+        }
+    }
+
+    func undoLastDecision() async -> UUID? {
+        guard !isSavingDecision, !isUndoingDecision, !isSubmitting,
+              let decision = lastDecision,
+              let persistReviewItem,
+              let index = items.firstIndex(where: { $0.id == decision.itemID })
+        else {
+            return nil
+        }
+
+        isUndoingDecision = true
+        undoErrorMessage = nil
+        defer { isUndoingDecision = false }
+
+        do {
+            try await persistReviewItem(decision.previousItem)
+            items[index] = decision.previousItem
+            lastDecision = nil
+            refreshSummary()
+            scheduleThumbnailRefreshIfNeeded(itemID: decision.itemID)
+            editingItemID = decision.itemID
+            return decision.itemID
+        } catch is CancellationError {
+            return nil
+        } catch {
+            undoErrorMessage = Self.confirmationMessage(for: error)
+            return nil
         }
     }
 
@@ -363,6 +421,8 @@ final class HighlightClipReviewViewModel: ObservableObject {
         unavailableItemIDs.removeAll()
         itemErrorMessages.removeAll()
         editingItemID = nil
+        lastDecision = nil
+        undoErrorMessage = nil
     }
 
     private func refreshSummary() {

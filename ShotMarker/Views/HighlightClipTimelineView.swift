@@ -8,6 +8,7 @@ struct HighlightClipTimelineView: View {
     let markerReferences: [HighlightClipMarkerReference]
     let reviewNumbersByMarkerID: [UUID: Int]
     let frames: [Data?]
+    var neighbors: [HighlightClipNeighborRelationship] = []
     let onAction: (HighlightClipTimelineAction) -> Void
 
     @GestureState private var startGestureRange: HighlightClipRange?
@@ -42,6 +43,7 @@ struct HighlightClipTimelineView: View {
 
             ZStack(alignment: .topLeading) {
                 frameStrip
+                neighboringRanges(width: width)
                 selectionOverlay(
                     startX: startX,
                     endX: endX,
@@ -66,7 +68,25 @@ struct HighlightClipTimelineView: View {
         .frame(height: 144)
     }
 
-    @ViewBuilder
+    private func neighboringRanges(width: Double) -> some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(neighbors) { neighbor in
+                if let range = neighbor.timelineRange,
+                   min(range.end, window.end) > max(range.start, window.start)
+                {
+                    let startX = HighlightClipTimelineGeometry.x(for: max(range.start, window.start), window: window, width: width)
+                    let endX = HighlightClipTimelineGeometry.x(for: min(range.end, window.end), window: window, width: width)
+                    Rectangle()
+                        .fill(Color.white.opacity(neighbor.isIncluded ? 0.32 : 0.14))
+                        .frame(width: max(endX - startX, 1), height: 6)
+                        .position(x: (startX + endX) / 2, y: neighbor.position == .previous ? 8 : 18)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     private var frameStrip: some View {
         HStack(spacing: 0) {
             if frames.isEmpty {

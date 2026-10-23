@@ -18,21 +18,54 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
     }
 
     func testConfirmingMergedClipLoadsNextClipAndThenAnotherSource() {
-        app.buttons["片段 1–3"].tap()
-        assertLoadedClip(title: "片段 1–3", start: 1)
+        app.buttons["片段 1"].tap()
+        assertLoadedClip(title: "片段 1 / 3", start: 1)
 
-        app.buttons["确认片段"].tap()
-        assertLoadedClip(title: "片段 4", start: 691.1)
+        app.buttons["ClipKeep"].tap()
+        assertLoadedClip(title: "片段 2 / 3", start: 691.1)
         assertPlaybackAdvances(after: 691.1)
 
-        app.buttons["确认片段"].tap()
-        assertLoadedClip(title: "片段 5", start: 21)
+        app.buttons["ClipKeep"].tap()
+        assertLoadedClip(title: "片段 3 / 3", start: 21)
         assertPlaybackAdvances(after: 21)
 
-        app.buttons["确认片段"].tap()
+        app.buttons["ClipKeep"].tap()
         XCTAssertTrue(app.navigationBars["审核集锦片段"].waitForExistence(timeout: 5))
-        app.buttons["片段 4"].tap()
-        assertLoadedClip(title: "片段 4", start: 691.1)
+        app.buttons["片段 2"].tap()
+        assertLoadedClip(title: "片段 2 / 3", start: 691.1)
+    }
+
+    func testUndoWhileReopenedClipIsLoadingRejectsTheLateUndoneRange() {
+        app.terminate()
+        app.launchEnvironment["SHOTMARKER_UI_TEST_DELAY_REOPENED_CLIP"] = "1"
+        app.launch()
+        XCTAssertTrue(app.navigationBars["审核集锦片段"].waitForExistence(timeout: 20))
+        app.buttons["片段 1"].tap()
+        assertLoadedClip(title: "片段 1 / 3", start: 1)
+        let start = element(label: "片段起点")
+        let origin = start.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        origin.press(forDuration: 0.1, thenDragTo: origin.withOffset(CGVector(dx: 48, dy: 0)))
+        XCTAssertGreaterThan(seconds(start), 1.5, "必须先保存与默认起点不同的范围")
+        app.buttons["ClipKeep"].tap()
+        assertLoadedClip(title: "片段 2 / 3", start: 691.1)
+
+        app.buttons["ClipPrevious"].tap()
+        XCTAssertTrue(app.navigationBars["片段 1 / 3"].waitForExistence(timeout: 5))
+        let releaseLoad = app.buttons["ClipMediaReleasePlaybackLoad"]
+        XCTAssertTrue(releaseLoad.waitForExistence(timeout: 5), "重新打开首段的旧播放载入必须仍在等待")
+        app.buttons["ClipUndo"].tap()
+        XCTAssertTrue(app.staticTexts["未看 · 默认保留"].waitForExistence(timeout: 5))
+        let restoredRange = NSPredicate { _, _ in
+            abs(self.seconds(self.element(label: "片段起点")) - 1) < 0.11
+                && abs(self.seconds(self.element(label: "片段终点")) - 18) < 0.11
+        }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: restoredRange, object: nil)], timeout: 5), .completed)
+        releaseLoad.tap()
+        XCTAssertTrue(app.staticTexts["ClipMediaDelayedLoadFinished"].waitForExistence(timeout: 5),
+            "先让携带旧范围的载入返回，再核验播放状态")
+
+        assertLoadedClip(title: "片段 1 / 3", start: 1)
+        assertPlaybackAdvances(after: 1)
     }
 
     private func assertLoadedClip(title: String, start: Double) {

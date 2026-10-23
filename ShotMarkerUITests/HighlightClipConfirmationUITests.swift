@@ -13,81 +13,86 @@ final class HighlightClipConfirmationUITests: XCTestCase {
         app = nil
     }
 
-    func testGalleryExposesAllFourStatesAndDefaultDoesNotDisableGeneration() {
-        XCTAssertTrue(app.staticTexts["默认"].exists)
-        XCTAssertTrue(app.staticTexts["已确认 · 保留"].exists)
-        XCTAssertTrue(app.staticTexts["已确认 · 排除"].exists)
-        XCTAssertTrue(app.staticTexts["视频不可用"].exists)
+    func testGalleryExposesReviewStatesAndUnreviewedDoesNotDisableGeneration() {
+        XCTAssertTrue(app.staticTexts["未看 · 默认保留"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["已保留"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["已排除"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["视频不可用"].firstMatch.exists)
         XCTAssertTrue(app.buttons["确认并生成"].isEnabled)
     }
 
-    func testPreciseControlsStartCollapsedAndResetAfterReentry() {
+    func testExclusionAdvancesToAdjacentClipAndUndoRestoresOriginalDecision() {
         app.buttons["片段 1"].tap()
-        let disclosure = app.buttons["精确范围调整"]
-        scrollUntilHittable(disclosure)
-        XCTAssertTrue(disclosure.isHittable)
-        XCTAssertFalse(app.buttons["-0.5s 更早"].exists)
-        disclosure.tap()
-        let fineTuneButton = app.buttons["-0.5s 更早"].firstMatch
-        scrollUntilHittable(fineTuneButton)
-        XCTAssertTrue(fineTuneButton.isHittable)
-        scrollToTop()
-        app.buttons["返回"].tap()
-        XCTAssertFalse(app.alerts["放弃本次调整？"].exists)
-        XCTAssertTrue(app.navigationBars["审核集锦片段"].waitForExistence(timeout: 2))
-        app.buttons["片段 1"].tap()
-        scrollUntilHittable(app.buttons["精确范围调整"])
-        XCTAssertFalse(app.buttons["-0.5s 更早"].exists)
+        app.buttons["ClipExclude"].tap()
+        XCTAssertTrue(app.navigationBars["片段 2 / 5"].waitForExistence(timeout: 3))
+        app.buttons["ClipPrevious"].tap()
+        XCTAssertTrue(app.navigationBars["片段 1 / 5"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["已排除"].exists)
+        app.buttons["ClipNext"].tap()
+        app.buttons["ClipUndo"].tap()
+        XCTAssertTrue(app.navigationBars["片段 1 / 5"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["未看 · 默认保留"].exists)
+        XCTAssertFalse(app.buttons["ClipUndo"].exists)
     }
 
-    func testDirtyBackCanContinueOrDiscardWithoutChangingGallery() {
+    func testDirtyNavigationCanContinueOrDiscardWithoutChangingSavedRange() {
         app.buttons["片段 2"].tap()
-        let inclusionToggle = app.switches["保留此片段"]
-        scrollUntilHittable(inclusionToggle)
-        XCTAssertTrue(inclusionToggle.isHittable)
-        inclusionToggle.tap()
-        scrollToTop()
-        XCTAssertTrue(app.staticTexts["默认"].exists)
-        app.buttons["返回"].tap()
+        let start = element(label: "片段起点")
+        let originalValue = start.value as? String
+        let origin = start.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        origin.press(forDuration: 0.1, thenDragTo: origin.withOffset(CGVector(dx: -32, dy: 0)))
+        XCTAssertTrue(app.staticTexts["调整未保存"].waitForExistence(timeout: 2))
+        app.buttons["ClipNext"].tap()
         XCTAssertTrue(app.alerts["放弃本次调整？"].waitForExistence(timeout: 2))
         app.alerts.buttons["继续调整"].tap()
-        XCTAssertTrue(app.navigationBars.matching(
-            NSPredicate(format: "identifier BEGINSWITH '片段'")
-        ).firstMatch.exists)
-        app.buttons["返回"].tap()
+        XCTAssertTrue(app.navigationBars["片段 2 / 5"].exists)
+        app.buttons["ClipNext"].tap()
         app.alerts.buttons["放弃"].tap()
-        XCTAssertTrue(app.staticTexts["已确认 · 保留"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.navigationBars["片段 3 / 5"].waitForExistence(timeout: 3))
+        app.buttons["ClipPrevious"].tap()
+        XCTAssertTrue(app.navigationBars["片段 2 / 5"].waitForExistence(timeout: 3))
+        XCTAssertEqual(element(label: "片段起点").value as? String, originalValue)
+        XCTAssertTrue(app.staticTexts["已保留"].exists)
     }
 
-    func testConfirmationSkipsConfirmedCardThenReturnsAfterLastDefault() {
+    func testDirectDecisionVisitsConfirmedAndExcludedClipsWithoutRenumbering() {
         app.buttons["片段 1"].tap()
-        app.buttons["确认片段"].tap()
-        XCTAssertTrue(app.navigationBars["片段 3"].waitForExistence(timeout: 2))
-        app.buttons["确认片段"].tap()
-        XCTAssertTrue(app.navigationBars["审核集锦片段"].waitForExistence(timeout: 2))
+        for number in 2 ... 5 {
+            app.buttons["ClipKeep"].tap()
+            XCTAssertTrue(app.navigationBars["片段 \(number) / 5"].waitForExistence(timeout: 3))
+        }
+        XCTAssertFalse(app.buttons["ClipKeep"].isEnabled)
+        app.buttons["ClipExclude"].tap()
+        XCTAssertTrue(app.navigationBars["审核集锦片段"].waitForExistence(timeout: 3))
+        app.buttons["片段 3"].tap()
+        XCTAssertTrue(app.navigationBars["片段 3 / 5"].waitForExistence(timeout: 3))
+        let strip = app.scrollViews["ClipNavigationStrip"]
+        for _ in 0 ..< 5 where !strip.isHittable || strip.frame.maxY > app.frame.maxY - 200 {
+            let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.72))
+            origin.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.32)))
+        }
+        strip.swipeRight()
+        XCTAssertTrue(app.buttons["ClipStrip-1"].isHittable)
+        app.buttons["ClipStrip-1"].tap()
+        XCTAssertTrue(app.navigationBars["片段 1 / 5"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ClipPrevious"].isEnabled)
     }
 
-    func testMaximumDynamicTypeKeepsStatusesAndConfirmationActionAccessible() {
+    func testMaximumDynamicTypeKeepsDecisionsAndNavigationAccessible() {
         app.terminate()
         app = launchHarness(extraArguments: [
             "-UIPreferredContentSizeCategoryName",
             "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
         ])
-
-        for title in ["默认", "已确认 · 保留", "已确认 · 排除", "视频不可用"] {
-            let status = findStaticText(title)
-            XCTAssertTrue(status.exists)
-            XCTAssertFalse(
-                String(describing: status.value ?? "").isEmpty,
-                "\(title) 应提供非空辅助功能值",
-            )
+        app.buttons["片段 1"].tap()
+        for identifier in ["ClipExclude", "ClipKeep", "ClipNext"] {
+            let button = app.buttons[identifier]
+            XCTAssertTrue(button.isHittable, identifier)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
         }
-
-        let confirmButton = app.buttons["确认并生成"]
-        scrollUntilHittable(confirmButton)
-        XCTAssertTrue(confirmButton.exists)
-        XCTAssertTrue(confirmButton.isHittable)
-        XCTAssertGreaterThanOrEqual(confirmButton.frame.height, 44)
+        app.buttons["ClipExclude"].tap()
+        XCTAssertTrue(app.navigationBars["片段 2 / 5"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["ClipPrevious"].isHittable)
     }
 
     private func launchHarness(extraArguments: [String] = []) -> XCUIApplication {
@@ -99,48 +104,7 @@ final class HighlightClipConfirmationUITests: XCTestCase {
         return application
     }
 
-    private func findStaticText(_ title: String) -> XCUIElement {
-        let element = app.staticTexts[title].firstMatch
-        for _ in 0 ..< 8 where !element.exists {
-            swipeContentUp()
-        }
-        return element
-    }
-
-    private func scrollUntilHittable(_ element: XCUIElement) {
-        let safeTop = app.frame.minY + 100
-        let safeBottom = app.frame.maxY - 190
-
-        for _ in 0 ..< 8 {
-            if element.exists {
-                let midpoint = element.frame.midY
-                if element.isHittable, midpoint >= safeTop, midpoint <= safeBottom {
-                    return
-                }
-                if midpoint < safeTop {
-                    swipeContentDown()
-                    continue
-                }
-            }
-            swipeContentUp()
-        }
-    }
-
-    private func scrollToTop() {
-        for _ in 0 ..< 6 {
-            swipeContentDown()
-        }
-    }
-
-    private func swipeContentUp() {
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.72))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.30))
-        start.press(forDuration: 0.05, thenDragTo: end)
-    }
-
-    private func swipeContentDown() {
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.30))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.72))
-        start.press(forDuration: 0.05, thenDragTo: end)
+    private func element(label: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
     }
 }

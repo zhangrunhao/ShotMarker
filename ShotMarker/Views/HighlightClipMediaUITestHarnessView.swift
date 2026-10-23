@@ -1,5 +1,6 @@
 #if DEBUG
     import AVFoundation
+    import Combine
     import SwiftUI
 
     /// Real task persistence, navigation, playback and frame extraction for UI regression tests.
@@ -93,10 +94,18 @@
 
     private struct HighlightClipMediaUITestContent: View {
         @ObservedObject var session: HighlightReviewSession
+        @StateObject private var playbackGate = ReopenedClipPlaybackGate()
+        private let delaysReopenedPlayback = ProcessInfo.processInfo.environment["SHOTMARKER_UI_TEST_DELAY_REOPENED_CLIP"] == "1"
 
         var body: some View {
             NavigationStack {
-                HighlightTaskReviewView(session: session, onExit: {})
+                if delaysReopenedPlayback {
+                    HighlightClipReviewView(viewModel: session.viewModel,
+                        makePlaybackController: makeDelayedPlaybackController,
+                        generationButtonTitle: "生成视频")
+                } else {
+                    HighlightTaskReviewView(session: session, onExit: {})
+                }
             }
                 .overlay(alignment: .topLeading) {
                     if let itemID = session.viewModel.editingItemID {
@@ -107,6 +116,60 @@
                             .allowsHitTesting(false)
                     }
                 }
+                .overlay(alignment: .topTrailing) {
+                    if playbackGate.isWaiting {
+                        Button("继续载入") { playbackGate.release() }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("ClipMediaReleasePlaybackLoad")
+                    } else if playbackGate.hasFinishedDelayedLoad {
+                        Text("旧载入已返回")
+                            .font(.caption2)
+                            .accessibilityIdentifier("ClipMediaDelayedLoadFinished")
+                            .allowsHitTesting(false)
+                    }
+                }
+        }
+
+        private func makeDelayedPlaybackController() -> HighlightClipPlaybackController {
+            let isFirstItem = session.viewModel.editingItemID == session.viewModel.items.first?.id
+            let provider = session.viewModel.mediaProvider
+            return HighlightClipPlaybackController { video in
+                let asset = try await provider.asset(for: video)
+                let delayed = isFirstItem ? await playbackGate.waitForSecondOpening() : false
+                defer {
+                    if delayed { playbackGate.finishDelayedLoad() }
+                }
+                // Deliver the old asset even after cancellation to exercise load-generation rejection.
+                return asset
+            }
+        }
+    }
+
+    @MainActor
+    private final class ReopenedClipPlaybackGate: ObservableObject {
+        @Published private(set) var isWaiting = false
+        @Published private(set) var hasFinishedDelayedLoad = false
+        private var firstItemLoadCount = 0
+        private var continuation: CheckedContinuation<Void, Never>?
+
+        func waitForSecondOpening() async -> Bool {
+            firstItemLoadCount += 1
+            guard firstItemLoadCount == 2 else { return false }
+            await withCheckedContinuation { continuation in
+                self.continuation = continuation
+                isWaiting = true
+            }
+            return true
+        }
+
+        func release() {
+            isWaiting = false
+            continuation?.resume()
+            continuation = nil
+        }
+
+        func finishDelayedLoad() {
+            hasFinishedDelayedLoad = true
         }
     }
 #endif

@@ -59,6 +59,17 @@ struct HighlightClipReviewView: View {
             }
         }
         .background(Color(uiColor: .systemGroupedBackground))
+        .safeAreaInset(edge: .bottom) {
+            if viewModel.lastDecision != nil {
+                HighlightClipDecisionNotice(viewModel: viewModel) {
+                    Task { @MainActor in
+                        if let itemID = await viewModel.undoLastDecision() { openEditor(itemID: itemID) }
+                    }
+                }
+                .padding(.horizontal)
+                .background(.regularMaterial)
+            }
+        }
         .navigationTitle("审核集锦片段")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $editorDestination) { destination in
@@ -72,7 +83,7 @@ struct HighlightClipReviewView: View {
                     viewModel.cancelFilmstripLoading(itemID: destination.id)
                     destination.playbackController.reset()
                     switch navigation {
-                    case .open(let itemID):
+                    case let .open(itemID):
                         openEditor(itemID: itemID)
                     case .returnToReview:
                         editorDestination = nil
@@ -108,26 +119,31 @@ struct HighlightClipReviewView: View {
     }
 
     private var summaryHeader: some View {
-        Grid(horizontalSpacing: 10, verticalSpacing: 8) {
-            GridRow {
-                summaryValue(
-                    title: "保留打点",
-                    value: "\(viewModel.summary.includedMarkerCount)",
-                )
-                summaryValue(
-                    title: "排除打点",
-                    value: "\(viewModel.summary.excludedMarkerCount)",
-                )
-            }
-            GridRow {
-                summaryValue(
-                    title: "最终片段",
-                    value: "\(viewModel.summary.finalSegmentCount)",
-                )
-                summaryValue(
-                    title: "预计总时长",
-                    value: durationText(viewModel.summary.totalDuration),
-                )
+        VStack(spacing: 8) {
+            Text("已看 \(viewModel.items.count(where: { $0.confirmationState == .confirmed })) / \(viewModel.items.count) 段")
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Grid(horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    summaryValue(
+                        title: "保留打点",
+                        value: "\(viewModel.summary.includedMarkerCount)",
+                    )
+                    summaryValue(
+                        title: "排除打点",
+                        value: "\(viewModel.summary.excludedMarkerCount)",
+                    )
+                }
+                GridRow {
+                    summaryValue(
+                        title: "最终片段",
+                        value: "\(viewModel.summary.finalSegmentCount)",
+                    )
+                    summaryValue(
+                        title: "预计总时长",
+                        value: durationText(viewModel.summary.totalDuration),
+                    )
+                }
             }
         }
         .padding(.horizontal)
@@ -264,26 +280,9 @@ struct HighlightClipReviewView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityValue("视频不可用")
         } else {
-            switch (item.confirmationState, item.isIncluded) {
-            case (.defaultValue, _):
-                Label("默认", systemImage: "circle.dashed")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityValue("默认")
-            case (.confirmed, true):
-                Label("已确认 · 保留", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.green)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityValue("已确认，保留")
-            case (.confirmed, false):
-                Label("已确认 · 排除", systemImage: "minus.circle.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityValue("已确认，排除")
-            }
+            HighlightClipStateLabel(item: item)
+                .font(.caption.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -291,7 +290,7 @@ struct HighlightClipReviewView: View {
         ZStack {
             Color.black
             switch viewModel.thumbnailStates[item.id] ?? .idle {
-            case .loaded(let data):
+            case let .loaded(data):
                 if let image = UIImage(data: data) {
                     Image(uiImage: image)
                         .resizable()
@@ -383,7 +382,9 @@ struct HighlightClipReviewView: View {
     }
 
     private func openEditor(itemID: UUID) {
-        guard let editorViewModel = viewModel.makeEditorViewModel(itemID: itemID) else {
+        guard !viewModel.isUndoingDecision, !viewModel.isSavingDecision,
+              let editorViewModel = viewModel.makeEditorViewModel(itemID: itemID)
+        else {
             return
         }
         editorDestination = HighlightClipEditorDestination(
@@ -394,15 +395,8 @@ struct HighlightClipReviewView: View {
     }
 
     private func displayNumber(for item: HighlightClipReviewItem) -> String {
-        let range = item.isIncluded
-            ? viewModel.summary.displayNumberRangesByItemID[item.id]
-            : item.originalNumberRange
-        guard let range else {
-            return "—"
-        }
-        return range.lowerBound == range.upperBound
-            ? "\(range.lowerBound)"
-            : "\(range.lowerBound)–\(range.upperBound)"
+        guard let index = viewModel.items.firstIndex(where: { $0.id == item.id }) else { return "—" }
+        return String(index + 1)
     }
 
     private func cardAccessibilityLabel(
@@ -414,7 +408,7 @@ struct HighlightClipReviewView: View {
         var components = [
             "片段 \(number)",
             naturalDuration(item.duration),
-            item.confirmationState == .confirmed ? "已确认状态" : "默认状态",
+            item.confirmationState == .confirmed ? "已看" : "未看，默认保留",
             item.isIncluded ? "保留" : "排除",
         ]
         if unavailable {
@@ -511,12 +505,12 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
             )
             let first = makeItem(number: 1, videoID: video.id, start: 2, duration: 2)
             let markerReferences: [HighlightClipMarkerReference] = [
-                makePreviewMarker(suffix: 91_100, time: 12, number: 2),
-                makePreviewMarker(suffix: 91_101, time: 14, number: 3),
-                makePreviewMarker(suffix: 91_102, time: 16, number: 4),
+                makePreviewMarker(suffix: 91100, time: 12, number: 2),
+                makePreviewMarker(suffix: 91101, time: 14, number: 3),
+                makePreviewMarker(suffix: 91102, time: 16, number: 4),
             ]
             let editorItem = HighlightClipReviewItem(
-                id: fixedUUID(91_000),
+                id: fixedUUID(91000),
                 videoID: video.id,
                 markerReferences: markerReferences,
                 defaultStart: 10,
@@ -554,7 +548,7 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
             video: SelectedTrainingVideo,
         ) -> HighlightClipReviewViewModel {
             let session = TrainingSession(
-                id: fixedUUID(92_000),
+                id: fixedUUID(92000),
                 startedAt: video.recordedStartAt,
                 endedAt: video.recordedEndAt,
                 events: items.flatMap(\.markerReferences).map {
@@ -596,13 +590,13 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
             state: HighlightClipConfirmationState = .defaultValue,
         ) -> HighlightClipReviewItem {
             let marker = HighlightClipMarkerReference(
-                id: fixedUUID(90_100 + number),
+                id: fixedUUID(90100 + number),
                 markedAt: Date(timeIntervalSince1970: 110 + Double(number * 4)),
                 timeInVideo: 10 + Double(number * 4),
                 originalMatchedNumber: number,
             )
             return HighlightClipReviewItem(
-                id: fixedUUID(90_000 + number),
+                id: fixedUUID(90000 + number),
                 videoID: videoID,
                 markerReferences: [marker],
                 defaultStart: start,
@@ -642,8 +636,14 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
         func play() {}
         func pause() {}
         func seek(to _: TimeInterval) async {}
-        func addPeriodicTimeObserver(_: @escaping (TimeInterval) -> Void) -> Any { UUID() }
-        func addBoundaryTimeObserver(at _: TimeInterval, _: @escaping () -> Void) -> Any { UUID() }
+        func addPeriodicTimeObserver(_: @escaping (TimeInterval) -> Void) -> Any {
+            UUID()
+        }
+
+        func addBoundaryTimeObserver(at _: TimeInterval, _: @escaping () -> Void) -> Any {
+            UUID()
+        }
+
         func removeTimeObserver(_: Any) {}
     }
 

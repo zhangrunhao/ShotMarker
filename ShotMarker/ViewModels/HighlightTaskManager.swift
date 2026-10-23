@@ -125,16 +125,21 @@ final class HighlightTaskManager: ObservableObject {
     }
 
     func confirmClip(taskID: UUID, expectedRevision: Int, item: HighlightClipReviewItem) async throws -> HighlightTask {
+        var confirmed = item
+        confirmed.confirmationState = .confirmed
+        return try await saveClipReview(taskID: taskID, expectedRevision: expectedRevision, item: confirmed)
+    }
+
+    func saveClipReview(taskID: UUID, expectedRevision: Int, item: HighlightClipReviewItem) async throws -> HighlightTask {
         let old = try editableTask(taskID, revision: expectedRevision)
         guard let index = old.reviewItems.firstIndex(where: { $0.id == item.id }) else { throw HighlightTaskError.invalidTask }
-        var confirmed = try HighlightTaskPlanner.persisted(item)
+        let persisted = try HighlightTaskPlanner.persisted(item)
         let original = old.reviewItems[index]
-        guard original.videoID == confirmed.videoID, original.markerIDs == confirmed.markerIDs,
-              original.defaultStart == confirmed.defaultStart, original.defaultDuration == confirmed.defaultDuration
+        guard original.videoID == persisted.videoID, original.markerIDs == persisted.markerIDs,
+              original.defaultStart == persisted.defaultStart, original.defaultDuration == persisted.defaultDuration
         else { throw HighlightTaskError.revisionConflict }
-        confirmed.confirmationState = .confirmed
         var items = old.reviewItems
-        items[index] = confirmed
+        items[index] = persisted
         do {
             let updated = try await store.updateConfiguration(id: taskID, expectedRevision: expectedRevision,
                 videos: old.videos, settings: old.clipSettings, items: items)

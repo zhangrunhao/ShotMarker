@@ -14,12 +14,12 @@ struct HighlightTaskReviewView: View {
         .toolbar {
             if session.viewModel.editingItemID == nil {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("退出到首页", action: exit).disabled(session.viewModel.isSubmitting)
+                    Button("退出到首页", action: exit).disabled(session.viewModel.isSubmitting || session.viewModel.isUndoingDecision || session.viewModel.isSavingDecision)
                         .accessibilityIdentifier("highlight-task-exit-review")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("重置全部片段") { confirmingReset = true }
-                        .disabled(session.viewModel.isSubmitting)
+                        .disabled(session.viewModel.isSubmitting || session.viewModel.isUndoingDecision || session.viewModel.isSavingDecision)
                         .accessibilityIdentifier("highlight-task-reset-clips")
                 }
             }

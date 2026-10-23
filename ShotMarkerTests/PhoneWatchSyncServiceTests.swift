@@ -110,7 +110,7 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
         await importer.waitUntilEntered()
         XCTAssertTrue(connectivity.transferredUserInfos.isEmpty)
 
-        await importer.release()
+        importer.release()
         await handling
 
         XCTAssertEqual(connectivity.transferredUserInfos.count, 1)
@@ -552,7 +552,8 @@ private final class SpyTrainingSessionImporter: TrainingSessionImporting {
     }
 }
 
-private actor GatedTrainingSessionImporter: TrainingSessionImporting {
+@MainActor
+private final class GatedTrainingSessionImporter: TrainingSessionImporting {
     private var entered = false
     private var enteredContinuation: CheckedContinuation<Void, Never>?
     private var releaseContinuation: CheckedContinuation<Void, Never>?

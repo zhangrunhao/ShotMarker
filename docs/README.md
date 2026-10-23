@@ -40,6 +40,7 @@ YYYY-MM-DD-topic-plan.md
 
 archive 保存已经结束的设计、计划、讨论、排查、发布验证和旧文档。它不是当前事实来源。
 
+- [片段审核交互验证](archive/2026-10/2026-10-23-clip-review-validation.md)：直接保留/排除、撤销、稳定导航、相邻关系及精调面板移除。
 - [1.3 App Store 提交](archive/2026-09/2026-09-29-app-store-1-3-submission-plan.md)：已送审；用户明确跳过的后续验收保留为未验证，审核及最终发布进展见 current。
 - [1.3 商店新截图](archive/2026-09/2026-09-29-app-store-screenshots.md)：当前界面的 5 张 iPhone、3 张 iPad 和 1 张 Watch 素材，已替换并重新送审。
 - [旧 1.2 提交计划](archive/2026-08/2026-08-21-app-store-1-2-submission-plan.md)：已由 1.3 计划接替；历史未勾选项目不表示完成，也不直接作为当前待办。

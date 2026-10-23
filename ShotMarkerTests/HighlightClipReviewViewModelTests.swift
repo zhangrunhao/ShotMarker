@@ -88,7 +88,7 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testConfirmationSkipsConfirmedCardsAndOpensFirstLaterDefault() async {
+    func testConfirmationOpensImmediateNextCandidateEvenWhenAlreadyConfirmed() async {
         let fixture = makeReviewViewModelFixture(
             states: [.defaultValue, .confirmed, .defaultValue],
         )
@@ -98,11 +98,12 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
 
         let navigation = await editor.confirm()
 
-        XCTAssertEqual(navigation, .open(itemID: fixture.viewModel.items[2].id))
+        XCTAssertEqual(navigation, .open(itemID: fixture.viewModel.items[1].id))
+        XCTAssertEqual(fixture.viewModel.editingItemID, fixture.viewModel.items[1].id)
     }
 
     @MainActor
-    func testConfirmationAfterLastLaterDefaultReturnsToReviewWithoutLooping() async {
+    func testConfirmationBeforeOnlyConfirmedCandidatesStillOpensImmediateNext() async {
         let fixture = makeReviewViewModelFixture(
             states: [.defaultValue, .confirmed, .confirmed],
         )
@@ -112,8 +113,86 @@ final class HighlightClipReviewViewModelTests: XCTestCase {
 
         let navigation = await editor.confirm()
 
+        XCTAssertEqual(navigation, .open(itemID: fixture.viewModel.items[1].id))
+        XCTAssertEqual(fixture.viewModel.editingItemID, fixture.viewModel.items[1].id)
+    }
+
+    @MainActor
+    func testConfirmationOfLastCandidateReturnsToReviewWithoutWrapping() async {
+        let fixture = makeReviewViewModelFixture()
+        let editor = fixture.viewModel.makeEditorViewModel(
+            itemID: fixture.viewModel.items[2].id,
+        )!
+
+        let navigation = await editor.confirm()
+
         XCTAssertEqual(navigation, .returnToReview)
         XCTAssertNil(fixture.viewModel.editingItemID)
+    }
+
+    @MainActor
+    func testConfirmationOpensImmediateNextCandidateEvenWhenExcluded() async {
+        let fixture = makeReviewViewModelFixture()
+        let excluded = fixture.viewModel.makeEditorViewModel(
+            itemID: fixture.viewModel.items[1].id,
+        )!
+        excluded.setIncluded(false)
+        _ = await excluded.confirm()
+        let first = fixture.viewModel.makeEditorViewModel(
+            itemID: fixture.viewModel.items[0].id,
+        )!
+
+        let navigation = await first.confirm()
+
+        XCTAssertEqual(navigation, .open(itemID: fixture.viewModel.items[1].id))
+        XCTAssertFalse(fixture.viewModel.items[1].isIncluded)
+    }
+
+    @MainActor
+    func testUndoWaitsForPersistenceAndBlocksCompetingDecisionsAndNavigation() async throws {
+        let gate = SubmitGate()
+        var writes = 0
+        var submissions = 0
+        let fixture = makeReviewViewModelFixture(submitSegments: { _ in submissions += 1 },
+            persistReviewItem: { _ in
+                writes += 1
+                if writes == 2 { await gate.wait() }
+            })
+        let original = fixture.viewModel.items[0]
+        let first = fixture.viewModel.makeEditorViewModel(itemID: original.id)!
+        first.setIncluded(false)
+        _ = await first.confirm()
+        XCTAssertNotNil(fixture.viewModel.lastDecision)
+        guard fixture.viewModel.lastDecision != nil else { return }
+        let nextID = fixture.viewModel.items[1].id
+        let next = fixture.viewModel.makeEditorViewModel(itemID: nextID)!
+        let savedItems = fixture.viewModel.items
+        let undo = Task { await fixture.viewModel.undoLastDecision() }
+        for _ in 0..<100 where !fixture.viewModel.isUndoingDecision { await Task.yield() }
+
+        XCTAssertTrue(fixture.viewModel.isUndoingDecision)
+        XCTAssertEqual(fixture.viewModel.items, savedItems)
+        XCTAssertEqual(fixture.viewModel.editingItemID, nextID)
+        XCTAssertNotNil(fixture.viewModel.lastDecision)
+        XCTAssertFalse(fixture.viewModel.canConfirm)
+        XCTAssertNil(fixture.viewModel.makeEditorViewModel(itemID: original.id))
+        fixture.viewModel.closeEditor()
+        XCTAssertEqual(fixture.viewModel.editingItemID, nextID)
+        let competingUndo = Task { await fixture.viewModel.undoLastDecision() }
+        let competingConfirmation = await next.confirm()
+        await fixture.viewModel.submit()
+        XCTAssertNil(competingConfirmation)
+        XCTAssertEqual(submissions, 0)
+        await gate.release()
+        let restoredID = await undo.value
+        let competingID = await competingUndo.value
+
+        XCTAssertEqual(restoredID, original.id)
+        XCTAssertNil(competingID)
+        XCTAssertEqual(fixture.viewModel.items[0], original)
+        XCTAssertEqual(fixture.viewModel.editingItemID, original.id)
+        XCTAssertNil(fixture.viewModel.lastDecision)
+        XCTAssertFalse(fixture.viewModel.isUndoingDecision)
     }
 
     @MainActor
@@ -691,6 +770,7 @@ private func makeReviewViewModelFixture(
     now: Date = Date(timeIntervalSince1970: 400),
     recoveryNoticeMessage: String? = nil,
     submitSegments: @escaping HighlightClipReviewViewModel.SubmitSegments = { _ in },
+    persistReviewItem: ((HighlightClipReviewItem) async throws -> Void)? = nil,
 ) -> ReviewViewModelFixture {
     let video = SelectedTrainingVideo(
         id: "review-runtime-video",
@@ -761,6 +841,7 @@ private func makeReviewViewModelFixture(
         clipSettings: .default,
         combinationKey: key,
         reviewStore: store,
+        persistReviewItem: persistReviewItem,
         recoveryNoticeMessage: recoveryNoticeMessage,
         mediaProvider: mediaProvider,
         now: { now },

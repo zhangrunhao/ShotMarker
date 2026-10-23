@@ -89,6 +89,20 @@ final class HighlightClipEditorViewModel: ObservableObject {
         saveErrorMessage = nil
     }
 
+    func reloadSavedItem(_ item: HighlightClipReviewItem) {
+        guard !isSaving, item.id == workingItem.id, item.videoID == video.id else { return }
+        workingItem = item
+        openedItem = item
+        hasChanges = false
+        saveErrorMessage = nil
+    }
+
+    func confirm(isIncluded: Bool) async -> HighlightClipConfirmationNavigation? {
+        guard !isSaving else { return nil }
+        setIncluded(isIncluded)
+        return await confirm()
+    }
+
     func confirm() async -> HighlightClipConfirmationNavigation? {
         guard !isSaving else {
             return nil
