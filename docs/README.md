@@ -26,6 +26,7 @@ ShotMarker 对外网站、支持页和 how-to 由 `zhangrh.shop` 仓库维护，
 ## 正在进行的变更
 
 - [iOS 语音口令打点与技术统计](changes/2026-07-29-ios-voice-command-marking-spec.md)：设计已确认，尚未实现
+- [视频编辑后续优化想法](changes/2026-10-23-video-editing-ideas.md)：片段独立序号调整、整个视频的训练记录点管理；仅记录，待讨论，尚未设计或开发
 
 changes 使用扁平文件：
 
