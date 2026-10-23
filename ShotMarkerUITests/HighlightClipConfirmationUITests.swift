@@ -33,18 +33,22 @@ final class HighlightClipConfirmationUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["调整未保存"].exists)
     }
 
-    func testExclusionAdvancesToAdjacentClipAndUndoRestoresOriginalDecision() {
+    func testExcludedClipCanBeReopenedAndKeptThroughTheNavigationStrip() {
         app.buttons["片段 1"].tap()
         app.buttons["ClipExclude"].tap()
         XCTAssertTrue(app.navigationBars["片段 2 / 5"].waitForExistence(timeout: 3))
         selectClip(1)
         XCTAssertTrue(app.navigationBars["片段 1 / 5"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["已排除"].exists)
-        selectClip(2)
-        app.buttons["ClipUndo"].tap()
+        app.buttons["ClipKeep"].tap()
+        XCTAssertTrue(app.navigationBars["片段 2 / 5"].waitForExistence(timeout: 3))
+        selectClip(1)
         XCTAssertTrue(app.navigationBars["片段 1 / 5"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["未看 · 默认保留"].exists)
-        XCTAssertFalse(app.buttons["ClipUndo"].exists)
+        XCTAssertTrue(app.staticTexts["已保留"].exists)
+        app.buttons["返回"].tap()
+        XCTAssertTrue(app.navigationBars["审核集锦片段"].waitForExistence(timeout: 3))
+        app.buttons["片段 1"].tap()
+        XCTAssertTrue(app.staticTexts["已保留"].exists)
     }
 
     func testDirtyNavigationCanContinueOrDiscardWithoutChangingSavedRange() {
@@ -96,18 +100,30 @@ final class HighlightClipConfirmationUITests: XCTestCase {
         app = launchHarness(extraArguments: [
             "-UIPreferredContentSizeCategoryName",
             "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
-        ])
+        ], loadsMedia: true)
         app.buttons["片段 1"].tap()
         for identifier in ["ClipExclude", "ClipKeep"] {
             let button = app.buttons[identifier]
             XCTAssertTrue(button.isHittable, identifier)
             XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+            XCTAssertTrue(app.frame.contains(button.frame), "固定决定按钮必须完整位于屏幕内")
         }
+        let play = app.buttons["播放片段"]
+        revealContentElement(play)
+        XCTAssertTrue(play.isHittable)
+        let enabled = NSPredicate(format: "enabled == true")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: play)], timeout: 10), .completed)
+        play.tap()
+        XCTAssertTrue(app.buttons["暂停"].waitForExistence(timeout: 3))
+        let playbackScreenshot = XCTAttachment(screenshot: app.screenshot())
+        playbackScreenshot.name = "maximum-dynamic-type-playback-and-decisions"
+        playbackScreenshot.lifetime = .keepAlways
+        add(playbackScreenshot)
+        app.buttons["暂停"].tap()
         app.buttons["ClipExclude"].tap()
-        XCTAssertTrue(app.navigationBars["片段 2 / 5"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["片段 2 / 3"].waitForExistence(timeout: 3))
         selectClip(1)
-        XCTAssertTrue(app.navigationBars["片段 1 / 5"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["ClipStrip-1"].exists)
+        XCTAssertTrue(app.navigationBars["片段 1 / 3"].waitForExistence(timeout: 3))
         let restore = app.buttons["ClipFramingRestore"]
         revealContentElement(restore)
         XCTAssertTrue(restore.isHittable)
@@ -119,9 +135,7 @@ final class HighlightClipConfirmationUITests: XCTestCase {
     }
 
     private var contentBottom: CGFloat {
-        let excludeTop = app.buttons["ClipExclude"].frame.minY
-        let undo = app.buttons["ClipUndo"]
-        return (undo.exists ? min(undo.frame.minY, excludeTop) : excludeTop) - 24
+        app.buttons["ClipExclude"].frame.minY - 24
     }
 
     private func revealContentElement(_ element: XCUIElement) {
@@ -133,10 +147,34 @@ final class HighlightClipConfirmationUITests: XCTestCase {
             let scrollDown = target.maxY > bottom
             let overflow = scrollDown ? target.maxY - bottom : top - target.minY
             let distance = min(max(overflow + 20, 60), (bottom - top) * 0.7)
-            let startY = scrollDown ? bottom : top
-            let endY = scrollDown ? bottom - distance : top + distance
-            let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: startY / app.frame.height))
-            origin.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: endY / app.frame.height)))
+            let visibleContent = CGRect(x: 0, y: top, width: app.frame.width, height: bottom - top)
+            let labels = ["未看 · 默认保留", "已保留", "已排除", "调整未保存", "取景倍率", "片段播放进度", "全部片段"]
+            let textFrames = app.staticTexts.matching(NSPredicate(
+                format: "label IN %@ OR identifier == 'ClipRelationships'", labels
+            )).allElementsBoundByIndex.map { $0.frame.intersection(visibleContent) }
+                .filter { !$0.isNull && $0.height >= 20 }
+            let startFrame = scrollDown
+                ? textFrames.max(by: { $0.midY < $1.midY })
+                : textFrames.min(by: { $0.midY < $1.midY })
+            guard let startFrame else { break }
+            // Start inside visible content: blank padding does not reliably receive scrolling,
+            // while the preview and timeline reserve their own drag gestures.
+            let startY = scrollDown ? startFrame.maxY - 8 : startFrame.minY + 8
+            let endY = scrollDown ? max(top + 4, startY - distance) : min(bottom - 4, startY + distance)
+            let origin = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: startFrame.midX, dy: startY))
+            origin.press(forDuration: 0.05,
+                thenDragTo: app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: startFrame.midX, dy: endY)),
+                withVelocity: .slow, thenHoldForDuration: 0.2)
+        }
+        if element.frame.minY < top - 1 || element.frame.maxY > contentBottom + 1 {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "unreachable-editor-control"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "unreachable-editor-control"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
         }
         XCTAssertGreaterThanOrEqual(element.frame.minY, top - 1, "控件应完全位于导航栏下方")
         XCTAssertLessThanOrEqual(element.frame.maxY, contentBottom + 1, "控件应完全位于固定决定区域上方")
@@ -155,15 +193,18 @@ final class HighlightClipConfirmationUITests: XCTestCase {
         button.tap()
     }
 
-    private func launchHarness(extraArguments: [String] = []) -> XCUIApplication {
+    private func launchHarness(extraArguments: [String] = [], loadsMedia: Bool = false) -> XCUIApplication {
         let application = XCUIApplication()
         application.launchEnvironment["SHOTMARKER_UI_TEST_CLIP_CONFIRMATION"] = "1"
         application.launchArguments += extraArguments
+        if loadsMedia {
+            application.launchEnvironment["SHOTMARKER_UI_TEST_CLIP_MEDIA"] = "1"
+        }
         if extraArguments.contains("UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge") {
             application.launchEnvironment["SHOTMARKER_UI_TEST_MAX_DYNAMIC_TYPE"] = "1"
         }
         application.launch()
-        XCTAssertTrue(application.navigationBars["审核集锦片段"].waitForExistence(timeout: 5))
+        XCTAssertTrue(application.navigationBars["审核集锦片段"].waitForExistence(timeout: 20))
         return application
     }
 

@@ -18,6 +18,8 @@
         var body: some View {
             if ProcessInfo.processInfo.environment["SHOTMARKER_UI_TEST_CLIP_MEDIA"] == "1" {
                 HighlightClipMediaUITestHarnessView()
+                    .environment(\.dynamicTypeSize,
+                        ProcessInfo.processInfo.environment["SHOTMARKER_UI_TEST_MAX_DYNAMIC_TYPE"] == "1" ? .accessibility5 : .large)
             } else if ProcessInfo.processInfo.environment["SHOTMARKER_UI_TEST_MAX_DYNAMIC_TYPE"] == "1" {
                 gallery.environment(\.dynamicTypeSize, .accessibility5)
             } else {

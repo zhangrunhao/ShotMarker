@@ -6,7 +6,6 @@ private enum PendingEditorExitAction: Equatable {
     case review
     case videoSelection
     case clip(UUID)
-    case undo
 }
 
 struct HighlightClipEditorView: View {
@@ -61,7 +60,6 @@ struct HighlightClipEditorView: View {
                 playbackButton
                 relationshipHints
                 clipStrip
-                restoreControl
                 errorMessages(itemID: item.id)
             }
             .padding()
@@ -162,9 +160,6 @@ struct HighlightClipEditorView: View {
 
     private var confirmationAction: some View {
         VStack(spacing: 8) {
-            HighlightClipDecisionNotice(viewModel: reviewViewModel) {
-                requestExit(.undo)
-            }
             if let message = editorViewModel.saveErrorMessage {
                 Text(message)
                     .font(.footnote)
@@ -232,10 +227,6 @@ struct HighlightClipEditorView: View {
     }
 
     private func performExit(_ action: PendingEditorExitAction) {
-        if action == .undo {
-            undoDecision()
-            return
-        }
         reviewViewModel.cancelFilmstripLoading(itemID: item.id)
         playbackController.reset()
         switch action {
@@ -246,26 +237,6 @@ struct HighlightClipEditorView: View {
         case .videoSelection:
             dismiss()
             onRequestVideoReselection()
-        case .undo:
-            break
-        }
-    }
-
-    private func undoDecision() {
-        playbackController.pause()
-        Task { @MainActor in
-            guard let restoredID = await reviewViewModel.undoLastDecision() else { return }
-            if restoredID == item.id,
-               let restored = reviewViewModel.items.first(where: { $0.id == restoredID })
-            {
-                editorViewModel.reloadSavedItem(restored)
-                window = HighlightClipTimelineGeometry.makeWindow(range: restored.range, videoDuration: video.duration)
-                // Invalidate a pending load that may still hold the undone range.
-                playbackController.reset()
-                playbackLoadAttempt += 1
-            } else {
-                onConfirmationNavigation(.open(itemID: restoredID))
-            }
         }
     }
 
@@ -330,41 +301,14 @@ struct HighlightClipEditorView: View {
         .background(.black.opacity(0.78))
     }
 
-    @ViewBuilder
     private func timeReadout(item: HighlightClipReviewItem) -> some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            Grid(horizontalSpacing: 18, verticalSpacing: 8) {
-                GridRow {
-                    timeValue(title: "当前位置", value: playbackController.currentTime)
-                    timeValue(title: "起点", value: item.start)
-                }
-                GridRow {
-                    timeValue(title: "终点", value: item.range.end)
-                    timeValue(title: "时长", value: item.duration)
-                }
-            }
-        } else {
-            HStack(spacing: 8) {
-                timeValue(title: "当前位置", value: playbackController.currentTime)
-                timeValue(title: "起点", value: item.start)
-                timeValue(title: "终点", value: item.range.end)
-                timeValue(title: "时长", value: item.duration)
-            }
-        }
-    }
-
-    private func timeValue(title: String, value: TimeInterval) -> some View {
-        VStack(spacing: 3) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(shortTime(value))
-                .font(.body.monospacedDigit().weight(.semibold))
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(title)
-        .accessibilityValue(naturalTime(value))
+        let elapsed = min(max(playbackController.currentTime - item.start, 0), item.duration)
+        return Text(String(format: "%.1f / %.1f 秒", elapsed, item.duration))
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .accessibilityLabel("片段播放进度")
+            .accessibilityValue("\(naturalTime(elapsed))，共 \(naturalTime(item.duration))")
     }
 
     private func timeline(item: HighlightClipReviewItem) -> some View {
@@ -406,11 +350,6 @@ struct HighlightClipEditorView: View {
 
     private var framingControls: some View {
         VStack(spacing: 6) {
-            if editorViewModel.isUsingInheritedFraming {
-                Text("沿用上一段取景")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
             let layout = dynamicTypeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(spacing: 8))
                 : AnyLayout(HStackLayout(spacing: 12))
@@ -496,13 +435,6 @@ struct HighlightClipEditorView: View {
         return "\(prefix)：\(detail)\(effect)"
     }
 
-    private var restoreControl: some View {
-        Button { restoreDefaultRange() } label: {
-            Text("恢复默认范围").frame(minHeight: 44)
-        }
-            .disabled(item.range == item.defaultRange)
-    }
-
     @ViewBuilder
     private func errorMessages(itemID: UUID) -> some View {
         if let editorErrorMessage {
@@ -565,16 +497,6 @@ struct HighlightClipEditorView: View {
                 editorErrorMessage = userFacingMessage(for: error)
             }
         }
-    }
-
-    private func restoreDefaultRange() {
-        editorViewModel.restoreDefault()
-        playbackController.updateRange(item.range)
-        Task { @MainActor in
-            await playbackController.previewStart(of: item.range)
-        }
-        editorErrorMessage = nil
-        shiftWindowToCurrentRange()
     }
 
     private func shiftWindowToCurrentRange() {

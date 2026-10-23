@@ -59,17 +59,6 @@ struct HighlightClipReviewView: View {
             }
         }
         .background(Color(uiColor: .systemGroupedBackground))
-        .safeAreaInset(edge: .bottom) {
-            if viewModel.lastDecision != nil {
-                HighlightClipDecisionNotice(viewModel: viewModel) {
-                    Task { @MainActor in
-                        if let itemID = await viewModel.undoLastDecision() { openEditor(itemID: itemID) }
-                    }
-                }
-                .padding(.horizontal)
-                .background(.regularMaterial)
-            }
-        }
         .navigationTitle("审核集锦片段")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $editorDestination) { destination in

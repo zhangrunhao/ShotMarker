@@ -22,38 +22,6 @@ struct HighlightClipStateLabel: View {
     }
 }
 
-struct HighlightClipDecisionNotice: View {
-    @ObservedObject var viewModel: HighlightClipReviewViewModel
-    let onUndo: () -> Void
-
-    var body: some View {
-        if let decision = viewModel.lastDecision,
-           let index = viewModel.items.firstIndex(where: { $0.id == decision.itemID })
-        {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("\(decision.isIncluded ? "已保留" : "已排除")片段 \(index + 1)")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if viewModel.isUndoingDecision {
-                        ProgressView()
-                    }
-                    Button("撤销", action: onUndo)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .accessibilityLabel("撤销对片段 \(index + 1) 的\(decision.isIncluded ? "保留" : "排除")")
-                        .accessibilityIdentifier("ClipUndo")
-                        .disabled(viewModel.isUndoingDecision || viewModel.isSavingDecision || viewModel.isSubmitting)
-                }
-                if let message = viewModel.undoErrorMessage {
-                    Text(message)
-                        .foregroundStyle(.red)
-                        .accessibilityLabel("撤销失败，\(message)")
-                }
-            }
-            .font(.footnote)
-        }
-    }
-}
-
 struct HighlightClipNavigationStrip: View {
     @ObservedObject var viewModel: HighlightClipReviewViewModel
     let currentItemID: UUID

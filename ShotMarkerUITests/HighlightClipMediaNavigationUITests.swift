@@ -36,7 +36,7 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         assertLoadedClip(title: "片段 2 / 3", start: 691.1)
     }
 
-    func testUndoWhileReopenedClipIsLoadingRejectsTheLateUndoneRange() {
+    func testNavigatingFromLoadingClipRejectsItsLateMediaAndPreservesSavedRange() {
         app.terminate()
         app.launchEnvironment["SHOTMARKER_UI_TEST_DELAY_REOPENED_CLIP"] = "1"
         app.launch()
@@ -46,7 +46,8 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         let start = element(label: "片段起点")
         let origin = start.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         origin.press(forDuration: 0.1, thenDragTo: origin.withOffset(CGVector(dx: 48, dy: 0)))
-        XCTAssertGreaterThan(seconds(start), 1.5, "必须先保存与默认起点不同的范围")
+        let savedStart = seconds(start)
+        XCTAssertGreaterThan(savedStart, 1.5, "必须先保存与默认起点不同的范围")
         app.buttons["ClipKeep"].tap()
         assertLoadedClip(title: "片段 2 / 3", start: 691.1)
 
@@ -54,19 +55,17 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["片段 1 / 3"].waitForExistence(timeout: 5))
         let releaseLoad = app.buttons["ClipMediaReleasePlaybackLoad"]
         XCTAssertTrue(releaseLoad.waitForExistence(timeout: 5), "重新打开首段的旧播放载入必须仍在等待")
-        app.buttons["ClipUndo"].tap()
-        XCTAssertTrue(app.staticTexts["未看 · 默认保留"].waitForExistence(timeout: 5))
-        let restoredRange = NSPredicate { _, _ in
-            abs(self.seconds(self.element(label: "片段起点")) - 1) < 0.11
-                && abs(self.seconds(self.element(label: "片段终点")) - 18) < 0.11
-        }
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: restoredRange, object: nil)], timeout: 5), .completed)
+        selectClip(3)
+        assertLoadedClip(title: "片段 3 / 3", start: 21)
         releaseLoad.tap()
         XCTAssertTrue(app.staticTexts["ClipMediaDelayedLoadFinished"].waitForExistence(timeout: 5),
-            "先让携带旧范围的载入返回，再核验播放状态")
-
-        assertLoadedClip(title: "片段 1 / 3", start: 1)
-        assertPlaybackAdvances(after: 1)
+            "先让上一片段的载入返回，再核验当前片段的播放状态")
+        assertLoadedClip(title: "片段 3 / 3", start: 21)
+        assertPlaybackAdvances(after: 21)
+        selectClip(1)
+        assertLoadedClip(title: "片段 1 / 3", start: savedStart)
+        XCTAssertTrue(app.staticTexts["已保留"].exists)
+        assertPlaybackAdvances(after: savedStart)
     }
 
     func testFramingControlsPersistContinueAndManualNavigationRestoresOwnValue() {
@@ -80,7 +79,6 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         app.buttons["ClipKeep"].tap()
         assertLoadedClip(title: "片段 2 / 3", start: 691.1)
         XCTAssertEqual(element(label: "取景倍率").value as? String, "2.2 倍")
-        XCTAssertTrue(app.staticTexts["沿用上一段取景"].exists)
         selectClip(1)
         XCTAssertFalse(app.alerts["放弃本次调整？"].exists)
         assertLoadedClip(title: "片段 1 / 3", start: 1)
@@ -228,18 +226,28 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
 
     private func assertLoadedClip(title: String, start: Double) {
         XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
-        let position = element(label: "当前位置")
+        let position = element(label: "预览位置")
         let positioned = NSPredicate { _, _ in
             abs(self.seconds(position) - start) < 0.11
         }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: positioned, object: nil)], timeout: 10), .completed,
             "\(title) 应定位到新片段起点，实际为 \(position.value ?? "无")")
+        let progress = element(label: "片段播放进度")
+        XCTAssertEqual(seconds(progress), 0, accuracy: 0.11, "新片段应从自身零秒开始显示进度")
         let frames = app.staticTexts["ClipMediaLoadedFrameCount"]
         XCTAssertTrue(frames.waitForExistence(timeout: 5))
         let extracted = NSPredicate(format: "label == '8'")
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: extracted, object: frames)], timeout: 10), .completed)
         XCTAssertGreaterThan(element(label: "片段终点").frame.midX - element(label: "片段起点").frame.midX, 80,
             "时间轴必须围绕新片段展开，起止手柄不能挤在同一侧")
+        let play = app.buttons["播放片段"]
+        XCTAssertTrue(play.isHittable, "普通字号下播放按钮应可直接使用")
+        XCTAssertGreaterThanOrEqual(play.frame.minY, app.navigationBars.firstMatch.frame.maxY)
+        XCTAssertLessThanOrEqual(play.frame.maxY, app.buttons["ClipExclude"].frame.minY - 8,
+            "播放按钮必须完整位于固定决定区域上方")
+        for identifier in ["ClipExclude", "ClipKeep"] {
+            XCTAssertTrue(app.frame.contains(app.buttons[identifier].frame), "决定按钮必须完整位于屏幕内")
+        }
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = title
         screenshot.lifetime = .keepAlways
@@ -248,9 +256,10 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
 
     private func assertPlaybackAdvances(after start: Double) {
         app.buttons["播放片段"].tap()
-        let position = element(label: "当前位置")
+        let position = element(label: "预览位置")
         let advancing = NSPredicate { _, _ in self.seconds(position) > start + 0.2 }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: advancing, object: nil)], timeout: 5), .completed)
+        XCTAssertGreaterThan(seconds(element(label: "片段播放进度")), 0.2)
         app.buttons["暂停"].tap()
     }
 
