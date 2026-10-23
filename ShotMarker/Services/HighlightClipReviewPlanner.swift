@@ -404,7 +404,7 @@ enum HighlightClipReviewPlanningError: LocalizedError, Equatable {
         case .sourceVideoMissing:
             "找不到片段使用的视频，请重新选择视频。"
         case .invalidRange:
-            "片段范围无效，请恢复默认范围后再试。"
+            "片段范围无效，请调整片段范围后再试。"
         case .invalidFraming:
             "片段取景无效，请恢复原画面后再试。"
         case .missingMarkers:
