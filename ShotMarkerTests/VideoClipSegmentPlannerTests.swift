@@ -2,6 +2,40 @@
 import XCTest
 
 final class VideoClipSegmentPlannerTests: XCTestCase {
+    func testSignedDefaultsStayWithFirstSourceContainingMarkerAndSkipEmptyIntersection() {
+        let start = Date(timeIntervalSince1970: 100)
+        let session = TrainingSession(startedAt: start, endedAt: start.addingTimeInterval(60),
+            events: [ShotMarkerEvent(markedAt: start.addingTimeInterval(2.5)),
+                     ShotMarkerEvent(markedAt: start.addingTimeInterval(30))])
+        let first = SelectedTrainingVideo(id: "first", recordedStartAt: start, duration: 60)
+        let earlier = SelectedTrainingVideo(id: "earlier", recordedStartAt: start.addingTimeInterval(-60), duration: 120)
+        let partial = VideoClipSegmentPlanner.highlightPlan(for: session, videos: [first, earlier],
+            clipSettings: ClipSettings(secondsBeforeMarker: 11, secondsAfterMarker: -2))
+        XCTAssertEqual(partial.segments.map(\.videoID), ["first", "first"])
+        XCTAssertEqual(partial.segments.map(\.start), [0, 19])
+        XCTAssertEqual(partial.segments.map(\.duration), [0.5, 9])
+        let outside = VideoClipSegmentPlanner.highlightPlan(for: session, videos: [first, earlier],
+            clipSettings: ClipSettings(secondsBeforeMarker: 20, secondsAfterMarker: -19))
+        XCTAssertEqual(outside.matchedMarkerCount, 1)
+        XCTAssertEqual(outside.segments.first?.videoID, "first")
+        XCTAssertEqual(outside.segments.first?.start, 10)
+        XCTAssertEqual(outside.segments.first?.duration, 1)
+    }
+
+    func testInvalidDefaultSettingsProduceNoClips() {
+        let start = Date(timeIntervalSince1970: 100)
+        let session = TrainingSession(startedAt: start, endedAt: start.addingTimeInterval(60),
+            events: [ShotMarkerEvent(markedAt: start.addingTimeInterval(30))])
+        let video = SelectedTrainingVideo(id: "source", recordedStartAt: start, duration: 60)
+        for (before, after) in [(0.0, 0.0), (2, -3), (0.4, 0.4), (21, 2), (2, 21), (.nan, 2), (2, .infinity)] {
+            let plan = VideoClipSegmentPlanner.highlightPlan(for: session, videos: [video],
+                clipSettings: ClipSettings(secondsBeforeMarker: before, secondsAfterMarker: after))
+            XCTAssertFalse(plan.canGenerate)
+            XCTAssertEqual(plan.matchedMarkerCount, 0)
+            XCTAssertTrue(plan.segments.isEmpty)
+        }
+    }
+
     func testTestClipSegmentsUseBeginningAndMiddleWhenVideoIsLongEnough() {
         let segments = VideoClipSegmentPlanner.testSegments(forDuration: 12, segmentDuration: 2)
 

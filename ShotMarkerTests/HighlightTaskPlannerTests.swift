@@ -2,6 +2,77 @@
 import XCTest
 
 final class HighlightTaskPlannerTests: XCTestCase {
+    func testSignedAndZeroDefaultsBecomeExactExecutionRanges() throws {
+        let video = HighlightTaskTestFixture.video()
+        let session = TrainingSession(startedAt: video.recordedStartAt,
+            endedAt: video.recordedEndAtForTest,
+            events: [ShotMarkerEvent(markedAt: video.recordedStartAt.addingTimeInterval(30))])
+        for (before, after, start, duration) in [(11.0, -2.0, 19.0, 9.0), (-2, 11, 32, 9),
+                                                (0, 4, 30, 4), (4, 0, 26, 4)] {
+            let settings = ClipSettings(secondsBeforeMarker: before, secondsAfterMarker: after)
+            let task = try HighlightTaskPlanner.makeTask(id: UUID(), session: session, videos: [video], settings: settings)
+            let execution = try HighlightTaskPlanner.execution(for: task)
+            XCTAssertEqual(execution.snapshot.clipSettings, settings)
+            XCTAssertEqual(execution.snapshot.segments.count, 1)
+            XCTAssertEqual(execution.snapshot.segments[0].start, start)
+            XCTAssertEqual(execution.snapshot.segments[0].duration, duration)
+        }
+    }
+
+    func testInvalidDefaultsAreRejectedEvenWhenConfirmedItemsNeedNoReplanning() throws {
+        let task = try HighlightTaskTestFixture.task()
+        for (before, after) in [(0.0, 0.0), (2, -3), (0.4, 0.4), (21, 2), (-21, 20),
+                                (2, 21), (20, -21), (.nan, 2), (2, .infinity)] {
+            let settings = ClipSettings(secondsBeforeMarker: before, secondsAfterMarker: after)
+            XCTAssertThrowsError(try HighlightTaskPlanner.makeTask(id: UUID(),
+                session: HighlightTaskTestFixture.session, videos: task.videos, settings: settings))
+            var invalid = task
+            invalid.clipSettings = settings
+            XCTAssertThrowsError(try HighlightTaskPlanner.reconcile(task: invalid, videos: invalid.videos, settings: settings))
+        }
+    }
+
+    func testOffsetChangeOutsideSourcePreservesConfirmedRangeExclusionAndFraming() throws {
+        var task = try HighlightTaskTestFixture.task()
+        task.reviewItems[0].confirmationState = .confirmed
+        task.reviewItems[0].start = 4
+        task.reviewItems[0].duration = 5
+        task.reviewItems[0].isIncluded = false
+        task.reviewItems[0].framing = ClipFraming(scale: 2.2, centerX: 0.5, centerY: 0.5)
+        let saved = task.reviewItems[0]
+        let settings = ClipSettings(secondsBeforeMarker: 20, secondsAfterMarker: -19)
+        let result = try HighlightTaskPlanner.reconcile(task: task, videos: task.videos, settings: settings)
+        XCTAssertEqual(result.resetConfirmationCount, 0)
+        XCTAssertEqual(result.items[0], saved)
+        XCTAssertEqual(result.items[1].start, 20)
+        XCTAssertEqual(result.items[1].duration, 1)
+        XCTAssertEqual(result.items[1].confirmationState, .defaultValue)
+    }
+
+    func testAllNewDefaultsOutsideSourceStillPreserveAvailableConfirmation() throws {
+        let video = HighlightTaskTestFixture.video()
+        let session = TrainingSession(startedAt: video.recordedStartAt,
+            endedAt: video.recordedEndAtForTest,
+            events: [ShotMarkerEvent(markedAt: video.recordedStartAt.addingTimeInterval(10))])
+        var task = try HighlightTaskPlanner.makeTask(id: UUID(), session: session, videos: [video], settings: .default)
+        task.reviewItems[0].confirmationState = .confirmed
+        task.reviewItems[0].framing = ClipFraming(scale: 3, centerX: 0.5, centerY: 0.5)
+        let result = try HighlightTaskPlanner.reconcile(task: task, videos: [video],
+            settings: ClipSettings(secondsBeforeMarker: 20, secondsAfterMarker: -19))
+        XCTAssertEqual(result.items, task.reviewItems)
+        XCTAssertEqual(result.resetConfirmationCount, 0)
+    }
+
+    func testSignedDefaultIntersectionKeepsExistingMinimumDurationPolicy() throws {
+        let video = HighlightTaskTestFixture.video()
+        let session = TrainingSession(startedAt: video.recordedStartAt,
+            endedAt: video.recordedEndAtForTest,
+            events: [ShotMarkerEvent(markedAt: video.recordedStartAt.addingTimeInterval(2.5))])
+        let task = try HighlightTaskPlanner.makeTask(id: UUID(), session: session, videos: [video],
+            settings: ClipSettings(secondsBeforeMarker: 11, secondsAfterMarker: -2))
+        XCTAssertEqual(task.reviewItems[0].start, 0)
+        XCTAssertEqual(task.reviewItems[0].duration, 1)
+    }
     func testShortVideoUsesWholeSourceAndCanGenerateAtExactMediaBoundary() throws {
         let video = HighlightTaskVideo(id: UUID(), sourceIdentity: .photoLibraryAsset("short"),
             recordedStartAt: Date(timeIntervalSince1970: 100), duration: 0.55,
@@ -82,4 +153,8 @@ final class HighlightTaskPlannerTests: XCTestCase {
         XCTAssertTrue(reset.items.allSatisfy { $0.isIncluded && $0.confirmationState == .defaultValue })
         XCTAssertEqual(reset.items.map(\.start), [1, 31])
     }
+}
+
+private extension HighlightTaskVideo {
+    var recordedEndAtForTest: Date { recordedStartAt.addingTimeInterval(duration) }
 }

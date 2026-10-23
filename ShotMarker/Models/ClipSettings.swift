@@ -62,6 +62,28 @@ nonisolated struct ClipSettings: Codable, Equatable, Sendable {
             markerLabelStyle: markerLabelStyle.normalized,
         )
     }
+
+    var isValidRange: Bool {
+        secondsBeforeMarker.isFinite && secondsAfterMarker.isFinite
+            && (-20...20).contains(secondsBeforeMarker)
+            && (-20...20).contains(secondsAfterMarker)
+            && secondsBeforeMarker + secondsAfterMarker >= 1
+    }
+
+    var relativeRangeDescription: String? {
+        guard isValidRange else { return nil }
+        let duration = Self.secondsText(secondsBeforeMarker + secondsAfterMarker)
+        return "\(Self.positionText(-secondsBeforeMarker)) → \(Self.positionText(secondsAfterMarker))，共 \(duration) 秒"
+    }
+
+    private static func positionText(_ offset: TimeInterval) -> String {
+        guard offset != 0 else { return "打点时" }
+        return "打点\(offset < 0 ? "前" : "后") \(secondsText(abs(offset))) 秒"
+    }
+
+    private static func secondsText(_ seconds: TimeInterval) -> String {
+        seconds.formatted(.number.precision(.fractionLength(0...1)))
+    }
 }
 
 struct ClipSettingsStore {
@@ -80,7 +102,8 @@ struct ClipSettingsStore {
 
     func load() -> ClipSettings {
         guard let data = userDefaults.data(forKey: key),
-              let settings = try? JSONDecoder().decode(ClipSettings.self, from: data)
+              let settings = try? JSONDecoder().decode(ClipSettings.self, from: data),
+              settings.isValidRange
         else {
             return .default
         }
@@ -89,7 +112,8 @@ struct ClipSettingsStore {
     }
 
     func save(_ settings: ClipSettings) {
-        guard let data = try? JSONEncoder().encode(settings.normalized) else {
+        guard settings.isValidRange,
+              let data = try? JSONEncoder().encode(settings.normalized) else {
             return
         }
 

@@ -151,6 +151,10 @@ enum VideoClipSegmentPlanner {
         clipSettings: ClipSettings = .default,
         markerOrder: [UUID: Int]? = nil,
     ) -> HighlightClipPlan {
+        guard clipSettings.isValidRange else {
+            return HighlightClipPlan(selectedVideoCount: videos.count, totalMarkerCount: session.events.count,
+                matchedMarkerCount: 0, segments: [])
+        }
         let events = session.events.sorted {
             let lhsMilliseconds = HighlightClipReviewIdentityBuilder.milliseconds($0.markedAt)
             let rhsMilliseconds = HighlightClipReviewIdentityBuilder.milliseconds($1.markedAt)

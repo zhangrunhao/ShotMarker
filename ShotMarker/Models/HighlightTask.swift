@@ -3,7 +3,7 @@ import Foundation
 nonisolated struct HighlightTaskStoreDocument: Codable, Equatable, Sendable {
     let schemaVersion: Int
     var tasks: [HighlightTask]
-    static let empty = Self(schemaVersion: 2, tasks: [])
+    static let empty = Self(schemaVersion: 3, tasks: [])
 }
 
 nonisolated struct HighlightTask: Identifiable, Codable, Equatable, Sendable {

@@ -26,6 +26,7 @@ enum HighlightTaskPlanner {
 
     static func reconcile(task: HighlightTask, videos: [HighlightTaskVideo], settings: ClipSettings,
         resetAll: Bool = false) throws -> HighlightTaskReconciliation {
+        guard settings.isValidRange else { throw HighlightTaskError.invalidTask }
         let videoChanged = videos != task.videos
         let durationChanged = settings.secondsBeforeMarker != task.clipSettings.secondsBeforeMarker
             || settings.secondsAfterMarker != task.clipSettings.secondsAfterMarker
@@ -54,12 +55,22 @@ enum HighlightTaskPlanner {
             let partial = HighlightTaskTrainingSnapshot(startedAt: task.trainingSnapshot.startedAt,
                 endedAt: task.trainingSnapshot.endedAt, markers: task.trainingSnapshot.markers.filter { group.contains($0.id) })
             let baseline = try defaultItems(snapshot: partial, videos: videos, settings: settings)
-            guard baseline.flatMap(\.markerIDs).count == confirmation.markerIDs.count,
-                  baseline.allSatisfy({ $0.videoID == video.id }),
-                  let start = baseline.map(\.start).min(), let end = baseline.map({ $0.start + $0.duration }).max()
-            else { resetCount += 1; continue }
+            let start: TimeInterval
+            let duration: TimeInterval
+            if baseline.flatMap(\.markerIDs).count == confirmation.markerIDs.count,
+               baseline.allSatisfy({ $0.videoID == video.id }),
+               let baselineStart = baseline.map(\.start).min(),
+               let baselineEnd = baseline.map({ $0.start + $0.duration }).max() {
+                start = baselineStart
+                duration = normalized(baselineEnd - baselineStart)
+            } else {
+                // Changing defaults must not discard a valid manual decision when its new window misses the source.
+                guard !videoChanged else { resetCount += 1; continue }
+                start = confirmation.defaultStart
+                duration = confirmation.defaultDuration
+            }
             kept.append(PersistedHighlightTaskClip(id: confirmation.id, videoID: video.id,
-                markerIDs: confirmation.markerIDs, defaultStart: start, defaultDuration: normalized(end - start),
+                markerIDs: confirmation.markerIDs, defaultStart: start, defaultDuration: duration,
                 start: confirmation.start, duration: confirmation.duration, isIncluded: confirmation.isIncluded,
                 confirmationState: .confirmed, framing: confirmation.framing))
             occupied.formUnion(group)
@@ -126,7 +137,7 @@ enum HighlightTaskPlanner {
 
     private static func defaultItems(snapshot: HighlightTaskTrainingSnapshot, videos: [HighlightTaskVideo],
         settings: ClipSettings) throws -> [PersistedHighlightTaskClip] {
-        guard (1...20).contains(videos.count), Set(videos.map(\.id)).count == videos.count,
+        guard settings.isValidRange, (1...20).contains(videos.count), Set(videos.map(\.id)).count == videos.count,
               Set(videos.map(\.sourceIdentity)).count == videos.count,
               videos.allSatisfy({ $0.duration.isFinite && $0.duration > 0 }) else { throw HighlightTaskError.invalidTask }
         let draft = HighlightClipReviewPlanner.makeDraft(for: snapshot.planningSession,

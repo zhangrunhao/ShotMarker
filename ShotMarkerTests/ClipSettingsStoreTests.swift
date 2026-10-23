@@ -2,6 +2,35 @@
 import XCTest
 
 final class ClipSettingsStoreTests: XCTestCase {
+    func testSignedAndZeroOffsetsRoundTripWithoutNormalization() throws {
+        let store = ClipSettingsStore(userDefaults: userDefaults)
+        for (before, after) in [(11.0, -2.0), (-2, 11), (0, 4), (4, 0)] {
+            let settings = ClipSettings(secondsBeforeMarker: before, secondsAfterMarker: after)
+            store.save(settings)
+            XCTAssertEqual(store.load(), settings)
+            XCTAssertEqual(try JSONDecoder().decode(ClipSettings.self,
+                from: JSONEncoder().encode(settings)), settings)
+        }
+    }
+
+    func testInvalidIntermediateOffsetsNeverReplaceLastSavedDefaults() {
+        let store = ClipSettingsStore(userDefaults: userDefaults)
+        let saved = ClipSettings(secondsBeforeMarker: 11, secondsAfterMarker: -2)
+        store.save(saved)
+        for (before, after) in [(0.0, 0.0), (2, -3), (0.4, 0.4), (21, 2), (-21, 20),
+                                (2, 21), (20, -21), (.nan, 2), (2, .infinity)] {
+            store.save(ClipSettings(secondsBeforeMarker: before, secondsAfterMarker: after))
+            XCTAssertEqual(store.load(), saved)
+        }
+    }
+
+    func testInvalidStoredDefaultOffsetsFallBackWithoutRewritingBytes() {
+        let bytes = Data(#"{"secondsBeforeMarker":0,"secondsAfterMarker":0}"#.utf8)
+        userDefaults.set(bytes, forKey: "ShotMarker.clipSettings")
+        XCTAssertEqual(ClipSettingsStore(userDefaults: userDefaults).load(), .default)
+        XCTAssertEqual(userDefaults.data(forKey: "ShotMarker.clipSettings"), bytes)
+    }
+
     private var suiteName: String!
     private var userDefaults: UserDefaults!
 

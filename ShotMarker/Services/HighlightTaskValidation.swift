@@ -12,8 +12,7 @@ nonisolated enum HighlightTaskValidation {
               (1...20).contains(task.videos.count),
               Set(task.videos.map(\.id)).count == task.videos.count,
               Set(task.videos.map(\.sourceIdentity)).count == task.videos.count,
-              (0...20).contains(task.clipSettings.secondsBeforeMarker),
-              (1...20).contains(task.clipSettings.secondsAfterMarker), !task.reviewItems.isEmpty
+              task.clipSettings.isValidRange, !task.reviewItems.isEmpty
         else { throw HighlightTaskError.invalidTask }
         for video in task.videos {
             guard video.duration.isFinite, video.duration > 0, video.recordedStartAt.timeIntervalSince1970.isFinite,

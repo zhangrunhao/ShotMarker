@@ -87,6 +87,23 @@
             )
         }
 
+        private var reviewableMarkerCount: Int {
+            guard clipSettings.isValidRange else { return 0 }
+            if let taskBaseline, let highlightTaskManager {
+                let media = HighlightTaskMedia(fileStore: highlightTaskManager.fileStore)
+                let original = taskBaseline.videos.compactMap { try? media.selectionVideo(for: $0) }
+                if original == selectedVideos {
+                    return (try? HighlightTaskPlanner.reconcile(task: taskBaseline, videos: taskBaseline.videos,
+                        settings: clipSettings).items.reduce(0) { $0 + $1.markerIDs.count }) ?? 0
+                }
+            }
+            return plan.matchedMarkerCount
+        }
+
+        private var canReviewConfiguration: Bool {
+            clipSettings.isValidRange && reviewableMarkerCount > 0
+        }
+
         var body: some View {
             alertedFlowView
         }
@@ -284,12 +301,26 @@
 
         private var clipSettingsSection: some View {
             Section("剪辑范围") {
-                Stepper(value: guardedSecondsBeforeMarker, in: 0 ... 20, step: 1) {
+                Stepper(value: guardedSecondsBeforeMarker, in: -20 ... 20, step: 1) {
                     LabeledContent("打点前", value: "\(Int(clipSettings.secondsBeforeMarker)) 秒")
                 }
+                .accessibilityIdentifier("ClipSettingsBefore")
 
-                Stepper(value: guardedSecondsAfterMarker, in: 1 ... 20, step: 1) {
+                Stepper(value: guardedSecondsAfterMarker, in: -20 ... 20, step: 1) {
                     LabeledContent("打点后", value: "\(Int(clipSettings.secondsAfterMarker)) 秒")
+                }
+                .accessibilityIdentifier("ClipSettingsAfter")
+
+                if let description = clipSettings.relativeRangeDescription {
+                    Text(description)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("ClipSettingsRangeDescription")
+                } else {
+                    Text("起点必须早于终点，前后两项相加至少为 1 秒。")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("ClipSettingsInvalidRange")
                 }
             }
             .disabled(isCreatingHighlightJob)
@@ -326,16 +357,16 @@
         private var coverageResultSection: some View {
             Section("覆盖结果") {
                 LabeledContent("已选择", value: "\(plan.selectedVideoCount) 个视频")
-                LabeledContent("可剪辑", value: "\(plan.matchedMarkerCount) / \(plan.totalMarkerCount) 个打点")
+                LabeledContent("可剪辑", value: "\(reviewableMarkerCount) / \(plan.totalMarkerCount) 个打点")
 
-                if plan.unmatchedMarkerCount > 0 {
-                    Text("\(plan.unmatchedMarkerCount) 个打点不在所选视频范围内，生成时会跳过。")
+                if clipSettings.isValidRange, plan.totalMarkerCount > reviewableMarkerCount {
+                    Text("\(plan.totalMarkerCount - reviewableMarkerCount) 个打点按当前剪辑范围无法截取，生成时会跳过。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
-                if !plan.canGenerate {
-                    Text("所选视频没有覆盖任何打点。请确认视频是否对应这次训练。")
+                if clipSettings.isValidRange, !canReviewConfiguration {
+                    Text("当前范围没有可剪辑片段。请调整前后秒数或选择对应视频。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -359,8 +390,9 @@
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("ClipSettingsReview")
                 .disabled(
-                    !plan.canGenerate
+                    !canReviewConfiguration
                         || isLoadingVideos
                         || isCreatingHighlightJob
                         || isPreparingReview
@@ -830,7 +862,7 @@
 
         @MainActor
         private func prepareReview() async {
-            guard !isPreparingReview, let manager = highlightTaskManager else { return }
+            guard !isPreparingReview, canReviewConfiguration, let manager = highlightTaskManager else { return }
             isPreparingReview = true
             availabilityTask?.cancel()
             availabilityTask = nil
