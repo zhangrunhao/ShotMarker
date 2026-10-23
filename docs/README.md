@@ -25,7 +25,6 @@ ShotMarker 对外网站、支持页和 how-to 由 `zhangrh.shop` 仓库维护，
 
 ## 正在进行的变更
 
-- [片段取景与连续审核](changes/2026-10-23-clip-framing-spec.md)：完整规格已批准，正在实施
 - [iOS 语音口令打点与技术统计](changes/2026-07-29-ios-voice-command-marking-spec.md)：设计已确认，尚未实现
 
 changes 使用扁平文件：
@@ -41,6 +40,7 @@ YYYY-MM-DD-topic-plan.md
 
 archive 保存已经结束的设计、计划、讨论、排查、发布验证和旧文档。它不是当前事实来源。
 
+- 片段取景与连续审核：[规格](archive/2026-10/2026-10-23-clip-framing-spec.md)、[实施计划](archive/2026-10/2026-10-23-clip-framing-plan.md)、[验证记录](archive/2026-10/2026-10-23-clip-framing-validation.md)。460 项 iPhone 自动测试通过，包含真实取景预览、导出与最大字号回归。
 - [片段审核交互验证](archive/2026-10/2026-10-23-clip-review-validation.md)：直接保留/排除、撤销、稳定导航、相邻关系及精调面板移除。
 - [1.3 App Store 提交](archive/2026-09/2026-09-29-app-store-1-3-submission-plan.md)：已送审；用户明确跳过的后续验收保留为未验证，审核及最终发布进展见 current。
 - [1.3 商店新截图](archive/2026-09/2026-09-29-app-store-screenshots.md)：当前界面的 5 张 iPhone、3 张 iPad 和 1 张 Watch 素材，已替换并重新送审。

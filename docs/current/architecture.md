@@ -1,6 +1,6 @@
 # ShotMarker 技术架构
 
-- 最后复核：2026-10-23（片段审核交互、撤销数据流与工具链）
+- 最后复核：2026-10-23（片段取景、兼容存储与逐片段导出）
 - 测试和构建结果见 [质量状态](quality.md)；外部集成与隐私声明沿用各段注明的核验日期。
 
 ## 运行单元
@@ -30,8 +30,9 @@
 - `TrainingSession` 保存 ID、训练起止和 `ShotMarkerEvent(id, markedAt)`；路径为 Application Support/ShotMarker/training-sessions.json。
 - `HighlightTask` 拥有不可变训练快照、任务视频、`ClipSettings`、全部 `reviewItems`、活动执行、最近结果及当前成片。
 - 新建快照使用新的任务本地打点 UUID、毫秒时间及稳定 `sourceOrder`，不保存原训练 ID 或原打点 ID；临时训练适配对象仅供纯规划和只读 UI。
-- `HighlightTaskStore` actor 是 schema 1 的 highlight-tasks.json 唯一写入者。读取后校验、原子写盘，成功后才发布 UI。
-- 审核撤销记录只存在于当前 `HighlightClipReviewViewModel`，不写入任务文档。恢复操作沿用 schema 1 保存完整片段状态，无 schema 迁移。
+- `HighlightTaskStore` actor 是 highlight-tasks.json 唯一写入者，正常事务写 schema 2。兼容读取 schema 1，取景缺失按原画面；单纯读取或无变化事务不改写文件、不改 revision/epoch。读取后校验、原子写盘，成功后才发布 UI。
+- 审核撤销记录只存在于当前 `HighlightClipReviewViewModel`，不写入任务文档。恢复通过同一配置事务保存完整片段状态，包括可选取景的 nil / 明确原画面 / 放大值。
+- `ClipFraming` 保存倍率及正向源画面左上原点的归一化中心。UI 规范倍率到 0.1、中心到 0.00001 后限制边缘；持久化保留原始输入并严格校验，不能静默修复损坏取景。旧执行快照缺字段按原画面，明确 null 仍视为损坏。
 - 配置更新校验 expectedRevision；有变化才递增一次，无变化不写盘。生成进度、结果及相册状态不改变配置 revision。
 - 未知高 schema 只读保护；损坏文档改名保留并报告错误，后续启动仍不当作空文档清理文件。
 - PhotoKit 来源使用稳定资源引用；文件来源流式 SHA-256 后放入 HighlightTasks/<task>/Inputs/<video>.<ext>。所有已选文件均归任务持有，包括当前未参与成片的来源。
@@ -56,14 +57,18 @@
 - `HighlightTaskPlanner` 复用默认范围规则；视频变化保留精确安全确认，确认项占位并分隔默认合并链；时长变化保留人工范围并更新默认基线，样式变化不规划。
 - `HighlightReviewSession` 持有任务 revision、审核 ViewModel 和单一播放器，统一释放请求、AVAsset、播放器 item/观察者、帧数据和准备文件。
 - 编辑器使用工作副本；保留或排除通过 `saveClipReview` 与 expectedRevision 事务保存，Store 成功后更新卡片、汇总和连续导航。过期提交或写盘失败保留当前调整；未保存调整的离开、跳转和撤销统一经过继续调整或放弃提示。
-- 连续确认按 items 原顺序进入紧邻下一项，不过滤已确认或排除项，末项返回总览。上一段、下一段和缩略图条使用同一候选顺序，“下一个未看”单独查找后续默认项。
+- 编辑器区分已保存 item 与入口工作基线，临时继承只影响入口取景；dirty 比较范围、包含状态和有效取景，全部回到基线就清除。确认把有效取景与其他字段一并保存，失败不发布导航。
+- 连续确认按 items 原顺序进入紧邻下一项，不过滤已确认或排除项，末项返回总览。缩略图条使用同一候选顺序，“下一个未看”单独查找后续默认项。只有同源成功确认产生携带目标 UUID、来源 ID 与取景的 `.continueReview`；消费时重新核对目标与来源，普通 `.open` 不继承。
 - `HighlightClipReviewContext` 从完整 items 顺序推导稳定候选编号和相邻项，与打点及导出序数独立。它将当前工作副本代入最终规划器，以最终片段的打点成员关系判断是否合并；跨视频不计算时间距离，同源范围使用实际交集与对称间隔。
 - 时间轴在可视窗口内绘制同源相邻范围的淡色参考条，不接收手势；起止、整体移动和播放头保留拖动及 VoiceOver 步进，恢复默认使用当前默认基线。
 - 成功确认保存一份完整的前值作为单级撤销记录。撤销先通过同一版本校验事务保存前值，成功后更新卡片、汇总和编辑位置并清空记录；失败保留记录。保存、撤销和生成互斥，退出会话清空撤销记录。
 - 导航目标使用片段 UUID 作为编辑器视图身份；连续切换重新初始化局部时间轴和媒体任务。原位撤销时重新载入已保存片段、重建时间轴窗口，并重置播放器、递增加载标识以使旧范围请求失效。
+- `ClipFramingViewport` 使用共享源画面比例适配几何，AVPlayerLayer/缩略图只在有效源区域内缩放和平移；外部留边不参与取景。播放器加载正向源尺寸也受 loadGeneration 保护，迟到元数据不能覆盖当前片段；尺寸不可用时只禁用取景。
 - `HighlightClipReviewMediaProvider` 与 ViewModel 保留的缩略图数据均有上限；局部胶片退出时释放，审核不导出逐片段文件。
 - 本地照片资源先校验可用，审核和生成关闭网络访问；下载由配置页明确准备流程承担。
-- `HighlightRenderRunner` 只读取执行快照，使用已确认精确片段建立单一 AVMutableComposition/导出，并使用该执行独有临时目录。
+- `HighlightRenderRunner` 只读取执行快照，使用包含明确取景的精确片段建立单一 AVMutableComposition/导出，并使用该执行独有临时目录。相邻合并必须有效取景相等；不同取景的重叠范围完整顺序输出。
+- `ClipFramingVideoComposition` 捕获每段方向、裁切、输出时间及编号为不可变指令。自定义 CI compositor 按来源方向、共享裁切、固定画布比例适配、编号的顺序单次渲染，组成轨道保持 identity，透明编号不跳过取景。当前使用 BGRA SDR 路径，HDR/广色域保真未验收。
+- 合成器串行渲染，以同一锁管理请求资源获取、结束与取消；取消返回前结束所有持有请求，后台渲染只使用已捕获资源，不能重复结束请求。音轨仍按各段输出位置插入，保持进度和取消清理事务。
 - 活动状态统一推导操作集合为停止。停止先持久化执行失效，再取消；旧 Runner 真正退出和清理前不释放串行槽。
 - 回调通过 task/execution/revision 门槛验证；迟到结果和进度不能覆盖停止或新执行。
 - background 禁止调度并停止所有执行，inactive 不触发。启动将遗留执行改为 stopped，不自动恢复。
