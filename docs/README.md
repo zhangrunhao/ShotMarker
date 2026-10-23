@@ -40,6 +40,7 @@ YYYY-MM-DD-topic-plan.md
 
 archive 保存已经结束的设计、计划、讨论、排查、发布验证和旧文档。它不是当前事实来源。
 
+- [已保存取景优先验证](archive/2026-10/2026-10-23-framing-priority-validation.md)：保存值优先；无保存值且同源连续确认才继承，手动任一项（含当前项）恢复自己的取景。464 项专项回归通过。
 - 片段编辑精简与有符号范围：[规格](archive/2026-10/2026-10-23-clip-editor-simplify-spec.md)、[实施计划](archive/2026-10/2026-10-23-clip-editor-simplify-plan.md)、[验证记录](archive/2026-10/2026-10-23-clip-editor-simplify-validation.md)。475 项 iPhone 自动测试通过，覆盖负偏移、已确认取景保留及精简后的实际操作。
 - 片段取景与连续审核：[规格](archive/2026-10/2026-10-23-clip-framing-spec.md)、[实施计划](archive/2026-10/2026-10-23-clip-framing-plan.md)、[验证记录](archive/2026-10/2026-10-23-clip-framing-validation.md)。460 项 iPhone 自动测试通过，包含真实取景预览、导出与最大字号回归。
 - [片段审核交互验证](archive/2026-10/2026-10-23-clip-review-validation.md)：直接保留/排除、撤销、稳定导航、相邻关系及精调面板移除。
