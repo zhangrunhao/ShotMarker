@@ -33,4 +33,4 @@ DEBUG 验收入口在 preparation 失败时显示可见错误，临时路径探�
 
 - 本轮未验真实 Photos 授权/保存、HealthKit、完整真机全功能、Watch 联机升级、iPad 全功能、VoiceOver 人工朗读、HDR/广色域、正式 Archive 或线上 Analytics/GlitchTip。
 - 商店、TestFlight、审核和上线状态最后核验日期仍沿用[发布状态](../../current/release.md)，本轮不推断其变化。
-- 最终合并状态：尚未合并；等待完成 Watch 验收或用户明确采用已通过的 iPhone 验收范围。
+- 最终合并状态：2026-10-25，用户明确采用已通过的 iPhone 验收结果合并 main；维护分支已快进合并，合并点为 `2f54a80`。合并后的生产、测试和构建配置与已验收 `3b8a3be` 一致；后续仅更新本次验收决定与合并记录，不重复运行未变化的测试。本次未推送远端。
