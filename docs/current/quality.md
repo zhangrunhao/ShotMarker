@@ -1,19 +1,22 @@
 # ShotMarker 质量状态
 
-- 最后验证：2026-10-25；以下本地检查对应代码 `2fa8049`。
+- 最后验证：2026-10-25；追加 iPhone 生产代码为 `3b8a3be`。各项验证使用下表注明的代码范围，Watch 既有基线不扩大为本轮真机验收。
 - 工程版本：1.3（Build 3）；工具链 Xcode 27.1（27A9275）、Swift 6.4，工程使用 Swift 5 语言模式。
 
 ## 最近验证基线
 
 | 范围 | 环境 | 结果和边界 |
 | --- | --- | --- |
-| iPhone 完整自动测试 | iPhone 17 Pro / iOS 26.5 Simulator | 491 单元 + 24 UI 共 515 项通过，0 失败/跳过 |
-| Watch 完整自动测试 | Apple Watch Series 11 (46mm) / watchOS 26.5 Simulator | 40 项通过，0 失败/跳过；HealthKit 生命周期以可控平台适配验证 |
-| Release 构建及产物边界 | generic iOS Simulator；全新 DerivedData | App/Watch 1.3（3）构建成功，两种架构的 dSYM 各自对应；DEBUG 测试入口不进入产物；隐私清单核对通过；不代替签名 Archive |
+| iPhone 完整自动测试 | `3b8a3be`；iPhone 17 Pro / iOS 26.5 Simulator | 492 单元 + 24 UI 共 516 项通过，0 失败；最终失败/跳过统计及测试辅助修改的定向复验见[追加验收](../archive/2026-10/2026-10-25-maintenance-device-acceptance.md) |
+| Watch 既有自动测试基线 | `2fa8049`；Apple Watch Series 11 (46mm) / watchOS 26.5 Simulator | 40 项通过，0 失败/跳过；本轮 Watch 范围：尝试真机 runtime 回归，连接尚未恢复；结果：三次完整连接尝试均在测试启动前超时，0 项执行；不能记为通过 |
+| Release 构建及产物边界 | `3b8a3be`；generic iOS Simulator 增量构建 | 构建退出 0，DEBUG 验收入口不进入产物；全新 DerivedData、dSYM 与隐私清单的既有基线为 `2fa8049`；不代替签名 Archive |
+| 严格签名检查 | `3b8a3be` 的开发签名 iPhone Debug App 1.3（3） | 验证退出 0；不扩大为正式 Archive 验收 |
+| 真机限定 UI 与媒体回归 | 3b8a3be；详细设备证据由独立私有台账维护 | 首轮 23 项中 21 项通过；修正测试滚动后，受影响的 8 项全部通过（包含原 2 项失败），覆盖 23 个不同用例；未执行请求真实 Photos 授权的 1 项 |
+| 真机隔离 host 单元与真实视频导出 | 3b8a3be | 43 项通过，0 失败/跳过；包含真实视频生成、修改后重新生成、旧输出替换与重新加载 |
 | 生产源码 SwiftLint | ShotMarker、Shared、ShotMarkerWatchApp；原有规则 | 149 项：120 warning / 29 error；静态检查未通过，未放宽规则 |
-| 文本和文档结构 | 公开 Markdown 本地路径、归档月份、current 行数及 git diff | 路径检查无失效目标，归档符合月份及扁平结构，current 各文件不超过 300 行，文本检查通过 |
+| 文本和文档结构 | 公开 Markdown 本地路径、归档月份、current 行数及 git diff | 本地路径、current 行数、归档月份和文本差异已完成检查 |
 
-命令、结果包及验证边界见[维护验证](../archive/2026-10/2026-10-25-maintenance-validation.md)。更早的结果及外部摘要见[文档整理记录](../archive/2026-10/2026-10-25-documentation-audit.md)。
+本轮追加结果与限制见[真机追加验收](../archive/2026-10/2026-10-25-maintenance-device-acceptance.md)；此前命令、结果包及验证边界见[维护验证](../archive/2026-10/2026-10-25-maintenance-validation.md)。更早的结果及外部摘要见[文档整理记录](../archive/2026-10/2026-10-25-documentation-audit.md)。
 
 ## 当前覆盖
 
@@ -28,13 +31,14 @@
 - 24 项 UI 基线包括 7 项任务、6 项审核、7 项真实媒体导航/取景/序号/加载隔离及 4 项时间轴。合成 H.264/AAC 覆盖横竖屏、旋转、多来源、真实像素及音轨；accessibility5 环境检查播放、决定按钮及导航可达性。
 - 缩略图保留上限 64 项，退出后 AVAsset 弱引用释放和帧数据清理；审核不逐片段导出。
 - 模拟旧 epoch 升级的业务文件/缓存/临时文件/偏好和旧日志目录清理、Photos 保留、第二次启动保留新数据；Watch 临时目录 outbox 重置。
+- 受控任务根目录先规范化再派生目标路径，包含系统路径别名下 prepare/commit 的真实字节回归；逐段符号链接与越界保护继续覆盖。
 - 播放器无效加载释放、迟到元数据/观察回调、定位完成乱序与实际回首后重播；服务加载期间场景变化及 inactive 不覆盖后台状态。
 - 日志正常写入执行 14 天/30 MB 清理、旧目录清理与自定义目录隔离；Watch 授权迟到、结束保存期间快速重启、过期回调与拒绝/不可用保护。
 
 ## 风险和未覆盖
 
 - 自动测试覆盖上述 Simulator 和代码范围；本轮另外检查普通及最大辅助字号任务卡片截图，不扩大为深色或 iPad 完整验收。
-- 最近设备安装启动的公开摘要为 2026-10-25 `7adac03`：generic iOS Debug 构建、严格签名验证及开发安装启动通过；完整真机剪辑未验收。详细外部证据由独立私有台账维护。
+- 本轮真机验证仅覆盖上表限定范围，结论为：iPhone 限定回归通过，Watch 真机仍因调试连接失败而未完成。真实 Photos 授权/保存、HealthKit、完整真机全功能流程未验收；硬件及详细设备过程见[私有台账](../private.local/shotmarker/current/release.md)。
 - App Store / TestFlight 分发与启动反馈最后核验于 2026-09-29；签名、dSYM UUID 和 Organizer Validate 未独立复核。用户当日跳过后续验收的决定不扩大覆盖。
 - Watch 真机联机升级、完整 iPad 功能、VoiceOver 真机朗读、Release Analytics 生产、真机崩溃符号化与 GlitchTip 告警仍无新增通过证据。
 - 导出为 BGRA SDR；HDR/广色域保真、非方形像素、非零 clean aperture 及任意斜切来源变换未验收。

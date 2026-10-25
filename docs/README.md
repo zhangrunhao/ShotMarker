@@ -46,6 +46,7 @@ archive 保存已经结束的设计、计划、讨论、排查、发布验证和
 - [2026-09 归档](archive/2026-09/)：独立集锦任务、连续审核、样式和 1.3 提交材料。
 - [2026-08 归档](archive/2026-08/)：Analytics、日志、文档治理及旧版提交材料。
 - [2026-10-25 维护验证](archive/2026-10/2026-10-25-maintenance-validation.md)：生命周期修复、组件整理及完整回归结果。
+- [2026-10-25 真机追加验收](archive/2026-10/2026-10-25-maintenance-device-acceptance.md)：路径规范化修复、追加回归及限定真机验收边界。
 - [2026-10-25 文档整理记录](archive/2026-10/2026-10-25-documentation-audit.md)：审计依据及从 current 移出的既有验证/外部摘要。
 
 archive 的规则只适用于 archive；其中的 spec、plan 和其他材料不受 current 的 300 行规则约束。

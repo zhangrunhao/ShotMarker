@@ -34,6 +34,6 @@
 ## 外部验证边界
 
 - 最后核验于 2026-09-29 的 1.3 Archive 已获 Apple 接收，但该次签名、dSYM UUID、Organizer Validate 日志及源码精确映射未独立复核。
-- 完整真机剪辑、iPad、VoiceOver、Watch 联机升级、Analytics 生产事件、崩溃符号化和告警仍无新增验收证据，见[质量状态](quality.md)。
+- 真机覆盖限于[质量状态](quality.md)所列的 iPhone 自动回归与视频导出；真实 Photos 授权/保存、完整业务流程、iPad、VoiceOver、Watch 联机升级、Analytics 生产事件、崩溃符号化和告警仍未验收。
 - Analytics 生产四字段存储最后验收于 2026-08-16；GlitchTip 生产链路本次未复验。公开页面可访问不证明遥测正常。
 - 官网实现、支持页和 how-to 由 `zhangrh.shop` 仓库维护；其公开内容最后核验于 2026-09-29，本次未确认线上状态。旧外部核验详情见[文档整理记录](../archive/2026-10/2026-10-25-documentation-audit.md)。

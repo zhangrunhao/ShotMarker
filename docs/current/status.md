@@ -17,9 +17,9 @@ ShotMarker 提供 Watch 训练打点与同步、训练 JSON 导入/导出与多�
 
 ## 风险与验证边界
 
-- 最近自动测试及构建的代码范围、未覆盖平台和静态检查状态见[质量状态](quality.md)。模拟器通过与设备安装启动不等于完整真机验收。
+- 最近自动测试及构建、追加真机限定验收的代码范围和结果见[质量状态](quality.md)。本轮结论：iPhone 限定回归通过，Watch 真机仍因调试连接失败而未完成；不能扩大为完整真机全功能验收。
 - App Store / TestFlight 最后核验于 2026-09-29；审核与上线状态未重新确认。最终发布按已确认决定由用户手动操作，见[发布状态](release.md)。
-- 完整真机剪辑、iPad、VoiceOver 人工验收、Watch 联机升级、生产观测及正式 Archive 仍须各自证据，不能从 Debug 或历史提交推断。
+- 真实 Photos 授权/保存、HealthKit、完整真机全功能、iPad、VoiceOver 人工验收、Watch 联机升级、生产观测及正式 Archive 仍须各自证据；本轮 Watch 范围为：尝试真机 runtime 回归，连接尚未恢复。
 - 导出使用 BGRA SDR 路径，HDR/广色域保真未验收。
 
 ## 当前文档入口
