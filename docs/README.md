@@ -41,6 +41,7 @@ YYYY-MM-DD-topic-plan.md
 
 archive 保存已经结束的设计、计划、讨论、排查、发布验证和旧文档。它不是当前事实来源。
 
+- [播放与操作控件样式验证](archive/2026-10/2026-10-25-editor-controls-style-validation.md)：靛蓝播放按钮、当前模式标记和操作面板；4 项专项 UI 通过，最后入口宽度调整后浅深色各复测 1 项通过，并完成开发签名安装启动。
 - 片段独立序号布局与操作列表：[规格](archive/2026-10/2026-10-25-clip-number-layout-spec.md)、[实施计划](archive/2026-10/2026-10-25-clip-number-layout-plan.md)、[验证记录](archive/2026-10/2026-10-25-clip-number-layout-validation.md)。完整 499 项 iPhone 自动测试通过；最终隔离注解与 UI 断言补充后，475 单元 + 2 新增深色 UI 共 477 项通过。实现提交 `38c88c0` 已在主工作区 fast-forward 合入本地 main，未推送。
 - [已保存取景优先验证](archive/2026-10/2026-10-23-framing-priority-validation.md)：保存值优先；无保存值且同源连续确认才继承，手动任一项（含当前项）恢复自己的取景。464 项专项回归通过。
 - 片段编辑精简与有符号范围：[规格](archive/2026-10/2026-10-23-clip-editor-simplify-spec.md)、[实施计划](archive/2026-10/2026-10-23-clip-editor-simplify-plan.md)、[验证记录](archive/2026-10/2026-10-23-clip-editor-simplify-validation.md)。475 项 iPhone 自动测试通过，覆盖负偏移、已确认取景保留及精简后的实际操作。
