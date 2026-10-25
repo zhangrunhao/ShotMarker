@@ -44,9 +44,12 @@ final class EditableHighlightTaskUITests: XCTestCase {
         let review = app.buttons["ClipSettingsReview"]
         scrollTo(review, in: app)
         XCTAssertFalse(review.isEnabled)
-        scrollTo(after, in: app, down: true)
-        after.buttons.element(boundBy: 1).tap()
-        XCTAssertTrue(app.staticTexts["ClipSettingsRangeDescription"].label.contains("共 1 秒"))
+        let increment = after.buttons.element(boundBy: 1)
+        revealStepperButton(increment, in: app)
+        increment.tap()
+        let description = app.staticTexts["ClipSettingsRangeDescription"]
+        XCTAssertTrue(description.waitForExistence(timeout: 3))
+        XCTAssertTrue(description.label.contains("共 1 秒"))
         scrollTo(review, in: app)
         XCTAssertTrue(review.isEnabled)
     }
@@ -67,6 +70,21 @@ final class EditableHighlightTaskUITests: XCTestCase {
         review.tap()
         XCTAssertTrue(app.navigationBars["审核集锦片段"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "已保留")).firstMatch.exists)
+    }
+
+    private func revealStepperButton(_ button: XCUIElement, in app: XCUIApplication) {
+        let contentTop = app.navigationBars.firstMatch.frame.maxY + 8
+        let contentBottom = app.frame.maxY - 24
+        for _ in 0..<8 {
+            let frame = button.frame
+            if button.isHittable, frame.minY >= contentTop, frame.maxY <= contentBottom,
+               app.frame.contains(frame) { return }
+            if frame.minY < contentTop { app.swipeDown() } else { app.swipeUp() }
+        }
+        XCTAssertTrue(button.isHittable)
+        XCTAssertGreaterThanOrEqual(button.frame.minY, contentTop, "步进按钮必须完整位于导航栏下方")
+        XCTAssertLessThanOrEqual(button.frame.maxY, contentBottom, "步进按钮必须完整位于内容可见区域")
+        XCTAssertTrue(app.frame.contains(button.frame))
     }
 
     private func scrollTo(_ element: XCUIElement, in app: XCUIApplication, down: Bool = false) {

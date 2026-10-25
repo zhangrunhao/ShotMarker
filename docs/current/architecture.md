@@ -40,7 +40,7 @@ Bootstrap 在异步加载期间保存最近的 active/background 状态，inacti
 - 配置更新校验 expectedRevision；有变化才递增一次，无变化不写盘。生成进度、结果及相册状态不改变配置 revision。
 - 未知高 schema 只读保护；损坏文档改名保留并报告错误，后续启动仍不当作空文档清理文件。
 - PhotoKit 来源使用稳定资源引用；文件来源流式 SHA-256 后放入 HighlightTasks/<task>/Inputs/<video>.<ext>。所有已选文件均归任务持有，包括当前未参与成片的来源。
-- 文件只存受控相对路径，拒绝越界及符号链接。创建用 staging；更新先移动新增文件、提交 JSON 后才清理旧副本，失败回滚本次新增文件。
+- 文件只存受控相对路径。`HighlightTaskFileStore` 先解析并规范受信根目录，再从同一根目录逐段派生可能尚未创建的目标路径；逐段拒绝符号链接，并验证最终规范路径仍位于根目录内。创建用 staging；更新先移动新增文件、提交 JSON 后才清理旧副本，失败回滚本次新增文件。
 - 当前成片为 HighlightTasks/<task>/Outputs/<output>/highlight.mov；每次输出使用新的 UUID 目录。
 - 旧 `HighlightJob` 和组合确认类型仍保留供旧契约回归，正式 App 不再实例化旧 Manager/Store，也不读取或迁移旧文档。训练服务默认不注入组合确认 Store。
 

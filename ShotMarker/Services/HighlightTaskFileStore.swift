@@ -166,15 +166,18 @@ actor HighlightTaskFileStore {
         guard HighlightTaskValidation.isSafePath(path), path.split(separator: "/").first == "HighlightTasks" else {
             throw HighlightTaskError.invalidPath
         }
+        // Resolve the trusted root before appending paths that may not exist yet.
+        // Foundation can normalize /private aliases differently for existing and missing URLs.
+        let canonicalBase = baseDirectory.resolvingSymlinksInPath().standardizedFileURL
         // Reject every symlink component, including links into another task within the sandbox.
-        var cursor = baseDirectory
+        var cursor = canonicalBase
         for component in path.split(separator: "/") {
             cursor.appendPathComponent(String(component))
             if (try? cursor.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true {
                 throw HighlightTaskError.invalidPath
             }
         }
-        let root = baseDirectory.resolvingSymlinksInPath().standardizedFileURL.path + "/"
+        let root = canonicalBase.path + "/"
         guard cursor.resolvingSymlinksInPath().standardizedFileURL.path.hasPrefix(root) else { throw HighlightTaskError.invalidPath }
         return cursor
     }

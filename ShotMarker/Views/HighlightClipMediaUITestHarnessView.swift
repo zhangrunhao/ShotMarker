@@ -14,6 +14,7 @@
                     HighlightClipMediaUITestContent(session: session)
                 } else if let preparationError {
                     Text(preparationError)
+                        .accessibilityIdentifier("ClipMediaUIFixturePreparationError")
                 } else {
                     ProgressView("正在准备测试视频…")
                 }
@@ -24,6 +25,7 @@
                     session = try await makeSession()
                 } catch {
                     preparationError = error.localizedDescription
+                    print("Clip media UI fixture preparation failed: \(error.localizedDescription)")
                 }
             }
         }

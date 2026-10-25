@@ -325,14 +325,14 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         XCTAssertGreaterThan(element(label: "片段终点").frame.midX - element(label: "片段起点").frame.midX, 80,
             "时间轴必须围绕新片段展开，起止手柄不能挤在同一侧")
         let play = app.buttons["播放片段"]
-        // Number editing adds a slider and optional operations row. Its playback
-        // control may require scrolling, but must remain fully reachable.
-        if app.sliders["ClipNumberSize"].exists {
-            for _ in 0..<8 where play.frame.maxY > app.buttons["ClipExclude"].frame.minY - 8 {
-                let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.72))
-                origin.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.45)))
-            }
+        // Expanded operations or number controls can require scrolling on a narrow
+        // screen. Reveal playback according to its geometry in every editing mode.
+        for _ in 0..<8 where play.frame.maxY > app.buttons["ClipExclude"].frame.minY - 8 {
+            let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.72))
+            origin.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.45)))
         }
+        XCTAssertEqual(seconds(position), start, accuracy: 0.11, "滚动显示播放按钮不应改变预览位置")
+        XCTAssertEqual(seconds(progress), 0, accuracy: 0.11, "滚动显示播放按钮不应改变播放进度")
         XCTAssertTrue(play.isHittable, "播放按钮应可达并可操作")
         XCTAssertGreaterThanOrEqual(play.frame.minY, app.navigationBars.firstMatch.frame.maxY)
         XCTAssertLessThanOrEqual(play.frame.maxY, app.buttons["ClipExclude"].frame.minY - 8,

@@ -47,6 +47,34 @@ final class HighlightTaskFileStoreTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: input.path))
     }
 
+    func testCreationThroughPrivateAliasCopiesInputsBeforeTaskDirectoriesExist() async throws {
+        #if targetEnvironment(simulator)
+            // Simulator sandboxes can live under /Users, outside the /private alias.
+            let temporary = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+        #else
+            let temporaryPath = FileManager.default.temporaryDirectory.standardizedFileURL.path
+            let privatePath = temporaryPath.hasPrefix("/private/") ? temporaryPath : "/private" + temporaryPath
+            let temporary = URL(fileURLWithPath: privatePath, isDirectory: true)
+        #endif
+        let root = temporary.appendingPathComponent("ShotMarker-PrivateAliasTests-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source.mov")
+        let bytes = Data("private alias input".utf8)
+        try bytes.write(to: source)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("HighlightTasks").path))
+        let files = HighlightTaskFileStore(baseDirectory: root)
+        let prepared = try await files.prepareInputs([
+            SelectedTrainingVideo(id: source.absoluteString, recordedStartAt: Date(timeIntervalSince1970: 100), duration: 60),
+        ], taskID: UUID(), existing: [])
+
+        try await files.commitInputs(prepared, creating: true)
+
+        guard case let .taskInputFile(path) = prepared.videos[0].source else { return XCTFail("Expected task-owned input") }
+        XCTAssertEqual(try Data(contentsOf: files.url(forRelativePath: path)), bytes)
+        XCTAssertEqual(try Data(contentsOf: source), bytes)
+    }
+
     func testPathsRejectTraversalAbsoluteAndCrossTaskSymlink() throws {
         let fixture = try TaskStoreFixture()
         defer { fixture.cleanup() }
@@ -64,7 +92,8 @@ final class HighlightTaskFileStoreTests: XCTestCase {
     func testCleanupPreservesReferencedInputsAndCurrentOutputOnly() async throws {
         let fixture = try TaskStoreFixture()
         defer { fixture.cleanup() }
-        let store = HighlightTaskFileStore(baseDirectory: fixture.directory)
+        let store = HighlightTaskFileStore(baseDirectory: fixture.directory,
+            temporaryDirectory: fixture.directory.appendingPathComponent("tmp"))
         var task = try HighlightTaskTestFixture.task()
         let old = fixture.directory.appendingPathComponent("old.mov")
         try Data([1]).write(to: old)

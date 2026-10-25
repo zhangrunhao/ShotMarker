@@ -11,6 +11,10 @@ struct HighlightTaskUITestHarnessView: View {
     var body: some View {
         NavigationStack {
             List {
+                if let preparationError = fixture.preparationError {
+                    Text(preparationError)
+                        .accessibilityIdentifier("TaskUIFixturePreparationError")
+                }
                 ForEach(fixture.manager.tasks) { task in
                     HighlightTaskRow(task: task, manager: fixture.manager,
                         onEdit: { editing = true }, onPlay: {})
@@ -29,6 +33,7 @@ struct HighlightTaskUITestHarnessView: View {
 @MainActor
 private final class TaskUIFixture: ObservableObject {
     let manager: HighlightTaskManager
+    @Published private(set) var preparationError: String?
     private let store: HighlightTaskStore
     private let files: HighlightTaskFileStore
     private let root: URL
@@ -78,7 +83,10 @@ private final class TaskUIFixture: ObservableObject {
                 }
             }
             await manager.refresh()
-        } catch { assertionFailure("Task UI fixture failed to initialize") }
+        } catch {
+            preparationError = error.localizedDescription
+            print("Task UI fixture preparation failed: \(error.localizedDescription)")
+        }
     }
 
     private func prepareConfiguration(confirmed: Bool) async throws {
