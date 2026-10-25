@@ -405,11 +405,10 @@ struct HighlightClipEditorView: View {
             .frame(minWidth: 132, minHeight: 44)
         }
         .buttonStyle(.borderedProminent)
-        .tint(playbackTint)
         .disabled(playbackController.isLoading || playbackController.loadError != nil)
     }
 
-    private var playbackTint: Color {
+    private var panelSelectedTint: Color {
         colorScheme == .dark
             ? Color(red: 0.38, green: 0.40, blue: 0.73)
             : Color(red: 0.28, green: 0.30, blue: 0.68)
@@ -418,7 +417,7 @@ struct HighlightClipEditorView: View {
     private var toolAccent: Color {
         colorScheme == .dark
             ? Color(red: 0.70, green: 0.73, blue: 1)
-            : playbackTint
+            : panelSelectedTint
     }
 
     private var canAdjustFraming: Bool {
@@ -446,28 +445,18 @@ struct HighlightClipEditorView: View {
                                 systemImage: operations.isExpanded ? "chevron.up" : "chevron.down")
                                 .fixedSize(horizontal: false, vertical: true)
                         } else {
-                            HStack(spacing: 8) {
-                                Text("操作")
-                                Text(operations.mode == .none ? "关闭" : operations.mode.title)
-                                    .font(.caption.weight(.semibold))
+                            HStack(spacing: 6) {
+                                Text("操作 · \(operations.mode == .none ? "关闭" : operations.mode.title)")
                                     .fixedSize(horizontal: true, vertical: false)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
-                                    .background(toolAccent.opacity(0.12), in: Capsule())
                                 Image(systemName: operations.isExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.caption2.weight(.bold))
+                                    .font(.caption2)
                             }
                         }
                     }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(toolAccent)
-                    .padding(.horizontal, 12)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
                     .frame(minHeight: 44)
-                    .background(toolAccent.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 14)
-                            .strokeBorder(toolAccent.opacity(0.16), lineWidth: 1)
-                    }
                     .contentShape(RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
@@ -488,7 +477,7 @@ struct HighlightClipEditorView: View {
                             symbol: operations.mode == .framing ? "checkmark.circle.fill" : "viewfinder")
                     }
                     .buttonStyle(ClipEditorOperationButtonStyle(isSelected: operations.mode == .framing,
-                        selectedTint: playbackTint, accent: toolAccent))
+                        selectedTint: panelSelectedTint, accent: toolAccent))
                     .accessibilityIdentifier("ClipFramingToggle")
                     Button {
                         guard canAdjustFraming else { return }
@@ -498,7 +487,7 @@ struct HighlightClipEditorView: View {
                         operationLabel("恢复原画面", symbol: "arrow.counterclockwise")
                     }
                     .buttonStyle(ClipEditorOperationButtonStyle(isSelected: false,
-                        selectedTint: playbackTint, accent: Color(uiColor: .secondaryLabel)))
+                        selectedTint: panelSelectedTint, accent: Color(uiColor: .secondaryLabel)))
                     .accessibilityIdentifier("ClipFramingRestore")
                     .disabled(!canAdjustFraming || editorViewModel.effectiveFraming == .original)
                     Button {
@@ -509,7 +498,7 @@ struct HighlightClipEditorView: View {
                             symbol: operations.mode == .number ? "checkmark.circle.fill" : "number")
                     }
                     .buttonStyle(ClipEditorOperationButtonStyle(isSelected: operations.mode == .number,
-                        selectedTint: playbackTint, accent: toolAccent))
+                        selectedTint: panelSelectedTint, accent: toolAccent))
                     .accessibilityIdentifier("ClipNumberToggle")
                 }
                 .padding(6)
