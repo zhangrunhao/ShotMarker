@@ -1,7 +1,7 @@
 # ShotMarker 质量状态
 
-- 最后复核：2026-10-25（片段独立序号布局、操作列表及共享导出画布）
-- 本地验证代码：`38c88c0`（逐段序号布局、操作列表和相关回归）。验证限于本地 Debug Simulator，不代表商店或真机分发产物。
+- 最后复核：2026-10-25（片段独立序号布局、操作列表、共享导出画布及开发签名安装启动）
+- 本地验证代码：`38c88c0`（逐段序号布局、操作列表和相关回归）。自动回归使用 Debug Simulator；另以文档提交后的 `362d66e` 完成 generic iOS Debug 构建、签名及真机安装启动，不代表商店分发产物。
 - 工程版本：1.3（Build 3）
 
 ## 当前结论
@@ -10,7 +10,7 @@
 
 本次已检查普通字号浅色/深色下序号拖动、折叠后滑杆、扩大后的操作按钮，以及浅色下实际最大辅助字号截图。序号模式展开全部控件后可纵向滚动至播放按钮，固定保留/排除入口保持可用。媒体测试使用合成视频，预览与导出使用相同标签图片及边界计算；未将模拟器结果等同真机完整验收。
 
-最近真机安装启动证据仍为 2026-10-23 `3d79e72` 的开发签名版本，不包含本次序号改动；权威记录见[私有发布状态](../private.local/shotmarker/current/release.md)。App Store / TestFlight 分发与启动反馈最近核验于 2026-09-29，当前商店状态未复核；用户当日跳过后续验收的决定不扩大测试覆盖。
+2026-10-25 已将包含本次序号改动的 `362d66e` 开发签名版本安装并正常启动，随后确认同一进程仍在运行，供用户试用；完整剪辑流程仍未验收。权威记录见[私有发布状态](../private.local/shotmarker/current/release.md)。App Store / TestFlight 分发与启动反馈最近核验于 2026-09-29，当前商店状态未复核；用户当日跳过后续验收的决定不扩大测试覆盖。
 
 ## 已验证
 
@@ -25,14 +25,14 @@
 | iPhone 完整测试 | Xcode 27.1（27A9275）；`111303d`；iPhone 17 Pro / iOS 26.5 Simulator | 2026-10-23 | 475 通过，0 失败，0 跳过；含 453 项单元测试、22 项 UI 测试；Debug 测试构建成功 |
 | 取景真实导出 | AVFoundation / CI；合成 H.264、真实文件与像素解码 | 2026-10-23 | 中心/边缘、旋转/镜像/原生竖屏、多源画布、透明编号、编号位置/切点、完整重叠时长、音频对齐与实际取消清理通过 |
 | 取景原生 UI | 真实 Store、AVPlayer、像素采样与 accessibility5 | 2026-10-23 | 2.2× 保存/继承、底部手动恢复、恢复原画面、竖屏/旋转预览和手势暂停通过；最大字号下主要操作与缩略图可滚动到完整可见区域，未载入取景时页面可滚动 |
-| iOS 开发签名构建 | Xcode 27.1；main `3d79e72`；generic iOS Debug | 2026-10-23 | 构建退出码 0；App 为 1.3（3），codesign 深度严格验证通过；已安装并正常前台启动；不是分发 Archive |
+| iOS 开发签名构建 | Xcode 27.1；main `362d66e`；generic iOS Debug | 2026-10-25 | 构建退出码 0；App 为 1.3（3），codesign 深度严格验证通过；安装与正常前台启动成功，同一进程随后仍在运行；不是分发 Archive |
 | 连续审核与媒体隔离 UI | 真实任务 Store/Session、AVPlayer 和帧提取；合成 H.264 文件 | 2026-10-23 | 候选 1 → 2（691.1 秒）→ 跨来源候选 3 → 返回重开通过；切换来源后迟到的旧加载不能覆盖当前范围；定位、8 帧胶片、手柄与播放推进正确 |
 | Watch 完整测试 | Apple Watch Series 11 46mm / watchOS 26.5 Simulator；`1975784` | 2026-09-10 | 31 通过，0 失败，0 跳过；2026-10-23 未重跑 Watch 测试，未修改 Watch 代码 |
 | Release 构建 | generic iOS Simulator；当日增量构建 | 2026-09-10 | 成功；主 App/Watch 均为 1.3（3），dSYM UUID 对应；全新 DerivedData 构建的最近验证代码为 `1975784` |
 | Release 边界 | App/Watch 二进制及 App 包 | 2026-09-10 | 三个 DEBUG 入口、真实媒体测试场景及计数观测均不在产物中；Privacy Manifest 存在，Tracking=false，无后台生成模式 |
 | 真实视频导出 | AVFoundation + 真实文件 | 2026-09-10 | 41 秒成片修改后替换为 26 秒，旧文件清理，重载与外部源保护通过 |
 | 数据升级与交互 | 专用 iPhone Simulator 原生入口及沙盒核验 | 2026-09-10 | 创建恢复、独立任务、编辑、停止/后台/进程终止、播放/保存、删除和一次性升级通过；具体覆盖方式见验证记录 |
-| Git 文本检查 | 本次公开仓库改动的 git diff --check | 2026-10-25 | 通过；私有设备台账未改动 |
+| Git 文本检查 | 本次公开仓库改动的 git diff --check | 2026-10-25 | 通过；私有设备台账独立维护 |
 | 分发与启动反馈 | 1.3（Build 3）；用户截图、用户报告及 App Store Connect 页面 | 2026-09-29 | 已 Archive、上传、TestFlight 分发并送审；用户确认 iPhone/Watch 可打开；未复核设备型号、系统和完整主流程 |
 | 正式签名 / dSYM / Organizer Validate 详细核验 | 1.2（Build 1） | 2026-08-19 | 最近详细证据；未作为 1.3 产物验收 |
 
@@ -40,7 +40,7 @@
 
 本次序号布局的完整命令、红绿测试、独立复核、截图检查及限制见[验证记录](../archive/2026-10/2026-10-25-clip-number-layout-validation.md)。
 
-此前取景优先级见[验证记录](../archive/2026-10/2026-10-23-framing-priority-validation.md)。编辑精简与负偏移验证见[本轮记录](../archive/2026-10/2026-10-23-clip-editor-simplify-validation.md)。取景、兼容存储及媒体回归见 [取景验证](../archive/2026-10/2026-10-23-clip-framing-validation.md)，原审核交互见 [审核交互验证](../archive/2026-10/2026-10-23-clip-review-validation.md)。此前黑屏与时间轴错位记录见 [导航修复验证](../archive/2026-09/2026-09-10-clip-review-navigation-validation.md)。用户已反馈上一版取景在手机上的体验改善；本次序号变更的证据仅为模拟器自动回归和截图检查；既有安装证据不包含它。
+此前取景优先级见[验证记录](../archive/2026-10/2026-10-23-framing-priority-validation.md)。编辑精简与负偏移验证见[本轮记录](../archive/2026-10/2026-10-23-clip-editor-simplify-validation.md)。取景、兼容存储及媒体回归见 [取景验证](../archive/2026-10/2026-10-23-clip-framing-validation.md)，原审核交互见 [审核交互验证](../archive/2026-10/2026-10-23-clip-review-validation.md)。此前黑屏与时间轴错位记录见 [导航修复验证](../archive/2026-09/2026-09-10-clip-review-navigation-validation.md)。用户已反馈上一版取景在手机上的体验改善；本次序号变更已完成模拟器自动回归、截图检查及开发签名安装启动；尚无完整真机剪辑验收。
 
 ## 当前覆盖
 
@@ -60,7 +60,7 @@
 
 ## 现有风险和未覆盖
 
-- 本次序号布局验证限于 Debug Simulator；未更新手机安装，也未生成 Release、Archive 或商店分发构建，不能据此推断已上传候选状态。此前 generic iOS Debug 构建、签名和安装启动的证据日期为 2026-10-23。
+- 本次序号布局已通过 Debug Simulator 回归，并于 2026-10-25 完成开发签名安装启动；尚无完整真机剪辑验收。未生成 Release、Archive 或商店分发构建，不能据此推断已上传候选状态。
 - TestFlight 安装启动仅有 2026-09-29 用户反馈；本次没有真机完整回归或 VoiceOver 人工验收。
 - 2026-09-29 记录的 1.3 Archive 已由 Apple 接收，但其签名、dSYM UUID 和 Validate 日志未独立复核；Release Analytics 生产、真机崩溃符号化及 GlitchTip 告警无新增验收。
 - Watch 真机联机升级流程未执行；自动测试结论不代替它。
@@ -68,7 +68,7 @@
 - SwiftLint 最近记录为 2026-08-18：42 个 violation、其中 5 个 error，均为 type_body_length。本次没有重跑，不能据旧记录断言当前数量。
 - 取景使用 BGRA SDR 渲染；HDR/广色域保真、非方形像素、非零 clean aperture 与任意斜切来源变换未验收。VoiceOver 操作接口已检查，未进行真机朗读验收。
 - 构建仍有既有 Sendable 及 AppIntents 提示；完整测试结果记录真实取消时等待 AVFoundation Utility 线程的 QoS 运行警告，无崩溃或超时。新增布局解码器的隔离警告已修正，最终复测日志无 ConformanceIsolation；不宣称 warning-free，Release 警告未重查。
-- 2026-10-23 main 的 Debug iphoneos 构建报告播放回调 handler 的 Sendable 警告及 AppIntents metadata 提示；这些既有警告未作为本轮修复范围。
+- 2026-10-25 `362d66e` 的 Debug iphoneos 构建仍报告播放回调 handler 的 Sendable 警告及 AppIntents metadata 提示；这些既有警告未作为本轮修复范围。
 
 ## 验证规则
 
