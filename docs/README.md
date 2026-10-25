@@ -26,8 +26,7 @@ ShotMarker 对外网站、支持页和 how-to 由 `zhangrh.shop` 仓库维护，
 ## 正在进行的变更
 
 - [iOS 语音口令打点与技术统计](changes/2026-07-29-ios-voice-command-marking-spec.md)：设计已确认，尚未实现
-- [片段独立序号布局与操作列表](changes/2026-10-25-clip-number-layout-spec.md)：操作列表、互斥模式、连续继承及不同布局分别保留已确认，进入实施
-- [视频编辑后续优化想法](changes/2026-10-23-video-editing-ideas.md)：第一项已进入上述设计；整个视频的训练记录点管理仍仅记录想法，尚未设计或开发
+- [视频编辑后续优化想法](changes/2026-10-23-video-editing-ideas.md)：第一项逐段序号布局已实现并归档；第二项整个视频的训练记录点管理仍待讨论，尚未设计或开发
 
 changes 使用扁平文件：
 
@@ -42,6 +41,7 @@ YYYY-MM-DD-topic-plan.md
 
 archive 保存已经结束的设计、计划、讨论、排查、发布验证和旧文档。它不是当前事实来源。
 
+- 片段独立序号布局与操作列表：[规格](archive/2026-10/2026-10-25-clip-number-layout-spec.md)、[实施计划](archive/2026-10/2026-10-25-clip-number-layout-plan.md)、[验证记录](archive/2026-10/2026-10-25-clip-number-layout-validation.md)。完整 499 项 iPhone 自动测试通过；最终隔离注解与 UI 断言补充后，475 单元 + 2 新增深色 UI 共 477 项通过。实现提交 `38c88c0` 已在主工作区 fast-forward 合入本地 main，未推送。
 - [已保存取景优先验证](archive/2026-10/2026-10-23-framing-priority-validation.md)：保存值优先；无保存值且同源连续确认才继承，手动任一项（含当前项）恢复自己的取景。464 项专项回归通过。
 - 片段编辑精简与有符号范围：[规格](archive/2026-10/2026-10-23-clip-editor-simplify-spec.md)、[实施计划](archive/2026-10/2026-10-23-clip-editor-simplify-plan.md)、[验证记录](archive/2026-10/2026-10-23-clip-editor-simplify-validation.md)。475 项 iPhone 自动测试通过，覆盖负偏移、已确认取景保留及精简后的实际操作。
 - 片段取景与连续审核：[规格](archive/2026-10/2026-10-23-clip-framing-spec.md)、[实施计划](archive/2026-10/2026-10-23-clip-framing-plan.md)、[验证记录](archive/2026-10/2026-10-23-clip-framing-validation.md)。460 项 iPhone 自动测试通过，包含真实取景预览、导出与最大字号回归。
