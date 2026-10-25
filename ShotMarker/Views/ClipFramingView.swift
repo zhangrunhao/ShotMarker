@@ -31,6 +31,7 @@ struct ClipFramingPlaybackView: View {
     let isEnabled: Bool
     let onInteractionBegan: () -> Void
     let onChange: (ClipFraming) -> Void
+    var canvasSize: CGSize? = nil
 
     @GestureState private var isPinchActive = false
     @GestureState private var isDragActive = false
@@ -40,13 +41,17 @@ struct ClipFramingPlaybackView: View {
     var body: some View {
         GeometryReader { proxy in
             let size = sourceSize ?? CGSize(width: 16, height: 9)
-            let fit = ClipFramingGeometry.aspectFitRect(sourceSize: size, in: CGRect(origin: .zero, size: proxy.size))
+            let canvas = ClipFramingGeometry.aspectFitRect(sourceSize: canvasSize ?? size,
+                in: CGRect(origin: .zero, size: proxy.size))
+            let fit = ClipFramingGeometry.aspectFitRect(sourceSize: size, in: canvas)
             ZStack {
                 accessibleBackground
                 ClipFramingViewport(sourceSize: size, framing: framing) {
                     ClipPlayerSurface(player: player)
                         .accessibilityHidden(true)
                 }
+                .frame(width: canvas.width, height: canvas.height)
+                .position(x: canvas.midX, y: canvas.midY)
                 .accessibilityHidden(true)
                 Color.clear
                     .frame(width: fit.width, height: fit.height)
@@ -96,7 +101,7 @@ struct ClipFramingPlaybackView: View {
             .accessibilityLabel("片段播放预览")
             .accessibilityIdentifier("ClipFramingPreview")
             .accessibilityValue(String(format: "%.1f 倍，取景中心横向 %.0f%%，纵向 %.0f%%", framing.scale, framing.centerX * 100, framing.centerY * 100))
-            .accessibilityHint(isEnabled ? "双指缩放、拖动调整取景，也可使用调整和方向操作" : "视频载入后可调整取景")
+            .accessibilityHint(isEnabled ? "双指缩放、拖动调整取景，也可使用调整和方向操作" : "取景操作已关闭或视频尚未载入")
             .accessibilityAdjustableAction { direction in
                 guard isEnabled else { return }
                 let delta = direction == .increment ? 0.1 : -0.1

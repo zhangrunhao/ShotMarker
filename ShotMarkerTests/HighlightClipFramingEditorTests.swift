@@ -13,7 +13,7 @@ final class HighlightClipFramingEditorTests: XCTestCase {
             let first = try XCTUnwrap(vm.makeEditorViewModel(itemID: vm.items[0].id))
             first.setFraming(zoom)
             let navigation = await first.confirm(isIncluded: included)
-            XCTAssertEqual(navigation, .continueReview(itemID: vm.items[1].id, sourceVideoID: "a", framing: zoom))
+            XCTAssertEqual(navigation, .continueReview(itemID: vm.items[1].id, sourceVideoID: "a", framing: zoom, markerLabelPlacement: MarkerLabelPlacement(style: .default)))
             XCTAssertEqual(writes.first?.framing, zoom)
             XCTAssertEqual(writes.first?.isIncluded, included)
             XCTAssertEqual(vm.items[0].framing, zoom)

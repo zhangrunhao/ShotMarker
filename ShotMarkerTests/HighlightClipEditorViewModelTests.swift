@@ -223,6 +223,7 @@ final class HighlightClipEditorViewModelTests: XCTestCase {
         try viewModel.moveRange(by: -1)
         viewModel.setIncluded(false)
         viewModel.restoreDefault()
+        viewModel.setMarkerLabelPlacement(MarkerLabelPlacement(fontSizeRatio: 0.16, normalizedCenterX: 0.8, normalizedCenterY: 0.7))
         viewModel.discardChanges()
         viewModel.reloadSavedItem(makeItem(start: 8, duration: 5))
 
@@ -235,6 +236,7 @@ final class HighlightClipEditorViewModelTests: XCTestCase {
         var confirmedSubmittedItem = submittedItem
         confirmedSubmittedItem.confirmationState = .confirmed
         confirmedSubmittedItem.framing = .original
+        confirmedSubmittedItem.markerLabelPlacement = MarkerLabelPlacement(style: .default)
         XCTAssertEqual(viewModel.workingItem, confirmedSubmittedItem)
         XCTAssertEqual(viewModel.displayedConfirmationState, .confirmed)
         XCTAssertFalse(viewModel.hasChanges)

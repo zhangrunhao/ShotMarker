@@ -12,6 +12,8 @@ struct HighlightClipEditorView: View {
     @ObservedObject var reviewViewModel: HighlightClipReviewViewModel
     @ObservedObject var editorViewModel: HighlightClipEditorViewModel
     @ObservedObject var playbackController: HighlightClipPlaybackController
+    @ObservedObject var operations: ClipEditorOperations
+    @StateObject private var outputCanvas: ClipOutputCanvas
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -33,6 +35,7 @@ struct HighlightClipEditorView: View {
         reviewViewModel: HighlightClipReviewViewModel,
         editorViewModel: HighlightClipEditorViewModel,
         playbackController: HighlightClipPlaybackController,
+        operations: ClipEditorOperations? = nil,
         loadsMedia: Bool = true,
         onRequestVideoReselection: @escaping () -> Void = {},
         onConfirmationNavigation:
@@ -41,6 +44,8 @@ struct HighlightClipEditorView: View {
         self.reviewViewModel = reviewViewModel
         self.editorViewModel = editorViewModel
         self.playbackController = playbackController
+        self.operations = operations ?? ClipEditorOperations()
+        _outputCanvas = StateObject(wrappedValue: ClipOutputCanvas(provider: reviewViewModel.mediaProvider))
         self.loadsMedia = loadsMedia
         self.onRequestVideoReselection = onRequestVideoReselection
         self.onConfirmationNavigation = onConfirmationNavigation
@@ -56,6 +61,7 @@ struct HighlightClipEditorView: View {
             VStack(spacing: 14) {
                 confirmationStatus
                 playbackArea(item: item)
+                if operations.mode == .number { numberControls }
                 framingControls
                 timeReadout(item: item)
                 timeline(item: item)
@@ -72,6 +78,10 @@ struct HighlightClipEditorView: View {
                 return
             }
             await loadPlayback(video: video, range: item.range)
+        }
+        .task(id: "\(canvasVideo.id):\(playbackLoadAttempt)") {
+            guard loadsMedia else { return }
+            await outputCanvas.load(video: canvasVideo)
         }
         .task(id: window) {
             guard loadsMedia else {
@@ -108,7 +118,7 @@ struct HighlightClipEditorView: View {
                 performPendingExit()
             }
         } message: {
-            Text("未确认的范围、取景与保留状态更改不会保存。")
+            Text("未确认的范围、取景、序号布局与保留状态更改不会保存。")
         }
         .onChange(of: playbackController.loadError) { _, error in
             if error == .sourceUnavailable {
@@ -129,7 +139,29 @@ struct HighlightClipEditorView: View {
     }
 
     private var context: HighlightClipReviewContext {
-        HighlightClipReviewContext(items: reviewViewModel.items, workingItem: item, videos: reviewViewModel.videos)
+        HighlightClipReviewContext(items: reviewViewModel.items, workingItem: item, videos: reviewViewModel.videos,
+            markerLabelStyle: reviewViewModel.markerLabelStyle)
+    }
+
+    private var workingSummary: HighlightClipReviewSummary? {
+        let items = reviewViewModel.items.map { $0.id == item.id ? item : $0 }
+        return try? HighlightClipReviewPlanner.makeSummary(items: items, videos: reviewViewModel.videos,
+            markerLabelStyle: reviewViewModel.markerLabelStyle)
+    }
+
+    private var canvasVideo: SelectedTrainingVideo {
+        let sourceID = workingSummary?.finalSegments.first?.videoID
+        return reviewViewModel.videos.first { $0.id == sourceID } ?? video
+    }
+
+    private var numberText: String {
+        guard item.isIncluded, let markerID = item.markerReferences.first?.id,
+              let segment = workingSummary?.finalSegments.first(where: { $0.markerIDs.contains(markerID) })
+        else { return "序号" }
+        let range = segment.markerNumberLowerBound == segment.markerNumberUpperBound
+            ? "\(segment.markerNumberLowerBound)"
+            : "\(segment.markerNumberLowerBound)-\(segment.markerNumberUpperBound)"
+        return "\(range)/\(segment.markerTotalCount)"
     }
 
     private var isBusy: Bool {
@@ -250,6 +282,7 @@ struct HighlightClipEditorView: View {
         hasReleasedMedia = true
         reviewViewModel.cancelFilmstripLoading(itemID: item.id)
         playbackController.reset()
+        outputCanvas.reset()
     }
 
     private func playbackArea(item: HighlightClipReviewItem) -> some View {
@@ -260,7 +293,17 @@ struct HighlightClipEditorView: View {
                 framing: editorViewModel.effectiveFraming,
                 isEnabled: canAdjustFraming,
                 onInteractionBegan: playbackController.pause,
-                onChange: editorViewModel.setFraming)
+                onChange: editorViewModel.setFraming,
+                canvasSize: outputCanvas.size)
+
+            if let size = outputCanvas.size, playbackController.uprightVideoSize != nil,
+               !playbackController.isLoading, playbackController.loadError == nil {
+                ClipMarkerLabelOverlay(text: numberText, canvasSize: size,
+                    style: editorViewModel.effectiveMarkerLabelPlacement.applying(to: reviewViewModel.markerLabelStyle),
+                    isEditing: operations.mode == .number && canAdjustSpace,
+                    onInteractionBegan: playbackController.pause,
+                    onChange: editorViewModel.setMarkerLabelPlacement)
+            }
 
             if playbackController.isLoading {
                 ProgressView("正在载入视频…")
@@ -270,6 +313,16 @@ struct HighlightClipEditorView: View {
                     .background(.black.opacity(0.68), in: RoundedRectangle(cornerRadius: 10))
             } else if let loadError = playbackController.loadError {
                 playbackErrorOverlay(loadError, item: item)
+            } else if outputCanvas.failed || playbackController.isSourceSizeUnavailable {
+                VStack(spacing: 8) {
+                    Text(playbackController.isSourceSizeUnavailable ? "暂时无法读取视频尺寸，取景与序号调整不可用" : "暂时无法载入成片画布")
+                        .multilineTextAlignment(.center)
+                    Button("重试") { playbackLoadAttempt += 1 }.buttonStyle(.borderedProminent)
+                }
+                .font(.footnote)
+                .foregroundStyle(.white)
+                .padding()
+                .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 8))
             }
         }
         .aspectRatio(16 / 9, contentMode: .fit)
@@ -357,7 +410,11 @@ struct HighlightClipEditorView: View {
     }
 
     private var canAdjustFraming: Bool {
-        playbackController.uprightVideoSize != nil && !playbackController.isLoading
+        canAdjustSpace && operations.mode == .framing
+    }
+
+    private var canAdjustSpace: Bool {
+        outputCanvas.size != nil && playbackController.uprightVideoSize != nil && !playbackController.isLoading
             && playbackController.loadError == nil && !isBusy
     }
 
@@ -367,40 +424,103 @@ struct HighlightClipEditorView: View {
                 ? AnyLayout(VStackLayout(spacing: 8))
                 : AnyLayout(HStackLayout(spacing: 12))
             layout {
-                HStack(spacing: 16) {
-                    Button { changeScale(by: -0.1) } label: {
-                        Image(systemName: "minus.magnifyingglass").frame(minWidth: 44, minHeight: 44)
-                    }
-                    .accessibilityLabel("缩小取景")
-                    .accessibilityIdentifier("ClipFramingDecrease")
-                    .disabled(editorViewModel.effectiveFraming.scale <= 1)
-                    Text(String(format: "%.1f×", editorViewModel.effectiveFraming.scale))
-                        .font(.body.monospacedDigit())
-                        .accessibilityLabel("取景倍率")
-                        .accessibilityValue(String(format: "%.1f 倍", editorViewModel.effectiveFraming.scale))
-                        .accessibilityIdentifier("ClipFramingScale")
-                        .accessibilityAdjustableAction { direction in
-                            guard canAdjustFraming else { return }
-                            changeScale(by: direction == .increment ? 0.1 : -0.1)
-                        }
-                    Button { changeScale(by: 0.1) } label: {
-                        Image(systemName: "plus.magnifyingglass").frame(minWidth: 44, minHeight: 44)
-                    }
-                    .accessibilityLabel("放大取景")
-                    .accessibilityIdentifier("ClipFramingIncrease")
-                    .disabled(editorViewModel.effectiveFraming.scale >= 4)
-                }
+                framingScaleControls
                 Button {
-                    playbackController.pause()
-                    editorViewModel.restoreOriginalFraming()
+                    operations.isExpanded.toggle()
                 } label: {
-                    Text("恢复原画面").frame(minHeight: 44)
+                    Label("操作 · \(operations.mode.title)", systemImage: operations.isExpanded ? "chevron.up" : "chevron.down")
+                        .frame(minHeight: 44)
                 }
-                .accessibilityIdentifier("ClipFramingRestore")
-                .disabled(editorViewModel.effectiveFraming == .original)
+                .accessibilityLabel(operations.isExpanded ? "收起操作列表" : "展开操作列表")
+                .accessibilityValue(operations.mode.title)
+                .accessibilityIdentifier("ClipOperationsToggle")
             }
-            .tint(Color(uiColor: .label).opacity(0.8))
-            .disabled(!canAdjustFraming)
+            if operations.isExpanded {
+                let buttons = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(spacing: 8))
+                    : AnyLayout(HStackLayout(spacing: 8))
+                buttons {
+                    Button {
+                        playbackController.pause()
+                        operations.toggleFraming()
+                    } label: {
+                        Text(operations.mode == .framing ? "关闭取景" : "开启取景").frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("ClipFramingToggle")
+                    Button {
+                        guard canAdjustFraming else { return }
+                        playbackController.pause()
+                        editorViewModel.restoreOriginalFraming()
+                    } label: {
+                        Text("恢复原画面").frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("ClipFramingRestore")
+                    .disabled(!canAdjustFraming || editorViewModel.effectiveFraming == .original)
+                    Button {
+                        playbackController.pause()
+                        operations.toggleNumber()
+                    } label: {
+                        Text(operations.mode == .number ? "关闭序号" : "开启序号").frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("ClipNumberToggle")
+                }
+                .buttonStyle(.bordered)
+                .font(.subheadline)
+            }
+        }
+        .tint(Color(uiColor: .label).opacity(0.8))
+    }
+
+    private var framingScaleControls: some View {
+        HStack(spacing: 16) {
+            Button { changeScale(by: -0.1) } label: {
+                Image(systemName: "minus.magnifyingglass").frame(minWidth: 44, minHeight: 44)
+            }
+            .accessibilityLabel("缩小取景")
+            .accessibilityIdentifier("ClipFramingDecrease")
+            .disabled(editorViewModel.effectiveFraming.scale <= 1)
+            Text(String(format: "%.1f×", editorViewModel.effectiveFraming.scale))
+                .font(.body.monospacedDigit())
+                .accessibilityLabel("取景倍率")
+                .accessibilityValue(String(format: "%.1f 倍", editorViewModel.effectiveFraming.scale))
+                .accessibilityIdentifier("ClipFramingScale")
+                .accessibilityAdjustableAction { direction in
+                    guard canAdjustFraming else { return }
+                    changeScale(by: direction == .increment ? 0.1 : -0.1)
+                }
+            Button { changeScale(by: 0.1) } label: {
+                Image(systemName: "plus.magnifyingglass").frame(minWidth: 44, minHeight: 44)
+            }
+            .accessibilityLabel("放大取景")
+            .accessibilityIdentifier("ClipFramingIncrease")
+            .disabled(editorViewModel.effectiveFraming.scale >= 4)
+        }
+        .disabled(!canAdjustFraming)
+    }
+
+    private var numberControls: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("序号字体大小")
+                Spacer()
+                Text(String(format: "%.0f%%", editorViewModel.effectiveMarkerLabelPlacement.fontSizeRatio * 100))
+                    .monospacedDigit()
+            }
+            .font(.subheadline)
+            Slider(value: Binding(get: { editorViewModel.effectiveMarkerLabelPlacement.fontSizeRatio }, set: { value in
+                guard canAdjustSpace else { return }
+                playbackController.pause()
+                let placement = editorViewModel.effectiveMarkerLabelPlacement
+                editorViewModel.setMarkerLabelPlacement(MarkerLabelPlacement(fontSizeRatio: value,
+                    normalizedCenterX: placement.normalizedCenterX, normalizedCenterY: placement.normalizedCenterY))
+            }), in: MarkerLabelStyle.fontSizeRatioRange, step: 0.01)
+            .accessibilityLabel("序号字体大小")
+            .accessibilityValue(String(format: "%.0f%%", editorViewModel.effectiveMarkerLabelPlacement.fontSizeRatio * 100))
+            .accessibilityIdentifier("ClipNumberSize")
+            .disabled(!canAdjustSpace)
+            if !item.isIncluded {
+                Text("已排除 · 序号仅供调整预览").font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -444,7 +564,8 @@ struct HighlightClipEditorView: View {
         }
         let effect = relationship.willMerge ? "，生成时合并"
             : (relationship.hasDifferentFraming ? "，取景不同，分别保留"
-                : (!relationship.isIncluded ? "，已排除" : ""))
+                : (relationship.hasDifferentMarkerLabelPlacement ? "，序号布局不同，分别保留"
+                    : (!relationship.isIncluded ? "，已排除" : "")))
         return "\(prefix)：\(detail)\(effect)"
     }
 

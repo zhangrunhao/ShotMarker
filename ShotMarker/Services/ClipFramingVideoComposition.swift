@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreImage
+import CoreGraphics
 
 /// Immutable source geometry and output timing captured while assembling the movie.
 struct ClipFramingVideoSegment {
@@ -8,6 +9,17 @@ struct ClipFramingVideoSegment {
     let preferredTransform: CGAffineTransform
     let framing: ClipFraming
     let label: String
+    let markerLabelPlacement: MarkerLabelPlacement?
+
+    init(timeRange: CMTimeRange, naturalSize: CGSize, preferredTransform: CGAffineTransform,
+         framing: ClipFraming, label: String, markerLabelPlacement: MarkerLabelPlacement? = nil) {
+        self.timeRange = timeRange
+        self.naturalSize = naturalSize
+        self.preferredTransform = preferredTransform
+        self.framing = framing
+        self.label = label
+        self.markerLabelPlacement = markerLabelPlacement
+    }
 
     var uprightBounds: CGRect {
         ClipFramingGeometry.uprightBounds(naturalSize: naturalSize, preferredTransform: preferredTransform)
@@ -26,16 +38,7 @@ enum ClipFramingVideoComposition {
         guard canvas.width.isFinite, canvas.height.isFinite, canvas.width > 0, canvas.height > 0 else {
             throw VideoClipEditingError.missingVideoTrack
         }
-        let metrics = try HighlightClipMarkerLabelOverlayMetrics.make(renderSize: canvas.size, style: style)
-        let images: [String: CIImage]
-        if style.textOpacity > 0 || style.backgroundOpacity > 0 {
-            images = Dictionary(uniqueKeysWithValues: Set(segments.map(\.label)).compactMap { label in
-                VideoClipEditingService.makeMarkerLabelOverlayImage(text: label, metrics: metrics)
-                    .map { (label, CIImage(cgImage: $0)) }
-            })
-        } else {
-            images = [:]
-        }
+        var images: [MarkerLabelImageKey: CGImage] = [:]
         var configuration = try await AVVideoComposition.Configuration(for: asset)
         configuration.renderSize = canvas.size
         configuration.renderScale = 1
@@ -59,10 +62,24 @@ enum ClipFramingVideoComposition {
             let rawCrop = crop.applying(upright.inverted())
             let flipSource = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: segment.naturalSize.height)
             let flipCanvas = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: canvas.height)
-            let image = images[segment.label]
-            let labelOrigin = image.map {
-                VideoClipEditingService.markerLabelCoreImageOrigin(style: style, overlaySize: $0.extent.size, imageExtent: canvas)
-            } ?? .zero
+            let segmentStyle = (segment.markerLabelPlacement?.applying(to: style) ?? style).normalized
+            let image: CIImage?
+            let labelOrigin: CGPoint
+            if segmentStyle.textOpacity > 0 || segmentStyle.backgroundOpacity > 0 {
+                let key = MarkerLabelImageKey(text: segment.label, canvasSize: canvas.size, style: segmentStyle)
+                let render: MarkerLabelRender
+                if let cached = images[key] {
+                    render = MarkerLabelRendering.layout(image: cached, canvasSize: canvas.size, style: segmentStyle)
+                } else {
+                    render = try MarkerLabelRendering.make(text: segment.label, canvasSize: canvas.size, style: segmentStyle)
+                    images[key] = render.image
+                }
+                image = CIImage(cgImage: render.image)
+                labelOrigin = render.coreImageOrigin
+            } else {
+                image = nil
+                labelOrigin = .zero
+            }
             return ClipFramingVideoInstruction(
                 timeRange: segment.timeRange,
                 trackID: track.trackID,
@@ -73,6 +90,25 @@ enum ClipFramingVideoComposition {
             )
         }
         return AVVideoComposition(configuration: configuration)
+    }
+}
+
+/// Position changes reuse pixels; every property affecting those pixels belongs in the key.
+nonisolated private struct MarkerLabelImageKey: Hashable {
+    let text: String
+    let canvasWidth: CGFloat
+    let canvasHeight: CGFloat
+    let fontSizeRatio: Double
+    let textOpacity: Double
+    let backgroundOpacity: Double
+
+    init(text: String, canvasSize: CGSize, style: MarkerLabelStyle) {
+        self.text = text
+        canvasWidth = canvasSize.width
+        canvasHeight = canvasSize.height
+        fontSizeRatio = style.fontSizeRatio
+        textOpacity = style.textOpacity
+        backgroundOpacity = style.backgroundOpacity
     }
 }
 

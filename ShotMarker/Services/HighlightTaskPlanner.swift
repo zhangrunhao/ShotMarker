@@ -72,7 +72,7 @@ enum HighlightTaskPlanner {
             kept.append(PersistedHighlightTaskClip(id: confirmation.id, videoID: video.id,
                 markerIDs: confirmation.markerIDs, defaultStart: start, defaultDuration: duration,
                 start: confirmation.start, duration: confirmation.duration, isIncluded: confirmation.isIncluded,
-                confirmationState: .confirmed, framing: confirmation.framing))
+                confirmationState: .confirmed, framing: confirmation.framing, markerLabelPlacement: confirmation.markerLabelPlacement))
             occupied.formUnion(group)
         }
 
@@ -111,7 +111,7 @@ enum HighlightTaskPlanner {
                     return HighlightClipMarkerReference(id: id, markedAt: marker.markedAt,
                         timeInVideo: marker.markedAt.timeIntervalSince(video.recordedStartAt), originalMatchedNumber: number)
                 }, defaultStart: item.defaultStart, defaultDuration: item.defaultDuration,
-                start: item.start, duration: item.duration, isIncluded: item.isIncluded, confirmationState: item.confirmationState, framing: item.framing)
+                start: item.start, duration: item.duration, isIncluded: item.isIncluded, confirmationState: item.confirmationState, framing: item.framing, markerLabelPlacement: item.markerLabelPlacement)
         }
         return HighlightClipReviewDraft(selectedVideoCount: task.videos.count,
             totalMarkerCount: task.trainingSnapshot.markers.count, items: items)
@@ -120,7 +120,7 @@ enum HighlightTaskPlanner {
     static func execution(for task: HighlightTask, now: Date = Date()) throws -> HighlightRenderExecution {
         let draft = try reviewDraft(for: task)
         let videos = task.videos.map(\.selectedTrainingVideo)
-        let summary = try HighlightClipReviewPlanner.makeSummary(items: draft.items, videos: videos)
+        let summary = try HighlightClipReviewPlanner.makeSummary(items: draft.items, videos: videos, markerLabelStyle: task.clipSettings.markerLabelStyle)
         let segments = try HighlightClipReviewPlanner.validateConfirmedSegments(summary.finalSegments,
             videos: videos, validMarkerIDs: Set(task.trainingSnapshot.markers.map(\.id)))
         return HighlightRenderExecution(id: UUID(), configurationRevision: task.configurationRevision,
@@ -132,7 +132,7 @@ enum HighlightTaskPlanner {
         guard let videoID = UUID(uuidString: item.videoID) else { throw HighlightTaskError.invalidTask }
         return PersistedHighlightTaskClip(id: item.id, videoID: videoID, markerIDs: item.markerReferences.map(\.id),
             defaultStart: item.defaultStart, defaultDuration: item.defaultDuration, start: item.start,
-            duration: item.duration, isIncluded: item.isIncluded, confirmationState: item.confirmationState, framing: item.framing)
+            duration: item.duration, isIncluded: item.isIncluded, confirmationState: item.confirmationState, framing: item.framing, markerLabelPlacement: item.markerLabelPlacement)
     }
 
     private static func defaultItems(snapshot: HighlightTaskTrainingSnapshot, videos: [HighlightTaskVideo],

@@ -124,6 +124,9 @@ final class HighlightClipConfirmationUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["片段 2 / 3"].waitForExistence(timeout: 3))
         selectClip(1)
         XCTAssertTrue(app.navigationBars["片段 1 / 3"].waitForExistence(timeout: 3))
+        let operations = app.buttons["ClipOperationsToggle"]
+        revealContentElement(operations)
+        operations.tap()
         let restore = app.buttons["ClipFramingRestore"]
         revealContentElement(restore)
         XCTAssertTrue(restore.isHittable)
@@ -132,6 +135,19 @@ final class HighlightClipConfirmationUITests: XCTestCase {
         screenshot.name = "maximum-dynamic-type-framing-controls"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        let number = app.buttons["ClipNumberToggle"]
+        revealContentElement(number)
+        XCTAssertGreaterThanOrEqual(number.frame.height, 44)
+        number.tap()
+        let size = app.sliders["ClipNumberSize"]
+        revealContentElement(size)
+        XCTAssertTrue(size.isHittable)
+        size.adjust(toNormalizedSliderPosition: 1)
+        XCTAssertEqual(size.value as? String, "16%")
+        let numberScreenshot = XCTAttachment(screenshot: app.screenshot())
+        numberScreenshot.name = "maximum-dynamic-type-number-controls"
+        numberScreenshot.lifetime = .keepAlways
+        add(numberScreenshot)
     }
 
     private var contentBottom: CGFloat {

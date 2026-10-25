@@ -36,6 +36,7 @@ struct HighlightClipSegment: Equatable {
     let markerNumberRange: ClosedRange<Int>
     let markerTotalCount: Int
     let framing: ClipFraming
+    let markerLabelPlacement: MarkerLabelPlacement?
 
     init(
         markerIDs: [UUID],
@@ -45,6 +46,7 @@ struct HighlightClipSegment: Equatable {
         markerNumber: Int = 1,
         markerTotalCount: Int = 1,
         framing: ClipFraming = .original,
+        markerLabelPlacement: MarkerLabelPlacement? = nil,
     ) {
         self.init(
             markerIDs: markerIDs,
@@ -54,6 +56,7 @@ struct HighlightClipSegment: Equatable {
             markerNumberRange: markerNumber...markerNumber,
             markerTotalCount: markerTotalCount,
             framing: framing,
+            markerLabelPlacement: markerLabelPlacement,
         )
     }
 
@@ -65,6 +68,7 @@ struct HighlightClipSegment: Equatable {
         markerNumberRange: ClosedRange<Int>,
         markerTotalCount: Int,
         framing: ClipFraming = .original,
+        markerLabelPlacement: MarkerLabelPlacement? = nil,
     ) {
         self.markerIDs = markerIDs
         self.videoID = videoID
@@ -73,6 +77,7 @@ struct HighlightClipSegment: Equatable {
         self.markerNumberRange = markerNumberRange
         self.markerTotalCount = markerTotalCount
         self.framing = framing
+        self.markerLabelPlacement = markerLabelPlacement
     }
 
     var coveredMarkerCount: Int {
@@ -191,6 +196,7 @@ enum VideoClipSegmentPlanner {
             guard let previousSegment = mergedSegments.last,
                   previousSegment.videoID == segment.videoID,
                   previousSegment.framing == segment.framing,
+                  previousSegment.markerLabelPlacement == segment.markerLabelPlacement,
                   segment.start <= previousSegment.end + segmentMergeGapTolerance
             else {
                 mergedSegments.append(segment)
@@ -245,6 +251,7 @@ private extension HighlightClipSegment {
             markerNumber: markerNumber,
             markerTotalCount: markerTotalCount,
             framing: framing,
+            markerLabelPlacement: markerLabelPlacement,
         )
     }
 
@@ -262,6 +269,7 @@ private extension HighlightClipSegment {
             markerNumberRange: mergedNumberRange,
             markerTotalCount: markerTotalCount,
             framing: framing,
+            markerLabelPlacement: markerLabelPlacement,
         )
     }
 }

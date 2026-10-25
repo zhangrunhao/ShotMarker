@@ -3,7 +3,7 @@ import Foundation
 nonisolated struct HighlightTaskStoreDocument: Codable, Equatable, Sendable {
     let schemaVersion: Int
     var tasks: [HighlightTask]
-    static let empty = Self(schemaVersion: 3, tasks: [])
+    static let empty = Self(schemaVersion: 4, tasks: [])
 }
 
 nonisolated struct HighlightTask: Identifiable, Codable, Equatable, Sendable {
@@ -56,6 +56,7 @@ nonisolated struct PersistedHighlightTaskClip: Identifiable, Codable, Equatable,
     var isIncluded: Bool
     var confirmationState: HighlightClipConfirmationState
     var framing: ClipFraming? = nil
+    var markerLabelPlacement: MarkerLabelPlacement? = nil
 }
 
 nonisolated struct HighlightRenderSnapshot: Codable, Equatable, Sendable {
@@ -136,5 +137,29 @@ nonisolated enum HighlightTaskError: LocalizedError, Equatable {
         case .mustReview: "任务已有修改，请进入审核后再生成。"
         case .background: "请返回前台后再生成视频。"
         }
+    }
+}
+
+// Missing layout is legacy/default; explicit null is corrupt rather than a fallback.
+extension PersistedHighlightTaskClip {
+    nonisolated private enum CodingKeys: String, CodingKey {
+        case id, videoID, markerIDs, defaultStart, defaultDuration, start, duration
+        case isIncluded, confirmationState, framing, markerLabelPlacement
+    }
+
+    nonisolated init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        videoID = try values.decode(UUID.self, forKey: .videoID)
+        markerIDs = try values.decode([UUID].self, forKey: .markerIDs)
+        defaultStart = try values.decode(TimeInterval.self, forKey: .defaultStart)
+        defaultDuration = try values.decode(TimeInterval.self, forKey: .defaultDuration)
+        start = try values.decode(TimeInterval.self, forKey: .start)
+        duration = try values.decode(TimeInterval.self, forKey: .duration)
+        isIncluded = try values.decode(Bool.self, forKey: .isIncluded)
+        confirmationState = try values.decode(HighlightClipConfirmationState.self, forKey: .confirmationState)
+        framing = try values.decodeIfPresent(ClipFraming.self, forKey: .framing)
+        markerLabelPlacement = try values.contains(.markerLabelPlacement)
+            ? values.decode(MarkerLabelPlacement.self, forKey: .markerLabelPlacement) : nil
     }
 }

@@ -40,7 +40,7 @@ final class HighlightTaskReviewTests: XCTestCase {
         XCTAssertTrue(session.viewModel.items[0].isIncluded)
         let navigation = await editor.confirm()
         XCTAssertEqual(navigation, .continueReview(itemID: task.reviewItems[1].id,
-            sourceVideoID: session.viewModel.items[0].videoID, framing: .original))
+            sourceVideoID: session.viewModel.items[0].videoID, framing: .original, markerLabelPlacement: MarkerLabelPlacement(style: .default)))
         XCTAssertEqual(fixture.manager.task(task.id)?.configurationRevision, 2)
         XCTAssertFalse(session.viewModel.items[0].isIncluded)
         let loaded = try await fixture.storeFixture.store.load()

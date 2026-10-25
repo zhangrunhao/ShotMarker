@@ -20,6 +20,7 @@ struct HighlightClipNeighborRelationship: Equatable, Identifiable {
     let separation: Separation
     let willMerge: Bool
     let hasDifferentFraming: Bool
+    let hasDifferentMarkerLabelPlacement: Bool
 
     var id: UUID {
         itemID
@@ -41,6 +42,7 @@ struct HighlightClipReviewContext {
         items: [HighlightClipReviewItem],
         workingItem: HighlightClipReviewItem,
         videos: [SelectedTrainingVideo],
+        markerLabelStyle: MarkerLabelStyle = .default,
     ) {
         candidateCount = items.count
         guard let index = items.firstIndex(where: { $0.id == workingItem.id }) else {
@@ -57,7 +59,7 @@ struct HighlightClipReviewContext {
 
         var workingItems = items
         workingItems[index] = workingItem
-        let summary = try? HighlightClipReviewPlanner.makeSummary(items: workingItems, videos: videos)
+        let summary = try? HighlightClipReviewPlanner.makeSummary(items: workingItems, videos: videos, markerLabelStyle: markerLabelStyle)
         let currentSegment = workingItem.markerReferences.first.flatMap { marker in
             summary?.finalSegments.first { $0.markerIDs.contains(marker.id) }
         }
@@ -99,6 +101,10 @@ struct HighlightClipReviewContext {
                 hasDifferentFraming: workingItem.isIncluded && neighbor.isIncluded
                     && workingItem.videoID == neighbor.videoID
                     && (workingItem.framing ?? .original).normalized != (neighbor.framing ?? .original).normalized,
+                hasDifferentMarkerLabelPlacement: workingItem.isIncluded && neighbor.isIncluded
+                    && workingItem.videoID == neighbor.videoID
+                    && (workingItem.markerLabelPlacement ?? MarkerLabelPlacement(style: markerLabelStyle.normalized))
+                        != (neighbor.markerLabelPlacement ?? MarkerLabelPlacement(style: markerLabelStyle.normalized)),
             )
         }
     }

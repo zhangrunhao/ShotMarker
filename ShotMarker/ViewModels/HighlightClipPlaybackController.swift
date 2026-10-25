@@ -112,6 +112,10 @@ final class HighlightClipPlaybackController: ObservableObject {
     private var hasLoadedItem = false
     private var loadGeneration = 0
 
+    var isSourceSizeUnavailable: Bool {
+        hasLoadedItem && !isLoading && loadError == nil && uprightVideoSize == nil
+    }
+
     init(
         engine: HighlightClipPlaybackEngine,
         loadAsset: @escaping LoadAsset,
@@ -366,7 +370,7 @@ final class HighlightClipPlaybackController: ObservableObject {
         errorMessage = error.errorDescription
     }
 
-    private static func loadSourceSize(_ asset: AVAsset) async throws -> CGSize {
+    static func loadSourceSize(_ asset: AVAsset) async throws -> CGSize {
         guard let track = try await asset.loadTracks(withMediaType: .video).first else {
             throw HighlightClipReviewMediaError.assetLoadFailed
         }

@@ -42,6 +42,7 @@ struct HighlightClipAssetRequest: Equatable {
 }
 
 nonisolated struct HighlightClipMarkerLabelOverlayMetrics: Equatable {
+    let renderSize: CGSize
     let fontSize: CGFloat
     let textOpacity: CGFloat
     let backgroundOpacity: CGFloat
@@ -65,6 +66,7 @@ nonisolated struct HighlightClipMarkerLabelOverlayMetrics: Equatable {
         let fontSize = min(renderSize.width, renderSize.height)
             * CGFloat(normalized.fontSizeRatio)
         return HighlightClipMarkerLabelOverlayMetrics(
+            renderSize: renderSize,
             fontSize: fontSize,
             textOpacity: CGFloat(normalized.textOpacity),
             backgroundOpacity: CGFloat(normalized.backgroundOpacity),
@@ -305,7 +307,8 @@ struct VideoClipEditingService {
                 naturalSize: source.naturalSize,
                 preferredTransform: source.preferredTransform,
                 framing: segment.framing,
-                label: segment.markerLabel
+                label: segment.markerLabel,
+                markerLabelPlacement: segment.markerLabelPlacement
             ))
 
             insertionTime = CMTimeAdd(insertionTime, segmentDuration)
@@ -532,15 +535,25 @@ struct VideoClipEditingService {
                 .paragraphStyle: paragraphStyle,
             ]
             let textSize = text.size(withAttributes: attributes)
-            let imageSize = CGSize(
+            let unscaledSize = CGSize(
                 width: ceil(textSize.width + metrics.horizontalPadding * 2),
                 height: ceil(textSize.height + metrics.verticalPadding * 2),
             )
+            let fitScale = min(1, metrics.renderSize.width / unscaledSize.width,
+                               metrics.renderSize.height / unscaledSize.height)
+            let imageSize = CGSize(
+                width: min(ceil(unscaledSize.width * fitScale), max(1, floor(metrics.renderSize.width))),
+                height: min(ceil(unscaledSize.height * fitScale), max(1, floor(metrics.renderSize.height))),
+            )
+            let drawingScale = min(imageSize.width / unscaledSize.width, imageSize.height / unscaledSize.height)
             let format = UIGraphicsImageRendererFormat()
             format.opaque = false
             format.scale = 1
-            let image = UIGraphicsImageRenderer(size: imageSize, format: format).image { _ in
-                let bounds = CGRect(origin: .zero, size: imageSize)
+            let image = UIGraphicsImageRenderer(size: imageSize, format: format).image { context in
+                context.cgContext.translateBy(x: (imageSize.width - unscaledSize.width * drawingScale) / 2,
+                                              y: (imageSize.height - unscaledSize.height * drawingScale) / 2)
+                context.cgContext.scaleBy(x: drawingScale, y: drawingScale)
+                let bounds = CGRect(origin: .zero, size: unscaledSize)
                 UIColor.black.withAlphaComponent(metrics.backgroundOpacity).setFill()
                 UIBezierPath(roundedRect: bounds, cornerRadius: metrics.cornerRadius).fill()
 

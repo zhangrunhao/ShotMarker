@@ -1,5 +1,6 @@
 @testable import ShotMarker
 import XCTest
+import UIKit
 
 final class MarkerLabelLayoutTests: XCTestCase {
     private let frame = CGRect(x: 0, y: 0, width: 200, height: 100)
@@ -123,5 +124,41 @@ final class MarkerLabelLayoutTests: XCTestCase {
 
         XCTAssertEqual(result.x, 50, accuracy: 0.0001)
         XCTAssertEqual(result.y, 90, accuracy: 0.0001)
+    }
+
+    func testLongMarkerLabelFitsEntireCanvasByUniformScaling() throws {
+        let text = "1234567890-2147483647/2147483647"
+        var style = MarkerLabelStyle.default
+        style.fontSizeRatio = 0.16
+        let image = try XCTUnwrap(VideoClipEditingService.makeMarkerLabelOverlayImage(
+            text: text,
+            metrics: HighlightClipMarkerLabelOverlayMetrics.make(
+                renderSize: CGSize(width: 180, height: 320), style: style
+            )
+        ))
+        XCTAssertLessThanOrEqual(image.width, 180, "The entire label must fit a narrow canvas")
+        XCTAssertLessThanOrEqual(image.height, 320)
+        let fontSize: CGFloat = 180 * 0.16
+        let measured = text.size(withAttributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .black)])
+        let expectedAspect = ceil(measured.width + fontSize * 1.1) / ceil(measured.height + fontSize * 0.56)
+        XCTAssertEqual(CGFloat(image.width) / CGFloat(image.height), expectedAspect, accuracy: 0.6,
+                       "Fit must scale the whole label instead of cropping or wrapping the number")
+    }
+
+    func testSharedRenderingReturnsExactImageBoundsForTransparentEditorOutline() throws {
+        var style = MarkerLabelStyle.default
+        style.textOpacity = 0
+        style.backgroundOpacity = 0
+        style.normalizedCenterX = 1
+        style.normalizedCenterY = 0
+        let render = try MarkerLabelRendering.make(text: "1/8", canvasSize: CGSize(width: 320, height: 180), style: style)
+        XCTAssertGreaterThan(render.size.width, 1)
+        XCTAssertEqual(render.size, CGSize(width: render.image.width, height: render.image.height))
+        XCTAssertEqual(render.frame.maxX, 320)
+        XCTAssertEqual(render.frame.minY, 0)
+        XCTAssertEqual(render.coreImageOrigin.x, render.frame.minX)
+        XCTAssertEqual(render.coreImageOrigin.y, 180 - render.frame.height)
+        let bytes = try XCTUnwrap(render.image.dataProvider?.data) as Data
+        XCTAssertTrue(bytes.allSatisfy { $0 == 0 }, "Editing geometry must not change task opacity")
     }
 }

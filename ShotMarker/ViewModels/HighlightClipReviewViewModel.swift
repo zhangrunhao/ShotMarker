@@ -40,6 +40,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
 
     let mediaProvider: HighlightClipReviewMediaProvider
     private(set) var videos: [SelectedTrainingVideo]
+    let markerLabelStyle: MarkerLabelStyle
 
     private let combinationKey: HighlightClipReviewCombinationKey?
     private let reviewStore: (any HighlightClipReviewStoring)?
@@ -71,6 +72,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
     ) {
         items = draft.items
         self.videos = videos
+        markerLabelStyle = clipSettings.markerLabelStyle.normalized
         self.combinationKey = combinationKey
         self.reviewStore = reviewStore
         self.persistConfirmation = persistConfirmation
@@ -188,7 +190,8 @@ final class HighlightClipReviewViewModel: ObservableObject {
         )
     }
 
-    func makeEditorViewModel(itemID: UUID, inheritedFraming: ClipFraming? = nil) -> HighlightClipEditorViewModel? {
+    func makeEditorViewModel(itemID: UUID, inheritedFraming: ClipFraming? = nil,
+        inheritedMarkerLabelPlacement: MarkerLabelPlacement? = nil) -> HighlightClipEditorViewModel? {
         guard !isSavingDecision, !isUndoingDecision, !isSubmitting,
               let item = items.first(where: { $0.id == itemID }),
               let video = videos.first(where: { $0.id == item.videoID })
@@ -200,6 +203,8 @@ final class HighlightClipReviewViewModel: ObservableObject {
             item: item,
             video: video,
             inheritedFraming: inheritedFraming,
+            markerLabelStyle: markerLabelStyle,
+            inheritedMarkerLabelPlacement: inheritedMarkerLabelPlacement,
             confirmWorkingCopy: { [weak self] workingItem in
                 guard let self else {
                     throw CancellationError()
@@ -213,9 +218,10 @@ final class HighlightClipReviewViewModel: ObservableObject {
         switch navigation {
         case let .open(itemID):
             return makeEditorViewModel(itemID: itemID)
-        case let .continueReview(itemID, sourceVideoID, framing):
+        case let .continueReview(itemID, sourceVideoID, framing, markerLabelPlacement):
             guard items.contains(where: { $0.id == itemID && $0.videoID == sourceVideoID }) else { return nil }
-            return makeEditorViewModel(itemID: itemID, inheritedFraming: framing)
+            return makeEditorViewModel(itemID: itemID, inheritedFraming: framing,
+                inheritedMarkerLabelPlacement: markerLabelPlacement)
         case .returnToReview:
             return nil
         }
@@ -274,6 +280,10 @@ final class HighlightClipReviewViewModel: ObservableObject {
             candidate.isIncluded = workingItem.isIncluded
             candidate.confirmationState = .confirmed
             candidate.framing = (workingItem.framing ?? .original).normalized
+            candidate.markerLabelPlacement = workingItem.markerLabelPlacement ?? MarkerLabelPlacement(style: markerLabelStyle)
+            guard candidate.markerLabelPlacement?.isValid == true else {
+                throw HighlightClipReviewPlanningError.invalidMarkerLabelPlacement
+            }
 
             var sourceValidationSucceeded = false
             if candidate.isIncluded {
@@ -325,7 +335,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
                 editingItemID = nextItem.id
                 if nextItem.videoID == candidate.videoID {
                     return .continueReview(itemID: nextItem.id, sourceVideoID: candidate.videoID,
-                        framing: candidate.framing ?? .original)
+                        framing: candidate.framing ?? .original, markerLabelPlacement: candidate.markerLabelPlacement)
                 }
                 return .open(itemID: nextItem.id)
             }
@@ -445,7 +455,7 @@ final class HighlightClipReviewViewModel: ObservableObject {
 
     private func refreshSummary() {
         do {
-            summary = try HighlightClipReviewPlanner.makeSummary(items: items, videos: videos)
+            summary = try HighlightClipReviewPlanner.makeSummary(items: items, videos: videos, markerLabelStyle: markerLabelStyle)
             planningErrorMessage = nil
         } catch {
             planningErrorMessage = Self.userFacingMessage(for: error)

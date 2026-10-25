@@ -30,6 +30,7 @@ struct HighlightClipReviewItem: Identifiable, Equatable {
     var isIncluded: Bool
     var confirmationState: HighlightClipConfirmationState
     var framing: ClipFraming?
+    var markerLabelPlacement: MarkerLabelPlacement?
 
     init(
         id: UUID,
@@ -42,6 +43,7 @@ struct HighlightClipReviewItem: Identifiable, Equatable {
         isIncluded: Bool,
         confirmationState: HighlightClipConfirmationState = .defaultValue,
         framing: ClipFraming? = nil,
+        markerLabelPlacement: MarkerLabelPlacement? = nil,
     ) {
         self.id = id
         self.videoID = videoID
@@ -53,6 +55,7 @@ struct HighlightClipReviewItem: Identifiable, Equatable {
         self.isIncluded = isIncluded
         self.confirmationState = confirmationState
         self.framing = framing
+        self.markerLabelPlacement = markerLabelPlacement
     }
 
     var range: HighlightClipRange {
@@ -84,10 +87,11 @@ nonisolated struct ConfirmedHighlightSegment: Identifiable, Codable, Equatable, 
     let markerNumberUpperBound: Int
     let markerTotalCount: Int
     let framing: ClipFraming
+    let markerLabelPlacement: MarkerLabelPlacement?
 
     init(id: UUID, videoID: String, markerIDs: [UUID], start: TimeInterval, duration: TimeInterval,
          markerNumberLowerBound: Int, markerNumberUpperBound: Int, markerTotalCount: Int,
-         framing: ClipFraming = .original) {
+         framing: ClipFraming = .original, markerLabelPlacement: MarkerLabelPlacement? = nil) {
         self.id = id
         self.videoID = videoID
         self.markerIDs = markerIDs
@@ -97,11 +101,12 @@ nonisolated struct ConfirmedHighlightSegment: Identifiable, Codable, Equatable, 
         self.markerNumberUpperBound = markerNumberUpperBound
         self.markerTotalCount = markerTotalCount
         self.framing = framing
+        self.markerLabelPlacement = markerLabelPlacement
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, videoID, markerIDs, start, duration
-        case markerNumberLowerBound, markerNumberUpperBound, markerTotalCount, framing
+        case markerNumberLowerBound, markerNumberUpperBound, markerTotalCount, framing, markerLabelPlacement
     }
 
     init(from decoder: Decoder) throws {
@@ -115,6 +120,8 @@ nonisolated struct ConfirmedHighlightSegment: Identifiable, Codable, Equatable, 
         markerNumberUpperBound = try values.decode(Int.self, forKey: .markerNumberUpperBound)
         markerTotalCount = try values.decode(Int.self, forKey: .markerTotalCount)
         framing = try values.contains(.framing) ? values.decode(ClipFraming.self, forKey: .framing) : .original
+        markerLabelPlacement = try values.contains(.markerLabelPlacement)
+            ? values.decode(MarkerLabelPlacement.self, forKey: .markerLabelPlacement) : nil
     }
 }
 

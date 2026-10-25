@@ -74,6 +74,7 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         XCTAssertFalse(app.buttons["ClipPrevious"].exists)
         XCTAssertFalse(app.buttons["ClipNext"].exists)
         setScale(2.2)
+        openOperationsIfNeeded()
         XCTAssertGreaterThanOrEqual(app.buttons["ClipFramingRestore"].frame.height, 44)
         recordScreenshot("landscape-framing-2.2x")
         app.buttons["ClipKeep"].tap()
@@ -100,6 +101,7 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         selectClip(1)
         assertLoadedClip(title: "片段 1 / 3", start: 1)
         scrollToPreview()
+        openOperationsIfNeeded()
         app.buttons["ClipFramingRestore"].tap()
         XCTAssertEqual(element(label: "取景倍率").value as? String, "1.0 倍")
         XCTAssertEqual(seconds(element(label: "片段起点")), 1, accuracy: 0.11)
@@ -128,6 +130,7 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["播放片段"].exists)
         assertPreviewPixel(preview, x: 0.05, y: 0.3, color: .red)
         assertOuterPillarboxBlack(preview)
+        openOperationsIfNeeded()
         app.buttons["ClipFramingRestore"].tap()
         preview.pinch(withScale: 2, velocity: 2)
         XCTAssertTrue(app.buttons["播放片段"].exists)
@@ -153,6 +156,81 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         assertPreviewPixel(preview, x: 0.5, y: 0.5, color: .yellow)
         assertOuterPillarboxBlack(preview)
         recordScreenshot("upright-source-framing-2x")
+    }
+
+    func testNumberOperationListSeparatesModesAndStaysActiveWhenCollapsed() {
+        app.buttons["片段 1"].tap()
+        assertLoadedClip(title: "片段 1 / 3", start: 1)
+        let operations = app.buttons["ClipOperationsToggle"]
+        XCTAssertTrue(operations.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.sliders["ClipNumberSize"].exists)
+        operations.tap()
+        app.buttons["ClipFramingToggle"].tap()
+        XCTAssertFalse(app.buttons["ClipFramingIncrease"].isEnabled)
+        app.buttons["ClipNumberToggle"].tap()
+        XCTAssertTrue(app.sliders["ClipNumberSize"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["ClipFramingIncrease"].isEnabled)
+        XCTAssertFalse(app.buttons["ClipFramingRestore"].isEnabled)
+        operations.tap()
+        XCTAssertFalse(app.buttons["ClipNumberToggle"].exists)
+        XCTAssertTrue(app.sliders["ClipNumberSize"].exists)
+        app.sliders["ClipNumberSize"].adjust(toNormalizedSliderPosition: 1)
+        XCTAssertEqual(element(label: "取景倍率").value as? String, "1.0 倍")
+        recordScreenshot("number-editing-collapsed-operations")
+        operations.tap()
+        app.buttons["ClipNumberToggle"].tap()
+        XCTAssertFalse(app.sliders["ClipNumberSize"].exists)
+        XCTAssertTrue(app.buttons["ClipFramingIncrease"].isEnabled)
+        app.buttons["ClipNumberToggle"].tap()
+        app.buttons["ClipFramingToggle"].tap()
+        XCTAssertFalse(app.sliders["ClipNumberSize"].exists)
+        XCTAssertTrue(app.buttons["ClipFramingIncrease"].isEnabled)
+        app.buttons["返回"].tap()
+        XCTAssertTrue(app.alerts["放弃本次调整？"].waitForExistence(timeout: 3))
+        app.alerts.buttons["放弃"].tap()
+        XCTAssertTrue(app.navigationBars["审核集锦片段"].waitForExistence(timeout: 5))
+    }
+
+    func testNumberPlacementSavesInheritsAndManualNavigationRestoresOwnLayout() {
+        app.buttons["片段 1"].tap()
+        assertLoadedClip(title: "片段 1 / 3", start: 1)
+        openOperationsIfNeeded()
+        app.buttons["ClipNumberToggle"].tap()
+        let size = app.sliders["ClipNumberSize"]
+        XCTAssertTrue(size.waitForExistence(timeout: 5))
+        size.adjust(toNormalizedSliderPosition: 1)
+        let position = app.otherElements["ClipNumberPosition"]
+        XCTAssertTrue(position.waitForExistence(timeout: 5))
+        let start = position.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
+        let finish = position.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.8))
+        start.press(forDuration: 0.1, thenDragTo: finish)
+        let savedPosition = position.value as? String
+        XCTAssertNotNil(savedPosition)
+        XCTAssertNotEqual(savedPosition, "横向 15%，纵向 10%，字号 16%")
+        XCTAssertEqual(element(label: "取景倍率").value as? String, "1.0 倍")
+        recordScreenshot("number-placement-adjusted")
+        app.buttons["ClipKeep"].tap()
+        assertLoadedClip(title: "片段 2 / 3", start: 691.1)
+        XCTAssertEqual(app.sliders["ClipNumberSize"].value as? String, "16%")
+        XCTAssertEqual(app.otherElements["ClipNumberPosition"].value as? String, savedPosition)
+        selectClip(2)
+        assertLoadedClip(title: "片段 2 / 3", start: 691.1)
+        XCTAssertEqual(app.sliders["ClipNumberSize"].value as? String, "10%")
+        selectClip(1)
+        assertLoadedClip(title: "片段 1 / 3", start: 1)
+        XCTAssertEqual(app.otherElements["ClipNumberPosition"].value as? String, savedPosition)
+        app.buttons["ClipKeep"].tap()
+        assertLoadedClip(title: "片段 2 / 3", start: 691.1)
+        app.buttons["ClipKeep"].tap()
+        assertLoadedClip(title: "片段 3 / 3", start: 21)
+        XCTAssertEqual(app.sliders["ClipNumberSize"].value as? String, "10%")
+        selectClip(2)
+        assertLoadedClip(title: "片段 2 / 3", start: 691.1)
+        XCTAssertEqual(app.otherElements["ClipNumberPosition"].value as? String, savedPosition)
+    }
+
+    private func openOperationsIfNeeded() {
+        if !app.buttons["ClipFramingRestore"].exists { app.buttons["ClipOperationsToggle"].tap() }
     }
 
     private func setScale(_ scale: Double) {
@@ -246,7 +324,15 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         XCTAssertGreaterThan(element(label: "片段终点").frame.midX - element(label: "片段起点").frame.midX, 80,
             "时间轴必须围绕新片段展开，起止手柄不能挤在同一侧")
         let play = app.buttons["播放片段"]
-        XCTAssertTrue(play.isHittable, "普通字号下播放按钮应可直接使用")
+        // Number editing adds a slider and optional operations row. Its playback
+        // control may require scrolling, but must remain fully reachable.
+        if app.sliders["ClipNumberSize"].exists {
+            for _ in 0..<8 where play.frame.maxY > app.buttons["ClipExclude"].frame.minY - 8 {
+                let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.72))
+                origin.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.45)))
+            }
+        }
+        XCTAssertTrue(play.isHittable, "播放按钮应可达并可操作")
         XCTAssertGreaterThanOrEqual(play.frame.minY, app.navigationBars.firstMatch.frame.maxY)
         XCTAssertLessThanOrEqual(play.frame.maxY, app.buttons["ClipExclude"].frame.minY - 8,
             "播放按钮必须完整位于固定决定区域上方")

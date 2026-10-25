@@ -7,6 +7,7 @@ struct HighlightClipReviewView: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var editorDestination: HighlightClipEditorDestination?
+    @StateObject private var editorOperations = ClipEditorOperations()
 
     private let makePlaybackController: () -> HighlightClipPlaybackController
     private let loadsMedia: Bool
@@ -66,6 +67,7 @@ struct HighlightClipReviewView: View {
                 reviewViewModel: viewModel,
                 editorViewModel: destination.editorViewModel,
                 playbackController: destination.playbackController,
+                operations: editorOperations,
                 loadsMedia: loadsMedia,
                 onRequestVideoReselection: onRequestVideoReselection,
                 onConfirmationNavigation: { navigation in

@@ -148,6 +148,7 @@ enum HighlightClipReviewPlanner {
     static func makeSummary(
         items: [HighlightClipReviewItem],
         videos: [SelectedTrainingVideo],
+        markerLabelStyle: MarkerLabelStyle = .default,
     ) throws -> HighlightClipReviewSummary {
         let videoIDs = videos.map(\.id)
         guard Set(videoIDs).count == videoIDs.count else {
@@ -160,6 +161,9 @@ enum HighlightClipReviewPlanner {
         for item in items {
             guard item.framing?.isValid ?? true else {
                 throw HighlightClipReviewPlanningError.invalidFraming
+            }
+            guard item.markerLabelPlacement?.isValid ?? true else {
+                throw HighlightClipReviewPlanningError.invalidMarkerLabelPlacement
             }
             guard itemIDs.insert(item.id).inserted else {
                 throw HighlightClipReviewPlanningError.duplicateIdentity
@@ -233,12 +237,14 @@ enum HighlightClipReviewPlanner {
                 markerNumberUpperBound: numberRange.upperBound,
                 markerTotalCount: includedMarkerCount,
                 framing: item.framing ?? .original,
+                markerLabelPlacement: item.markerLabelPlacement ?? MarkerLabelPlacement(style: markerLabelStyle.normalized),
             )
 
             if previousOriginalItemWasIncluded,
                let previousSegment = finalSegments.last,
                previousSegment.videoID == segment.videoID,
                previousSegment.framing == segment.framing,
+               previousSegment.markerLabelPlacement == segment.markerLabelPlacement,
                gap(between: previousSegment, and: segment) <= mergeGapTolerance
             {
                 let mergedStart = min(previousSegment.start, segment.start)
@@ -256,6 +262,7 @@ enum HighlightClipReviewPlanner {
                     markerNumberUpperBound: segment.markerNumberUpperBound,
                     markerTotalCount: includedMarkerCount,
                     framing: previousSegment.framing,
+                    markerLabelPlacement: previousSegment.markerLabelPlacement,
                 )
                 if let previousIncludedItemID {
                     mergingItemIDs.insert(previousIncludedItemID)
@@ -306,6 +313,9 @@ enum HighlightClipReviewPlanner {
         for segment in segments {
             guard segment.framing.isValid else {
                 throw HighlightClipReviewPlanningError.invalidFraming
+            }
+            guard segment.markerLabelPlacement?.isValid ?? true else {
+                throw HighlightClipReviewPlanningError.invalidMarkerLabelPlacement
             }
             guard segmentIDs.insert(segment.id).inserted else {
                 throw HighlightClipReviewPlanningError.duplicateIdentity
@@ -384,6 +394,7 @@ extension ConfirmedHighlightSegment {
             markerNumberRange: markerNumberLowerBound ... markerNumberUpperBound,
             markerTotalCount: markerTotalCount,
             framing: framing,
+            markerLabelPlacement: markerLabelPlacement,
         )
     }
 }
@@ -393,6 +404,7 @@ enum HighlightClipReviewPlanningError: LocalizedError, Equatable {
     case sourceVideoMissing
     case invalidRange
     case invalidFraming
+    case invalidMarkerLabelPlacement
     case missingMarkers
     case inconsistentNumbering
     case duplicateIdentity
@@ -407,6 +419,8 @@ enum HighlightClipReviewPlanningError: LocalizedError, Equatable {
             "片段范围无效，请调整片段范围后再试。"
         case .invalidFraming:
             "片段取景无效，请恢复原画面后再试。"
+        case .invalidMarkerLabelPlacement:
+            "片段序号布局无效，请重新调整后再试。"
         case .missingMarkers:
             "片段缺少关联打点，请重新创建任务。"
         case .inconsistentNumbering:

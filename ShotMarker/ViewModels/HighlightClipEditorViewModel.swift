@@ -3,7 +3,7 @@ import Foundation
 
 enum HighlightClipConfirmationNavigation: Equatable {
     case open(itemID: UUID)
-    case continueReview(itemID: UUID, sourceVideoID: String, framing: ClipFraming)
+    case continueReview(itemID: UUID, sourceVideoID: String, framing: ClipFraming, markerLabelPlacement: MarkerLabelPlacement? = nil)
     case returnToReview
 }
 
@@ -18,15 +18,19 @@ final class HighlightClipEditorViewModel: ObservableObject {
     @Published private(set) var saveErrorMessage: String?
 
     let video: SelectedTrainingVideo
+    let markerLabelStyle: MarkerLabelStyle
     private var openedItem: HighlightClipReviewItem
     private var entryItem: HighlightClipReviewItem
     @Published private(set) var isUsingInheritedFraming = false
+    @Published private(set) var isUsingInheritedMarkerLabelPlacement = false
     private let confirmWorkingCopy: ConfirmWorkingCopy
 
     init(
         item: HighlightClipReviewItem,
         video: SelectedTrainingVideo,
         inheritedFraming: ClipFraming? = nil,
+        markerLabelStyle: MarkerLabelStyle = .default,
+        inheritedMarkerLabelPlacement: MarkerLabelPlacement? = nil,
         confirmWorkingCopy: @escaping ConfirmWorkingCopy,
     ) {
         openedItem = item
@@ -34,14 +38,33 @@ final class HighlightClipEditorViewModel: ObservableObject {
         if item.framing == nil, let inheritedFraming {
             initialItem.framing = inheritedFraming.normalized
         }
+        if item.markerLabelPlacement == nil, let inheritedMarkerLabelPlacement, inheritedMarkerLabelPlacement.isValid {
+            initialItem.markerLabelPlacement = inheritedMarkerLabelPlacement
+        }
         workingItem = initialItem
         entryItem = initialItem
         self.video = video
+        self.markerLabelStyle = markerLabelStyle.normalized
         self.confirmWorkingCopy = confirmWorkingCopy
         isUsingInheritedFraming = item.framing == nil && inheritedFraming != nil
+        isUsingInheritedMarkerLabelPlacement = item.markerLabelPlacement == nil
+            && inheritedMarkerLabelPlacement?.isValid == true
     }
 
     var effectiveFraming: ClipFraming { (workingItem.framing ?? .original).normalized }
+
+    var effectiveMarkerLabelPlacement: MarkerLabelPlacement {
+        workingItem.markerLabelPlacement ?? MarkerLabelPlacement(style: markerLabelStyle)
+    }
+
+    func setMarkerLabelPlacement(_ placement: MarkerLabelPlacement) {
+        guard !isSaving else { return }
+        var editedItem = workingItem
+        // Gesture input quantizes its changed coordinates. Clamp invalid fields here
+        // without rounding legal saved centers when only the font size changes.
+        editedItem.markerLabelPlacement = MarkerLabelPlacement(style: placement.applying(to: .default).normalized)
+        applyEffectiveChange(editedItem)
+    }
 
     func setFraming(_ framing: ClipFraming) {
         guard !isSaving else { return }
@@ -118,6 +141,7 @@ final class HighlightClipEditorViewModel: ObservableObject {
         openedItem = item
         entryItem = item
         isUsingInheritedFraming = false
+        isUsingInheritedMarkerLabelPlacement = false
         hasChanges = false
         saveErrorMessage = nil
     }
@@ -136,6 +160,7 @@ final class HighlightClipEditorViewModel: ObservableObject {
         isSaving = true
         var submittedItem = workingItem
         submittedItem.framing = effectiveFraming
+        submittedItem.markerLabelPlacement = effectiveMarkerLabelPlacement
         defer {
             isSaving = false
         }
@@ -148,6 +173,7 @@ final class HighlightClipEditorViewModel: ObservableObject {
             openedItem = confirmedItem
             entryItem = confirmedItem
             isUsingInheritedFraming = false
+            isUsingInheritedMarkerLabelPlacement = false
             hasChanges = false
             saveErrorMessage = nil
             return navigation
@@ -167,5 +193,6 @@ final class HighlightClipEditorViewModel: ObservableObject {
             || workingItem.duration != entryItem.duration
             || workingItem.isIncluded != entryItem.isIncluded
             || effectiveFraming != (entryItem.framing ?? .original).normalized
+            || effectiveMarkerLabelPlacement != (entryItem.markerLabelPlacement ?? MarkerLabelPlacement(style: markerLabelStyle))
     }
 }

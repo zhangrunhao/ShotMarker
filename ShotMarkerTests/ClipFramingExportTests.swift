@@ -39,7 +39,7 @@ final class ClipFramingExportTests: XCTestCase {
         // Compare decoded source landmarks: codec/color-space conversion need not preserve raw RGB.
         XCTAssertLessThan(sourcePixels.color(0.2, 0.8)[0], sourcePixels.color(0.8, 0.2)[0])
         XCTAssertGreaterThan(sourcePixels.color(0.2, 0.8)[1], sourcePixels.color(0.8, 0.2)[1])
-        let segments = framings.map { segment("grid", framing: $0) }
+        let segments = framings.map { segment("grid", framing: $0, placement: .init(fontSizeRatio: 0.16, normalizedCenterX: 1, normalizedCenterY: 1)) }
         let output = try await export(segments, sources: ["grid": source])
         let duration = try await output.load(.duration)
         XCTAssertEqual(duration.seconds, Double(framings.count), accuracy: 0.04)
@@ -140,6 +140,56 @@ final class ClipFramingExportTests: XCTestCase {
         )))
         let origin = MarkerLabelLayout.clampedOrigin(for: CGPoint(x: 0.8, y: 0.2), labelSize: CGSize(width: reference.width, height: reference.height), in: CGRect(x: 0, y: 0, width: 320, height: 180))
         XCTAssertLessThan(after.difference(from: reference, at: origin), 0.06, "Glyphs must remain upright, with the existing font and padding")
+    }
+
+    func testIdenticalLabelsUseEachSegmentPlacementOnTheFirstSourceCanvas() async throws {
+        let landscape = try await makeVideo(name: "placement-landscape", black: true)
+        let portrait = try await makeVideo(name: "placement-portrait", black: true, width: 180, height: 320)
+        var style = MarkerLabelStyle.default
+        style.normalizedCenterX = 0.5
+        style.normalizedCenterY = 0.5
+        style.backgroundOpacity = 0
+        let output = try await export([
+            segment("landscape", number: 8),
+            segment("portrait", number: 8, placement: .init(fontSizeRatio: 0.04, normalizedCenterX: 0, normalizedCenterY: 0)),
+            segment("landscape", number: 8, framing: .init(scale: 4, centerX: 0.125, centerY: 0.875),
+                    placement: .init(fontSizeRatio: 0.16, normalizedCenterX: 1, normalizedCenterY: 1)),
+        ], sources: ["landscape": landscape, "portrait": portrait], style: style)
+        let fallback = try await pixels(output, at: 0.4, evidence: "placement-default")
+        let small = try await pixels(output, at: 1.4, evidence: "placement-small-portrait")
+        let large = try await pixels(output, at: 2.4, evidence: "placement-large")
+        XCTAssertEqual(small.width, 320)
+        XCTAssertEqual(small.height, 180)
+        XCTAssertEqual(fallback.brightBounds.midX, 160, accuracy: 5)
+        XCTAssertEqual(fallback.brightBounds.midY, 90, accuracy: 5)
+        XCTAssertGreaterThan(small.brightPixelCount, 4)
+        XCTAssertLessThan(small.brightBounds.maxX, 40, "Portrait label is relative to the full output canvas, including its side bars")
+        XCTAssertLessThan(small.brightBounds.maxY, 25)
+        XCTAssertGreaterThan(large.brightBounds.minX, 230)
+        XCTAssertGreaterThan(large.brightBounds.minY, 125)
+        XCTAssertGreaterThan(large.brightPixelCount, small.brightPixelCount * 8,
+                             "An image cache keyed only by identical text would reuse the wrong font size")
+    }
+
+    func testLongRangeLabelExportsCompleteFittedImageAtTheCanvasEdge() async throws {
+        let source = try await makeVideo(name: "long-range-portrait", black: true, width: 180, height: 320)
+        var style = MarkerLabelStyle.default
+        style.fontSizeRatio = 0.16
+        style.backgroundOpacity = 0
+        style.normalizedCenterX = 1
+        style.normalizedCenterY = 1
+        let segment = HighlightClipSegment(markerIDs: [UUID()], videoID: "portrait", start: 0, duration: 1,
+                                           markerNumberRange: 1234567890...2147483647, markerTotalCount: 2147483647)
+        let output = try await export([segment], sources: ["portrait": source], style: style)
+        let image = try await pixels(output, at: 0.4, evidence: "long-range-fitted")
+        let render = try MarkerLabelRendering.make(text: "1234567890-2147483647/2147483647",
+                                                   canvasSize: CGSize(width: 180, height: 320), style: style)
+        XCTAssertEqual(render.size.width, 180)
+        XCTAssertGreaterThan(image.brightPixelCount, 30)
+        XCTAssertLessThan(image.brightBounds.minX, 15)
+        XCTAssertGreaterThan(image.brightBounds.maxX, 165, "Both ends of the range remain visible")
+        let reference = try Pixels(render.image)
+        XCTAssertLessThan(image.difference(from: reference, at: render.frame.origin), 0.08)
     }
 
     func testAudioStaysAlignedWhenOnlyMiddleSourceHasSound() async throws {
@@ -254,9 +304,9 @@ final class ClipFramingExportTests: XCTestCase {
         return data
     }
 
-    private func segment(_ id: String, number: Int = 1, framing: ClipFraming = .original) -> HighlightClipSegment {
+    private func segment(_ id: String, number: Int = 1, framing: ClipFraming = .original, placement: MarkerLabelPlacement? = nil) -> HighlightClipSegment {
         HighlightClipSegment(markerIDs: [UUID()], videoID: id, start: 0, duration: 1,
-                             markerNumber: number, markerTotalCount: 8, framing: framing)
+                             markerNumber: number, markerTotalCount: 8, framing: framing, markerLabelPlacement: placement)
     }
 
     private func export(_ segments: [HighlightClipSegment], sources: [String: AVAsset], style: MarkerLabelStyle? = nil) async throws -> AVURLAsset {

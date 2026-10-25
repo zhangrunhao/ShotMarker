@@ -36,7 +36,7 @@ nonisolated enum HighlightTaskValidation {
             for marker in item.markerIDs {
                 guard occupied.insert(marker).inserted else { throw HighlightTaskError.invalidTask }
             }
-            guard item.framing?.isValid ?? true,
+            guard item.framing?.isValid ?? true, item.markerLabelPlacement?.isValid ?? true,
                   validRange(item.start, item.duration, video.duration), validRange(item.defaultStart, item.defaultDuration, video.duration)
             else { throw HighlightTaskError.invalidTask }
         }
@@ -61,7 +61,7 @@ nonisolated enum HighlightTaskValidation {
                       !segment.markerIDs.isEmpty, Set(segment.markerIDs).isSubset(of: validMarkers),
                       segment.markerNumberLowerBound == executionMarkers.count + 1,
                       segment.markerNumberUpperBound == executionMarkers.count + segment.markerIDs.count,
-                      segment.markerTotalCount == total, segment.framing.isValid, validRange(segment.start, segment.duration, video.duration)
+                      segment.markerTotalCount == total, segment.framing.isValid, segment.markerLabelPlacement?.isValid ?? true, validRange(segment.start, segment.duration, video.duration)
                 else { throw HighlightTaskError.invalidTask }
                 for id in segment.markerIDs {
                     guard executionMarkers.insert(id).inserted else { throw HighlightTaskError.invalidTask }

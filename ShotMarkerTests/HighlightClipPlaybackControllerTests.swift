@@ -169,14 +169,26 @@ final class HighlightClipPlaybackControllerTests: XCTestCase {
     @MainActor
     func testOptionalMetadataFailureKeepsFakePlaybackAvailableWithoutFraming() async {
         let engine = SpyHighlightClipPlaybackEngine()
-        let controller = HighlightClipPlaybackController(engine: engine, loadAsset: { _ in AVMutableComposition() }, loadUprightSize: { _ in throw PlaybackTestError.loadFailed })
+        var attempts = 0
+        let controller = HighlightClipPlaybackController(engine: engine, loadAsset: { _ in AVMutableComposition() }, loadUprightSize: { _ in
+            attempts += 1
+            if attempts == 1 { throw PlaybackTestError.loadFailed }
+            return CGSize(width: 640, height: 360)
+        })
+        XCTAssertFalse(controller.isSourceSizeUnavailable)
         await controller.load(video: makeVideo(), range: .init(start: 4, duration: 3))
         XCTAssertNil(controller.uprightVideoSize)
+        XCTAssertTrue(controller.isSourceSizeUnavailable)
         XCTAssertNil(controller.loadError)
         XCTAssertFalse(controller.isLoading)
         XCTAssertEqual(controller.currentTime, 4)
         controller.play()
         XCTAssertTrue(controller.isPlaying)
+        await controller.load(video: makeVideo(), range: .init(start: 4, duration: 3))
+        XCTAssertFalse(controller.isSourceSizeUnavailable)
+        XCTAssertEqual(controller.uprightVideoSize, CGSize(width: 640, height: 360))
+        controller.reset()
+        XCTAssertFalse(controller.isSourceSizeUnavailable)
     }
 
     @MainActor
