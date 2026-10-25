@@ -1,7 +1,7 @@
 # 任务编辑入口验证
 
 - 日期：2026-10-25。
-- 代码范围：基于 `be5ac70`，正式修改仅为 `HighlightTaskRow.swift` 与 `TrainingSessionHighlightView.swift`；同步调整 `EditableHighlightTaskUITests.swift` 的既有用例。
+- 实现提交：`7f3d18b`，基于 `be5ac70`；正式修改仅为 `HighlightTaskRow.swift` 与 `TrainingSessionHighlightView.swift`，同步调整 `EditableHighlightTaskUITests.swift` 的既有用例。
 - 用户要求：编辑任务配置页移除“片段序数”；任务卡片通过明确的“编辑任务”按钮进入配置，摘要和空白处不导航。
 
 ## 实现

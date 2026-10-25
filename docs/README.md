@@ -25,6 +25,7 @@ ShotMarker 对外网站、支持页和 how-to 由 `zhangrh.shop` 仓库维护，
 
 ## 正在进行的变更
 
+- [首页与任务入口改版方向](changes/2026-10-25-navigation-ideas.md)：首页改为任务列表，底部提供创建任务和训练记录列表入口；仅记录，尚未设计或实施
 - [iOS 语音口令打点与技术统计](changes/2026-07-29-ios-voice-command-marking-spec.md)：设计已确认，尚未实现
 - [视频编辑后续优化想法](changes/2026-10-23-video-editing-ideas.md)：第一项逐段序号布局已实现并归档；第二项整个视频的训练记录点管理仍待讨论，尚未设计或开发
 
