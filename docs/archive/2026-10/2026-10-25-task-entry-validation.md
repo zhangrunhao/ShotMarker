@@ -31,4 +31,12 @@ xcodebuild test -project ShotMarker.xcodeproj -scheme ShotMarker \
   -resultBundlePath /tmp/ShotMarkerTaskEntry-green.xcresult
 ```
 
-本次验证为 Debug Simulator 专项检查，没有重跑完整单元/UI 套件、Watch、深色、iPad、真机或 Release，也未生成或安装新的分发产物。构建保留既有并发及 AppIntents 等警告，不宣称无警告。首页和底部导航改版不属于本次实现。
+上述自动验证为 Debug Simulator 专项检查，没有重跑完整单元/UI 套件、Watch、深色、iPad、完整真机剪辑或 Release，也未生成或安装新的分发产物。测试构建保留既有并发及 AppIntents 等警告，不宣称无警告。首页和底部导航改版不属于本次实现。
+
+## 后续开发签名运行
+
+同日按用户要求，将 main `7adac03`（包含实现 `7f3d18b`，其后仅追加文档）进行 generic iOS Debug 构建。构建退出码 0，日志含 `BUILD SUCCEEDED`；App 为 1.3（3），`codesign --verify --deep --strict` 通过。本次增量构建仍有 AppIntents metadata 提示。
+
+已完成开发签名覆盖安装、正常前台启动与随后同一进程存活确认。真机核验的权威状态和安装记录由[私有发布状态](../../private.local/shotmarker/current/release.md)维护；启动验证不等同完整训练、编辑或导出验收。
+
+公共构建与签名证据：`/tmp/shotmarker-task-entry-device-build.log`、`/tmp/shotmarker-task-entry-device-signing.log`。这些临时文件可能被清理。
