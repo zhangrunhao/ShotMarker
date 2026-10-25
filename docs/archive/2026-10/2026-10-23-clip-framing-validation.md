@@ -91,10 +91,38 @@ xcrun xcresulttool get test-results summary \
 - 当前 BGRA SDR 路径；HDR/广色域保真未验收。测试源为全画幅方形像素 H.264，非方形像素、非零 clean aperture、任意斜切变换未新增支持或验收。
 - 本记录与临时日志反映本次代码与环境，不代表分发版本，也不替代未来手机实用反馈。
 
-## 同日后续：合并与开发签名构建
+## 同日后续：合并、开发签名安装与正常启动
 
-用户随后明确要求合并主分支并在当前连接手机运行。主仓库与功能工作树均干净，main 从 `9d078a5` 快进到 `291a0a4`；与 `b744efa` 比较产品、单元/UI 测试和工程目录无差异，因此保留上面的完整测试证据，没有重复运行相同代码的模拟器 suite。
+用户随后明确要求合并主分支并在连接的手机运行。main 从 `9d078a5` 快进到 `291a0a4`；与 `b744efa` 比较，产品、单元/UI 测试及工程目录无差异，因此沿用前述完整测试证据，没有重复运行相同代码的 Simulator suite。以下设备证据仅属于后续安装阶段。
 
-main `291a0a4` 的 Debug iphoneos 构建退出 0，日志 `/tmp/shotmarker-framing-device-build.log`；产物为 `com.heji.ShotMarker` 1.3（3）。`codesign --verify --deep --strict` 退出 0，日志 `/tmp/shotmarker-framing-device-signature.log`。构建仍有播放回调 handler 的 Sendable 警告及 AppIntents metadata 提示，不声明零警告。
+- 验证日期：2026-10-23（Asia/Shanghai）。
+- 授权范围：将已完成的片段取景方案合并到公开仓库本地 main，并在当前连接的 iPhone 上安装、运行，供用户实测。
+- 代码基线：公开仓库本地 main，`291a0a48a67cfa9b71923ca09182b00e43b4e852`。
+- App：ShotMarker 1.3（Build 3），`com.heji.ShotMarker`。
+- 环境：Xcode 27.1，Debug 真机构建；iPhone 16，iOS 26.6.1，有线连接，开发者模式启用。
 
-开发签名安装启动已完成。设备与进程验证的权威记录见[私有发布状态](../../private.local/shotmarker/current/release.md)；没有新增完整训练/剪辑验收或分发 Archive。本节补充前文实现阶段结束后发生的操作，不把后续证据倒填到先前验证范围。
+### 结果与证据
+
+1. main 已快进合并取景分支。真机构建退出码为 0，日志包含 `BUILD SUCCEEDED`；App 包版本和 Bundle ID 核对通过。
+2. `codesign --verify --deep --strict` 退出码为 0，签名验证通过。
+3. `devicectl install app` 退出码为 0，安装结果 JSON 的 `outcome` 为 `success`。
+4. 正常前台启动并终止旧实例，启动退出码为 0，JSON 的 `outcome` 为 `success`。未传入测试启动参数，未附加调试器。
+5. 随后的进程查询成功，已核对同一 ShotMarker 进程仍在运行。
+
+本次本地临时证据：
+
+- `/tmp/shotmarker-framing-device-build.log`
+- `/tmp/shotmarker-framing-device-signature.log`
+- `/tmp/shotmarker-framing-device-install.json` 及同名 `.log`
+- `/tmp/shotmarker-framing-device-launch.json` 及同名 `.log`
+- `/tmp/shotmarker-framing-device-processes.json` 及同名 `.log`
+
+已再次读取构建成功标记、三份 JSON 成功状态，并比较启动与进程查询结果中的进程身份。临时文件可能被系统清理，路径不构成永久留存保证。原始设备 JSON、签名输出与构建日志不进入文档仓库；本记录不保存设备名、UDID、容器路径、个人签名信息或登录凭据。
+
+### 验证范围
+
+- 已验证本版开发签名构建、签名、安装、正常前台启动和启动后的进程存活。
+- 构建仍有既有 handler Sendable 警告和 AppIntents 元数据提示，不宣称构建无警告。
+- 本次没有代替用户执行篮球训练、个人视频导入、完整取景剪辑与导出验收，也没有执行 Watch 真机、升级、VoiceOver 或生产观测验收。
+- 未生成或上传分发 Archive，未查询 App Store Connect、TestFlight、审核或上架状态。
+- 本轮只做本地提交，没有推送远端。

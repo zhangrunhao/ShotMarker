@@ -29,8 +29,10 @@
 
 ## Public and Private Boundaries
 
-- Keep public product behavior, code architecture, tests, build results, data contracts, and privacy boundaries in this repository.
-- When `docs/private.local/` is available, treat `docs/private.local/shotmarker/` as the private source for App Store Connect, TestFlight, signed Archive, real-device, Analytics production, and GlitchTip project verification facts.
+- Classify documentation by the sensitivity of its contents, not by whether the evidence came from a device, production service, or administrative console.
+- Keep product behavior, code architecture, tests, build and signing results, release records, sanitized device and external-service verification, data contracts, and privacy boundaries in this repository. App Store Connect, TestFlight, signed Archive, real-device, Analytics, and GlitchTip results are not private by default.
+- When `docs/private.local/` is available, reserve it for non-public infrastructure and account configuration, internal host/network and management locations, permissions, backups, and other operational details that need restricted access. Shared server facts belong to its `zhangrh-shop/` area; use `shotmarker/` only for genuinely private App-specific material.
+- Split mixed documents: keep independently understandable, sanitized results here and only the sensitive operational details in the private repository. Do not publish raw logs or screenshots containing identifiers, credentials, or private configuration.
 - Public documentation must remain complete without the private repository.
 - Keep one authoritative current source for each fact across repositories; other repositories may retain only the necessary summary or link.
 - `docs/private.local/` is an independent Git repository. Check, commit, and push it separately from this public repository.

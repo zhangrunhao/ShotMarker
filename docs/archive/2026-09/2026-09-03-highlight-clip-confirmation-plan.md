@@ -1,5 +1,7 @@
 # ShotMarker 片段确认持久化与连续审核 Implementation Plan
 
+> 文档边界更新（2026-10-25）：本文保留当时的计划与执行记录；其中按 App Store、TestFlight、签名 Archive、真机或生产观测来源一律归私有的规则已被取代。现按内容敏感性分类，脱敏结果在本仓库维护，敏感配置仍留私有；见[文档边界调整](../2026-10/2026-10-25-documentation-boundaries.md)。本次迁移不表示重新执行历史验证。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 为每个审核卡片增加原子持久化的逐片段确认、跨启动精确恢复、明确的编辑事务和连续审核导航，同时让未确认卡片继续按当前默认规则直接参与集锦生成。

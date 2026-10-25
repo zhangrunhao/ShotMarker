@@ -27,6 +27,7 @@ ShotMarker 提供 Watch 训练打点与同步、训练 JSON 导入/导出与多�
 - [产品事实与有效决定](product.md)：用户流程、训练管理及剪辑规则。
 - [技术架构](architecture.md)：服务、任务事务、媒体、同步和隐私边界。
 - [产品埋点](analytics.md)：事件与请求契约、发送范围和隐私边界。
+- [观测验证](observability.md)：Analytics / GlitchTip 脱敏验收结论及最后核验日期。
 - [质量状态](quality.md)：最近可信验证基线、覆盖和限制。
 - [发布状态](release.md)：工程配置、有效披露要求和带日期的外部摘要。
 

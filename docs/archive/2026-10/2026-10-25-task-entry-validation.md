@@ -33,10 +33,43 @@ xcodebuild test -project ShotMarker.xcodeproj -scheme ShotMarker \
 
 上述自动验证为 Debug Simulator 专项检查，没有重跑完整单元/UI 套件、Watch、深色、iPad、完整真机剪辑或 Release，也未生成或安装新的分发产物。测试构建保留既有并发及 AppIntents 等警告，不宣称无警告。首页和底部导航改版不属于本次实现。
 
-## 后续开发签名运行
+## 同日后续：开发签名安装与正常启动
 
-同日按用户要求，将 main `7adac03`（包含实现 `7f3d18b`，其后仅追加文档）进行 generic iOS Debug 构建。构建退出码 0，日志含 `BUILD SUCCEEDED`；App 为 1.3（3），`codesign --verify --deep --strict` 通过。本次增量构建仍有 AppIntents metadata 提示。
+- 验证日期：2026-10-25（Asia/Shanghai）。
+- 授权范围：将刚提交的任务编辑入口版本运行到连接的 iPhone，启动 App 后供用户试用。
+- 实际构建代码基线：公开仓库本地 main，`7adac039b7a0383c7c6987d5a5baa23e51caa00d`；包含任务入口实现 `7f3d18b`。
+- App：ShotMarker 1.3（Build 3），`com.heji.ShotMarker`。
+- 构建环境：Xcode 27.1，generic iOS Debug；构建开始时公开工作区干净。
+- 本轮重新读取设备详情并核验：iPhone 16，iOS 26.6.1，开发者模式启用；连接类型未核对。
 
-已完成开发签名覆盖安装、正常前台启动与随后同一进程存活确认。真机核验的权威状态和安装记录由[私有发布状态](../../private.local/shotmarker/current/release.md)维护；启动验证不等同完整训练、编辑或导出验收。
+### 结果与证据
 
-公共构建与签名证据：`/tmp/shotmarker-task-entry-device-build.log`、`/tmp/shotmarker-task-entry-device-signing.log`。这些临时文件可能被清理。
+1. Debug 真机构建退出码为 0，日志包含 `BUILD SUCCEEDED`；App 包的 Bundle ID 和版本核对通过。
+2. `codesign --verify --deep --strict` 返回码为 0，日志确认 `valid on disk` 与满足 Designated Requirement。
+3. 覆盖安装退出码为 0，安装 JSON 的 `outcome` 为 `success`，返回的 App Bundle ID 正确。
+4. 解锁后启动退出码为 0，启动 JSON 的 `outcome` 为 `success`；`activatedWhenStarted` 为 true，启动参数为空，`startStopped` 为 false，是正常 App 入口的前台激活启动。
+5. 随后进程查询退出码为 0，JSON 的 `outcome` 为 `success`；比较成功启动与运行中进程结果，确认同一 ShotMarker 进程仍在运行，匹配数为 1。
+
+首次启动因手机锁屏未成功；用户解锁后按上述正常入口启动并完成进程存活核验。
+
+本次本地临时证据：
+
+- `/tmp/shotmarker-task-entry-device-build.log`
+- `/tmp/shotmarker-task-entry-device-signing.log`
+- `/tmp/shotmarker-task-entry-device-details.json`
+- `/tmp/shotmarker-task-entry-device-install.json`
+- `/tmp/shotmarker-task-entry-device-install.log`
+- `/tmp/shotmarker-task-entry-device-launch-unlocked.json`
+- `/tmp/shotmarker-task-entry-device-launch-unlocked.log`
+- `/tmp/shotmarker-task-entry-device-processes-unlocked.json`
+- `/tmp/shotmarker-task-entry-device-processes-unlocked.log`
+
+已重新核对构建成功标记、签名结果、设备与安装/启动/进程查询 JSON 的成功摘要、正常启动选项及同一进程存活。证据仅记录摘要与临时文件路径；不保存设备名、设备标识、进程标识、容器路径、签名身份或原始日志。临时文件可能被系统清理，路径不构成永久留存保证。
+
+### 验证范围
+
+- 已验证任务编辑入口更新版本的开发签名构建、签名、覆盖安装、正常前台启动与随后进程存活，交由用户试用。
+- 本次未验收完整训练、剪辑与导出流程，也没有执行 Watch 真机、升级、VoiceOver 或生产服务验收。
+- 未生成或上传分发 Archive，未查询 App Store Connect、TestFlight、审核或上架状态。
+
+本轮增量构建仍有 AppIntents metadata 提示，不声称无警告。

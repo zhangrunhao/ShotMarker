@@ -39,4 +39,39 @@ xcodebuild test -project ShotMarker.xcodeproj -scheme ShotMarker \
 
 独立代码审查检查完整本轮差异、现有导航路径及同片段清理边界，无未解决问题。文档先更新 current 再保存本完成记录；旧取景规格保留为历史，当前优先级以 product 和本记录为准。
 
-本轮已合并到本地 main `3d79e72`，产品及测试目录与 `3fe813f` 一致；generic iOS Debug 构建退出码 0、codesign 深度严格验证通过，App 为 1.3（3）。日志 `/tmp/shotmarker-framing-priority-device-build.log` 和 `/tmp/shotmarker-framing-priority-signing.log`。用户重新连接并解锁后，已完成安装、正常前台启动及后续同一进程存活核验；没有使用测试启动参数。实际安装源码为 `3d79e72`，之后提交仅更新文档。完整设备事实由私有台账 `2026-10-23-framing-priority-iphone-install.md` 维护，未将启动成功扩展为完整真机剪辑验收。
+## 同日后续：开发签名安装与正常启动
+
+本轮合并后的本地 main `3d79e72` 与实现 `3fe813f` 的产品及测试目录一致，未重复运行相同代码的 Simulator suite。
+
+- 验证日期：2026-10-23（Asia/Shanghai）。
+- 授权范围：将取景保存值优先与点击片段重新打开规则合并到公开仓库本地 main，并安装、运行到用户已重新连接和解锁的 iPhone，供用户实测。
+- 实际构建代码基线：公开仓库本地 main，`3d79e72341e1262239de34adef33c27406c7ba13`；之后的 `c139f4f` 仅追加文档，不改变本次安装产物。
+- App：ShotMarker 1.3（Build 3），`com.heji.ShotMarker`。
+- 环境：Xcode 27.1，generic iOS Debug 构建；iPhone 16，iOS 26.6.1，有线连接、已配对，开发者模式启用。
+
+### 结果与证据
+
+1. main 已快进合并本轮改动。Debug 真机构建退出码为 0，日志包含 `BUILD SUCCEEDED`；App 包的 Bundle ID 和版本核对通过。
+2. `codesign --verify --deep --strict` 退出码为 0，签名验证通过。
+3. 本轮重新连接后的设备详情确认设备在线、有线连接、已配对且开发者模式启用。
+4. 安装 JSON 的 `outcome` 为 `success`，返回的 App Bundle ID 正确。
+5. 启动 JSON 的 `outcome` 为 `success`，记录为前台激活启动。启动参数为空，没有 UI 测试启动参数；未附加调试器。
+6. 稍后的进程查询 JSON 的 `outcome` 为 `success`，已核对同一 ShotMarker 进程仍在运行。
+
+本次本地临时证据：
+
+- `/tmp/shotmarker-framing-priority-device-build.log`
+- `/tmp/shotmarker-framing-priority-signing.log`
+- `/tmp/shotmarker-framing-priority-device-connected.json`
+- `/tmp/shotmarker-framing-priority-device-install.json`
+- `/tmp/shotmarker-framing-priority-device-launch.json`
+- `/tmp/shotmarker-framing-priority-device-processes.json`
+
+已再次读取构建成功标记、安装/启动/进程查询三份 JSON 成功状态，并比较启动与进程查询结果中的进程身份。临时文件可能被系统清理，路径不构成永久留存保证。原始设备 JSON、签名输出和构建日志不进入文档仓库；本记录不保存设备名、UDID、进程标识、容器路径、个人签名信息或登录凭据。
+
+### 验证范围
+
+- 已验证本版开发签名构建、签名、安装、正常前台启动和启动后的进程存活。
+- 本次没有代替用户完成个人训练视频的完整剪辑与导出验收，也没有执行 Watch 真机、升级、VoiceOver 或生产观测验收。
+- 未生成或上传分发 Archive，未查询 App Store Connect、TestFlight、审核或上架状态。
+- 本轮只做本地提交，没有推送远端。

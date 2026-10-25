@@ -42,9 +42,42 @@ xcodebuild test -project ShotMarker.xcodeproj -scheme ShotMarker \
 
 独立审查完整 `7cd8eb3..111303d` 变更及周边配置、持久化、规划和导航代码，最终无未解决问题。修正了仍推荐“恢复默认范围”的两处旧错误提示，以及 current 中一条旧正值范围说明。审查没有把此前的 460 项结果冒充本轮验证；随后本轮完整 475 项回归通过。
 
-本地 main 从 `7cd8eb3` 快进至 `b5aa379`；产品及测试目录与 `111303d` 无差异。同日 main `b5aa379` 的 Debug iphoneos 构建退出码 0，App 为 1.3（3），codesign 深度严格验证通过。安装、正常前台启动及后续同一进程存活均已核实；没有使用测试启动参数。构建日志 `/tmp/shotmarker-simplify-device-build.log`，签名日志 `/tmp/shotmarker-simplify-device-signing.log`。
+本地 main 从 `7cd8eb3` 快进至 `b5aa379`；产品及测试目录与 `111303d` 无差异。
 
-设备安装详情由私有仓库当前发布状态及 `2026-10-23-clip-editor-simplify-iphone-install.md` 维护。公开仓库不保存设备标识、原始用户数据或凭据。没有远程推送、商店提交或新分发 Archive。
+### 同日后续：开发签名安装与正常启动
+
+- 验证日期：2026-10-23（Asia/Shanghai）。
+- 授权范围：将片段编辑精简与带符号时间偏移改动合并到公开仓库本地 main，并安装、运行到用户已重新连接和解锁的 iPhone，供用户实测。
+- 构建代码基线：公开仓库本地 main，`b5aa3797d8ca2386b9cca50ee5f4d7faefa4abe3`。
+- App：ShotMarker 1.3（Build 3），`com.heji.ShotMarker`。
+- 环境：Xcode 27.1，Debug 真机构建；iPhone 16，iOS 26.6.1，有线连接、已配对，开发者模式启用。
+
+#### 结果与证据
+
+1. main 已快进合并本轮改动。Debug iphoneos 构建退出码为 0，日志包含 `BUILD SUCCEEDED`；App 包的 Bundle ID 和版本核对通过。
+2. `codesign --verify --deep --strict` 退出码为 0，签名验证通过。
+3. 安装 JSON 的 `outcome` 为 `success`，返回的 App Bundle ID 正确。
+4. 启动 JSON 的 `outcome` 为 `success`，记录为前台激活启动。启动参数为空，没有测试启动参数或测试环境变量；未附加调试器。
+5. 稍后的进程查询 JSON 的 `outcome` 为 `success`，已核对同一 ShotMarker 进程仍在运行。
+
+本次本地临时证据：
+
+- `/tmp/shotmarker-simplify-device-build.log`
+- `/tmp/shotmarker-simplify-device-signing.log`
+- `/tmp/shotmarker-simplify-device-install.json`
+- `/tmp/shotmarker-simplify-device-launch.json`
+- `/tmp/shotmarker-simplify-device-processes.json`
+
+已再次读取构建成功标记、三份 JSON 成功状态，并比较启动与进程查询结果中的进程身份。首次进程查询使用了不适用于 URL 字段的过滤表达式，命令失败；随后改用 App 名称搜索并成功核对。这是查询命令问题，没有据此判断 App 启动失败。
+
+临时文件可能被系统清理，路径不构成永久留存保证。原始设备 JSON、签名输出和构建日志不进入文档仓库；本记录不保存设备名、UDID、进程标识、容器路径、个人签名信息或登录凭据。
+
+#### 验证范围
+
+- 已验证本版开发签名构建、签名、安装、正常前台启动和启动后的进程存活。
+- 本次没有代替用户完成个人训练视频的完整剪辑与导出验收，也没有执行 Watch 真机、升级、VoiceOver 或生产观测验收。
+- 未生成或上传分发 Archive，未查询 App Store Connect、TestFlight、审核或上架状态。
+- 本轮只做本地提交，没有推送远端。
 
 ## 覆盖边界
 

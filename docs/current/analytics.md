@@ -45,4 +45,4 @@ Watch payload 重发或用户重复保存可能产生重复成功事件；网络
 
 - 2026-08-16 的最后一次生产验收中，服务端增加 ISO 8601 接收时间，并只保存 `project`、`event`、`time`、`device_id` 四个字段。
 - 同一验收基线下，Analytics JSONL 不保存来源 IP、User-Agent、Cookie 或完整请求 URL，也没有固定自动过期时间。
-- 本次仅核对本地源码，没有重新核验线上服务、真实 Release/TestFlight 事件或保留状态。2026-08-16 之后的当前生产状态未确认，详细外部证据由独立私有台账维护。
+- 本次仅核对本地源码，没有重新核验线上服务、真实 Release/TestFlight 事件或保留状态。2026-08-16 之后的当前生产状态未确认；脱敏验证结果见[观测验证](observability.md)及其历史记录。

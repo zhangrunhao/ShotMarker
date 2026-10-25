@@ -38,14 +38,30 @@ xcodebuild -project ShotMarker.xcodeproj -scheme ShotMarker \
 
 各目录根部保存原始 PNG；`upload-ready/` 保存上传 JPEG；iPad 另有两张从 JPEG 转码、无 Alpha 的 RGB PNG 兼容版；`manifest.json` 保存精确尺寸及 SHA-256。全部 9 张截图已逐张查看，JPEG 尺寸与无 Alpha 校验通过。尺寸规则按当日 [Apple 官方截图规范](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications) 核对。
 
-## 完成结果
+## 后台替换与重新提交
 
-- 截图准备完成后，按用户授权撤回原审核，替换 iPhone/iPad/Watch 素材，再使用同一 1.3（3）重新送审。
-- iPhone 上传 5 张 JPEG，Watch 上传 1 张 JPEG；iPad 使用 1 张 JPEG 与 2 张 RGB PNG。两张兼容 PNG 的 2064 × 2752 尺寸、无 Alpha 及全部 11 个清单文件的 SHA-256 均已核对。
-- 后台最终接受 9 张新素材并完成重新提交；发布方式仍为审核通过后手动发布。具体提交时间与审核状态由私有台账维护，公开摘要见 [发布状态](../../current/release.md)。
+验证方式为 Chrome 原生电脑控制，查看 App Store Connect 版本、Media Manager 和审核详情页面。以下均为 2026-09-29 当次操作事实，不代表后续或当前审核状态。
+
+1. 原提交于当日 15:05 进入等待审核。新素材准备完成后执行 Cancel Submission，版本变为 Developer Rejected。
+2. 删除旧 iPhone 6.9 与 6.5 英寸独立截图，以及旧 iPad 13 英寸和 Watch 素材；上传当前界面截图。
+3. iPhone 6.9 英寸最终 5 张，顺序为审核、编辑、样式、任务配置、完成任务；其他 iPhone 尺寸使用 6.9 英寸素材。
+4. iPad 13 英寸最终 3 张，顺序为审核、编辑、样式；其他 iPad 尺寸使用 13 英寸素材。Watch Ultra 3 槽位为新的开始训练截图 1 张。
+5. 重新核对 Build 3 / Version 1.3、英文更新说明、Description、Review Notes 和手动发布选项，保留已保存内容及原有构建。
+6. Add for Review 后草稿仅含 iOS App 1.3 / 1.3（3）；执行 Submit for Review，成功提示为 1 Item Submitted。
+7. 新审核详情显示 Waiting for Review，提交时间为 2026-09-29 16:33；没有发布上线。
+
+实际上传 iPhone 5 张 JPEG、Watch 1 张 JPEG，iPad 1 张 JPEG 与 2 张 RGB PNG。本地两张兼容 PNG 的 2064 × 2752 尺寸、无 Alpha 及全部 11 个清单文件的 SHA-256 均已核对，后台最终接受 9 张新素材。
+
+### 上传残留排查
+
+- iPad 的两张 JPEG 最初留下灰色占位图，Add for Review 返回 There are still screenshot uploads in progress。
+- 清理失败记录后，改用同尺寸、无 Alpha 的 RGB PNG 单张上传编辑和样式截图，实际缩略图正常显示。
+- 版本页一度只显示 3 张成功图片，但重新打开 Media Manager 时仍显示一条失败 JPEG 记录。删除该记录后，后台允许加入审核并正式提交。
+- 这是已观察到的上传残留及恢复过程，没有证明 JPEG 编码或网络服务是根因。
+- 本地证据保存在公开项目忽略目录 build/release-1.3/，含 ipad-new-assets-complete.png、resubmitted-new-screenshots.png 和同名状态文本；不把包含账号信息的原始页面状态纳入文档 Git。
 
 ## 验证边界
 
 - 此次验证覆盖截图页面及上述合成演示流程，没有重新执行完整自动测试、真机验收、Watch 同步/升级或生产观测验收。
 - Debug Simulator 版本号一致，不构成已上传正式 Archive 的源码、签名或 dSYM 映射证明。
-- 截图发布后的最新审核状态以 [发布状态](../../current/release.md) 的摘要与私有分发台账为准。
+- 截图发布后的最新审核状态以 [发布状态](../../current/release.md) 中注明日期的核验为准；本记录仅保留当日事实。

@@ -60,3 +60,39 @@ xcodebuild test -project ShotMarker.xcodeproj -scheme ShotMarker \
 ## 验证边界
 
 本次没有真机完整剪辑验收、iPad 完整测试、VoiceOver 真机朗读、Watch 新回归、Release/Archive、商店或生产服务核验。现有 actor/Sendable、AppIntents 和媒体运行提示不作为 warning-free 构建声明。编辑轮廓与方向无障碍动作有实现审查，未将代码审查等同人工辅助功能验收。
+
+## 同日后续：开发签名安装与正常启动
+
+以下记录功能实现和 Simulator 验证完成后发生的安装操作，不将安装启动扩大为个人训练视频的完整验收。
+
+- 验证日期：2026-10-25（Asia/Shanghai）。
+- 授权范围：将当前片段独立序号布局与操作列表功能安装、运行到用户的 iPhone，供用户实测。
+- 实际构建代码基线：公开仓库本地 main，`362d66ef0955f1c06420f4c38beb4dd37e905bd5`；包含功能提交 `38c88c08dc351431d769a52a199e2691dc2a4a85`。
+- App：ShotMarker 1.3（Build 3），`com.heji.ShotMarker`。
+- 环境：Xcode 27.1，generic iOS Debug 构建；iPhone 16，iOS 26.6.1，已配对、开发者模式启用。连接类型未核对。
+
+### 结果与证据
+
+1. Debug 真机构建成功，日志包含 `BUILD SUCCEEDED`；App 包的 Bundle ID 和版本核对通过。
+2. `codesign --verify --deep --strict` 返回码为 0，签名验证通过；签名日志为空，成功依据为本次命令返回码，不以空日志作为独立成功证据。
+3. 设备详情 JSON 的 `outcome` 为 `success`，确认型号、系统版本、配对及开发者模式状态。
+4. 安装 JSON 的 `outcome` 为 `success`，返回的 App Bundle ID 正确。
+5. 启动 JSON 的 `outcome` 为 `success`，记录为前台激活启动。启动参数为空，`startStopped` 为 false，没有 UI 测试启动参数，也未附加调试器。
+6. 随后的进程查询 JSON 的 `outcome` 为 `success`；比较启动与进程列表，确认同一 ShotMarker 进程仍在运行。用户已可开始试用。
+
+本次本地临时证据：
+
+- `/tmp/shotmarker-number-device-build.log`
+- `/tmp/shotmarker-number-device-signing.log`
+- `/tmp/shotmarker-number-device-details.json`
+- `/tmp/shotmarker-number-device-install.json`
+- `/tmp/shotmarker-number-device-launch.json`
+- `/tmp/shotmarker-number-device-processes.json`
+
+已重新读取构建成功标记、设备/安装/启动/进程查询四份 JSON 的成功摘要，并比较启动与进程查询结果中的进程身份。临时文件可能被系统清理，路径不构成永久留存保证。原始设备 JSON、签名输出和构建日志不进入文档仓库；本记录不保存设备名、设备标识、进程标识、容器路径、个人签名信息或登录凭据。
+
+### 验证范围
+
+- 已验证本版开发签名构建、签名、安装、正常前台启动和启动后的进程存活，安装完成后交由用户试用。
+- 本次没有代替用户完成个人训练视频的完整剪辑与导出验收，也没有执行 Watch 真机、升级、VoiceOver 或生产服务验收。
+- 未生成或上传分发 Archive，未查询 App Store Connect、TestFlight、审核或上架状态。

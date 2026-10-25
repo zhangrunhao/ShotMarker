@@ -43,3 +43,31 @@ xcodebuild test -project ShotMarker.xcodeproj -scheme ShotMarker \
 仅验证本地 Debug Simulator。没有新增 Watch 完整测试、Release/Archive、真机、完整 iPad 或 VoiceOver 人工验收，也没有重新核验分发和外部服务状态。构建仍有既有测试隔离/Sendable 警告及 AppIntents metadata 提示。
 
 慢速播放档位、逐帧按钮和片段衔接预览不在本次实现范围。
+
+## 同日后续：开发签名安装与正常启动
+
+以下为上述 Simulator 验证结束后，按用户要求完成的设备操作；不改变前文测试执行时的范围。
+
+- 验证日期：2026-10-23（Asia/Shanghai）
+- 授权范围：合并已完成的片段审核体验改进至公开仓库本地 main，并安装、运行到当前连接的 iPhone，供用户稍后实测。
+- 代码基线：公开仓库本地 main，`ca7b95602e2a00cf52638882e735e5620c85cd53`。
+- App：ShotMarker 1.3（Build 3），`com.heji.ShotMarker`。
+- 环境：Xcode 27.1，Debug 真机构建；iPhone 16，iOS 26.6.1，有线连接，开发者模式启用。
+
+### 结果与证据
+
+1. 真机构建退出码为 0，构建日志包含 `BUILD SUCCEEDED`；`codesign --verify --deep --strict` 通过。
+2. `devicectl install app` 退出码为 0，安装结果 JSON 的 `outcome` 为 `success`。
+3. `devicectl device process launch --activate --terminate-existing` 退出码为 0，启动结果 JSON 的 `outcome` 为 `success`。未传入测试启动参数，也未附加调试器。
+4. 随后查询设备进程，确认上述同一 ShotMarker 进程仍运行。
+
+本次本地临时证据为 `/tmp/shotmarker-phone-build.log`、`/tmp/shotmarker-phone-install.json`、`/tmp/shotmarker-phone-launch.json` 和 `/tmp/shotmarker-phone-processes.json`。构建成功标记及三份 JSON 的成功状态已再次读取核对；临时文件可能被系统清理，不能将路径视为永久留存保证。
+
+原始设备 JSON 和签名输出不进入文档仓库；本记录不保存设备名、UDID、容器路径、个人签名证书信息或登录凭据。
+
+### 验证范围
+
+- 已验证开发签名安装、正常启动和启动后进程存活。
+- 未验证篮球训练、视频导入与剪辑完整流程、Watch 真机、升级、VoiceOver、生产 Analytics、崩溃符号化或告警。
+- 未生成或上传分发 Archive，未查询 App Store Connect、TestFlight、审核或上架状态。
+- 本轮只做本地提交，没有推送远端。

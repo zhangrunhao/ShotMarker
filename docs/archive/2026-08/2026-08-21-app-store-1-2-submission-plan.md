@@ -1,5 +1,7 @@
 # ShotMarker 1.2 App Store Submission Implementation Plan
 
+> 文档边界更新（2026-10-25）：本文保留当时的计划与执行记录；其中按 App Store、TestFlight、签名 Archive、真机或生产观测来源一律归私有的规则已被取代。现按内容敏感性分类，脱敏结果在本仓库维护，敏感配置仍留私有；见[文档边界调整](../2026-10/2026-10-25-documentation-boundaries.md)。本次迁移不表示重新执行历史验证。
+
 > 历史计划：2026-09-29 已由 [1.3 提交计划](../2026-09/2026-09-29-app-store-1-3-submission-plan.md) 接替。以下保留原始执行设想和未完成清单，不再作为当前指令，也不表示当年各项验收或发布已经完成。当前事实见 [发布状态](../../current/release.md)。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task.

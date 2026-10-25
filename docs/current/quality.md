@@ -11,12 +11,18 @@
 | Watch 既有自动测试基线 | `2fa8049`；Apple Watch Series 11 (46mm) / watchOS 26.5 Simulator | 40 项通过，0 失败/跳过；本轮 Watch 范围：尝试真机 runtime 回归，连接尚未恢复；结果：三次完整连接尝试均在测试启动前超时，0 项执行；不能记为通过 |
 | Release 构建及产物边界 | `3b8a3be`；generic iOS Simulator 增量构建 | 构建退出 0，DEBUG 验收入口不进入产物；全新 DerivedData、dSYM 与隐私清单的既有基线为 `2fa8049`；不代替签名 Archive |
 | 严格签名检查 | `3b8a3be` 的开发签名 iPhone Debug App 1.3（3） | 验证退出 0；不扩大为正式 Archive 验收 |
-| 真机限定 UI 与媒体回归 | 3b8a3be；详细设备证据由独立私有台账维护 | 首轮 23 项中 21 项通过；修正测试滚动后，受影响的 8 项全部通过（包含原 2 项失败），覆盖 23 个不同用例；未执行请求真实 Photos 授权的 1 项 |
+| 真机限定 UI 与媒体回归 | `3b8a3be`；iPhone 16 / iOS 26.6.1 | 首轮 23 项中 21 项通过；修正测试滚动后，受影响的 8 项全部通过（包含原 2 项失败），覆盖 23 个不同用例；未执行请求真实 Photos 授权的 1 项 |
 | 真机隔离 host 单元与真实视频导出 | 3b8a3be | 43 项通过，0 失败/跳过；包含真实视频生成、修改后重新生成、旧输出替换与重新加载 |
 | 生产源码 SwiftLint | ShotMarker、Shared、ShotMarkerWatchApp；原有规则 | 149 项：120 warning / 29 error；静态检查未通过，未放宽规则 |
 | 文本和文档结构 | 公开 Markdown 本地路径、归档月份、current 行数及 git diff | 本地路径、current 行数、归档月份和文本差异已完成检查 |
 
 本轮追加结果与限制见[真机追加验收](../archive/2026-10/2026-10-25-maintenance-device-acceptance.md)；此前命令、结果包及验证边界见[维护验证](../archive/2026-10/2026-10-25-maintenance-validation.md)。更早的结果及外部摘要见[文档整理记录](../archive/2026-10/2026-10-25-documentation-audit.md)。
+
+## 真机运行状态
+
+- 最后验证：2026-10-25，代码 `3b8a3be`；iPhone 16 / iOS 26.6.1，USB 连接、开发者模式启用。开发签名严格验证通过；测试完成后无测试参数正常启动，同一进程存活。
+- 现有训练与任务两个业务文件在测试前、测试后和正常启动后三次字节数及 SHA-256 一致。媒体测试可能写入或清理应用日志，不表示整个沙盒零写入。
+- Apple Watch Series 8 / watchOS 26.6 已配对、开发者模式启用；三次完整连接尝试均在测试启动前超时，0 项执行。最近证据不等于当前设备连接状态。
 
 ## 当前覆盖
 
@@ -38,7 +44,7 @@
 ## 风险和未覆盖
 
 - 自动测试覆盖上述 Simulator 和代码范围；本轮另外检查普通及最大辅助字号任务卡片截图，不扩大为深色或 iPad 完整验收。
-- 本轮真机验证仅覆盖上表限定范围，结论为：iPhone 限定回归通过，Watch 真机仍因调试连接失败而未完成。真实 Photos 授权/保存、HealthKit、完整真机全功能流程未验收；硬件及详细设备过程见[私有台账](../private.local/shotmarker/current/release.md)。
+- 本轮真机验证仅覆盖上表限定范围，结论为：iPhone 限定回归通过，Watch 真机仍因调试连接失败而未完成。真实 Photos 授权/保存、HealthKit、完整真机全功能流程未验收；硬件及详细设备过程见[追加验收记录](../archive/2026-10/2026-10-25-maintenance-device-acceptance.md)。
 - App Store / TestFlight 分发与启动反馈最后核验于 2026-09-29；签名、dSYM UUID 和 Organizer Validate 未独立复核。用户当日跳过后续验收的决定不扩大覆盖。
 - Watch 真机联机升级、完整 iPad 功能、VoiceOver 真机朗读、Release Analytics 生产、真机崩溃符号化与 GlitchTip 告警仍无新增通过证据。
 - 导出为 BGRA SDR；HDR/广色域保真、非方形像素、非零 clean aperture 及任意斜切来源变换未验收。
@@ -50,4 +56,4 @@
 - 本次维护的验收决定：2026-10-25，用户明确采用已通过的 iPhone 验收结果合并 main；Watch 真机不作为本次合并前置条件，仍保留未验收状态。该决定不扩大任何测试或发布覆盖。
 - 测试、构建和外部服务结论注明日期与代码范围；自动测试不代替未执行的人工流程。
 - Simulator dSYM 只证明该产物配置，不替代正式 Archive dSYM。
-- 外部状态没有当次核验时保留最后日期或标为未确认；App Store Connect、TestFlight、签名 Archive、真机及生产观测的详细证据由独立私有台账维护。
+- 外部状态没有当次核验时保留最后日期或标为未确认；脱敏的发布、签名、真机及生产观测证据在本仓库维护；需要限制访问的账号和基础设施配置另存私有台账。

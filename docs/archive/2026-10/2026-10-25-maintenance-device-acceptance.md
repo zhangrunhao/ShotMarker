@@ -4,7 +4,7 @@
 - 起始代码：`322ba2b`，包含此前维护提交 `2fa8049`；本轮最终生产代码：`3b8a3be`。
 - 用户要求真机验收后合并 main。本记录只保存公开实现与验证摘要，不作为完整真机全功能通过声明。
 - 验收结论：iPhone 限定回归通过，Watch 真机仍因调试连接失败而未完成。
-- 真实硬件、设备过程及私有外部证据由[独立私有台账](../../private.local/shotmarker/current/release.md)维护；公开仓库不记录设备标识或复制详细硬件过程。
+- 本页记录脱敏后的设备环境、执行结果和限制；原始设备标识、签名身份、账号信息及真实业务内容不进入文档。
 
 ## 实现事实与处理
 
@@ -28,6 +28,34 @@ DEBUG 验收入口在 preparation 失败时显示可见错误，临时路径探�
 | 公开文档与文本检查 | 本地路径、current 行数、归档月份和文本差异已完成检查 | 本地目标、可选私有链接边界、current 行数和归档月份分别检查 |
 
 本地追加日志与结果包根目录为 `/tmp/shotmarker-device-20261025/`；它们不进入 Git。测试摘要不包含真实设备详细标识。
+
+## 设备环境与执行证据
+
+### iPhone
+
+- 环境：iPhone 16 / iOS 26.6.1，USB 连接，开发者模式启用；Xcode 27.1（27A9275）。用户已确认解锁并知悉自动操作 App。
+- generic iOS Debug 构建通过，随后物理 destination 测试构建通过。最终 App 的严格签名验证退出 0。全新派生目录直接 build-for-testing 首次因缺少 TEST_HOST 失败；先完成普通 App 构建后测试构建成功，没有更改签名配置。
+- 首次物理 UI 测试的任务 fixture 初始化失败触发 DEBUG 断言；之后可见诊断确认本文路径别名问题。UI 首轮的另一失败原因是实际 Increment 按钮位于导航栏上方而父 Stepper 仍报告可点击，媒体辅助滚动仅处理序号模式。修正实际按钮完整可见检查和按几何滚动后，1 项范围恢复与 7 项媒体导航通过，包含原两项失败；不是一次完整 23 项零失败运行。
+- 未运行 `testCompletedTaskOpensConfigurationAndDeletionRequiresConfirmation`：其 PhotoKit 来源 fixture 会申请真实 Photos read/write 权限；该项仍在 Simulator 全套通过。
+- 43 项隔离宿主测试的分布为 FileStore 5、MediaIntegration 1、Playback 19、Bootstrap 3、AppLogStore 10、Reset 5。使用同目录复制的 xctestrun，仅启用目标，并设置 `SHOTMARKER_UI_TEST_TIMELINE=1` 避免启动真实 bootstrap；文件和偏好使用隔离 fixture。真实硬件完成 41 秒合成片生成、修改排除/取景后 26 秒重新生成、旧输出保留及替换、持久化重载与临时输出清理。
+- 媒体测试使用共享日志实例，可能写入或清理日志，不修改真实 Photos 或 HealthKit。现有 `training-sessions.json` 与 `highlight-tasks.json` 在测试前、测试后、正常启动后三次 SHA-256 及字节数相同；核验仅保留一致性摘要，临时业务文件副本立即删除，不记录数据或用户标识。结论不扩大为整个沙盒零写入。
+- 最后使用空业务参数、无测试环境变量、`startStopped=false` 正常前台启动，并确认同一进程随后仍在运行。Device Hub 屏幕共享要求 iOS 27 以上，此设备没有通过该入口完成正常首页视觉检查；UI 证据来自 XCTest，不等同人工全流程验收。
+
+### Watch
+
+- 环境：Apple Watch Series 8 / watchOS 26.6，系统显示已配对且开发者模式启用。用户确认解锁及手机连接，随后将 Watch 放到 Mac 旁并开启 Wi-Fi/蓝牙；Mac Wi-Fi 也已核验开启。
+- devicectl 显示调试服务不可用及 tunnel disconnected；三次完整 Xcode destination 连接均在测试启动前超时，退出 70。最后底层错误为 `CoreDeviceError 4000` / `RemotePairingError 1001`，表示协商网络参数建立通道超时。Device Hub 曾提示需要靠近 Mac，靠近后仍未建立稳定调试通道。
+- 未解除配对、重置 Watch 或变更开发权限/安全设置。本轮 0 项执行，应记为连接限制，不记为断言失败或验收通过；用户最终接受的合并范围见文末。
+
+### 临时证据索引
+
+以下均位于 `/tmp/shotmarker-device-20261025/`，可能被系统清理，不进入 Git：
+
+- `iphone-ui-fixed.xcresult`：首轮 21/23；`stepper-probe.xcresult`：步进可见性 RED；`stepper-media-green.xcresult`：最终 8/8。
+- `iphone-isolated-core.xcresult`：43/43；`signing-final.log`、`artifact-final-summary.json`：开发签名及版本摘要。
+- `business-hashes-before.json`、`business-hashes-after-tests.json`、`business-hashes-after-launch.json`：三个时点的业务文件一致性摘要；不复制真实内容或原始摘要值。
+- `normal-launch.json`、`normal-processes.json`：正常启动及同一进程存活。
+- `watch-device-test.log`、`watch-device-retry.log`、`watch-device-nearby.log`、`watch-apps-nearby.log`：连接失败的本地原始证据；不将其中设备值复制到文档。
 
 ## 未验证与外部边界
 
