@@ -165,6 +165,7 @@ final class HighlightClipMediaNavigationUITests: XCTestCase {
         XCTAssertTrue(operations.waitForExistence(timeout: 5))
         XCTAssertFalse(app.sliders["ClipNumberSize"].exists)
         operations.tap()
+        recordScreenshot("framing-operations-expanded")
         app.buttons["ClipFramingToggle"].tap()
         XCTAssertFalse(app.buttons["ClipFramingIncrease"].isEnabled)
         app.buttons["ClipNumberToggle"].tap()

@@ -405,8 +405,20 @@ struct HighlightClipEditorView: View {
             .frame(minWidth: 132, minHeight: 44)
         }
         .buttonStyle(.borderedProminent)
-        .tint(Color(white: 0.25))
+        .tint(playbackTint)
         .disabled(playbackController.isLoading || playbackController.loadError != nil)
+    }
+
+    private var playbackTint: Color {
+        colorScheme == .dark
+            ? Color(red: 0.38, green: 0.40, blue: 0.73)
+            : Color(red: 0.28, green: 0.30, blue: 0.68)
+    }
+
+    private var toolAccent: Color {
+        colorScheme == .dark
+            ? Color(red: 0.70, green: 0.73, blue: 1)
+            : playbackTint
     }
 
     private var canAdjustFraming: Bool {
@@ -428,9 +440,37 @@ struct HighlightClipEditorView: View {
                 Button {
                     operations.isExpanded.toggle()
                 } label: {
-                    Label("操作 · \(operations.mode.title)", systemImage: operations.isExpanded ? "chevron.up" : "chevron.down")
-                        .frame(minHeight: 44)
+                    Group {
+                        if dynamicTypeSize.isAccessibilitySize {
+                            Label("操作 · \(operations.mode.title)",
+                                systemImage: operations.isExpanded ? "chevron.up" : "chevron.down")
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            HStack(spacing: 8) {
+                                Text("操作")
+                                Text(operations.mode == .none ? "关闭" : operations.mode.title)
+                                    .font(.caption.weight(.semibold))
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(toolAccent.opacity(0.12), in: Capsule())
+                                Image(systemName: operations.isExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.caption2.weight(.bold))
+                            }
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(toolAccent)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .background(toolAccent.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(toolAccent.opacity(0.16), lineWidth: 1)
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: 14))
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel(operations.isExpanded ? "收起操作列表" : "展开操作列表")
                 .accessibilityValue(operations.mode.title)
                 .accessibilityIdentifier("ClipOperationsToggle")
@@ -444,31 +484,58 @@ struct HighlightClipEditorView: View {
                         playbackController.pause()
                         operations.toggleFraming()
                     } label: {
-                        Text(operations.mode == .framing ? "关闭取景" : "开启取景").frame(minHeight: 44)
+                        operationLabel(operations.mode == .framing ? "关闭取景" : "开启取景",
+                            symbol: operations.mode == .framing ? "checkmark.circle.fill" : "viewfinder")
                     }
+                    .buttonStyle(ClipEditorOperationButtonStyle(isSelected: operations.mode == .framing,
+                        selectedTint: playbackTint, accent: toolAccent))
                     .accessibilityIdentifier("ClipFramingToggle")
                     Button {
                         guard canAdjustFraming else { return }
                         playbackController.pause()
                         editorViewModel.restoreOriginalFraming()
                     } label: {
-                        Text("恢复原画面").frame(minHeight: 44)
+                        operationLabel("恢复原画面", symbol: "arrow.counterclockwise")
                     }
+                    .buttonStyle(ClipEditorOperationButtonStyle(isSelected: false,
+                        selectedTint: playbackTint, accent: Color(uiColor: .secondaryLabel)))
                     .accessibilityIdentifier("ClipFramingRestore")
                     .disabled(!canAdjustFraming || editorViewModel.effectiveFraming == .original)
                     Button {
                         playbackController.pause()
                         operations.toggleNumber()
                     } label: {
-                        Text(operations.mode == .number ? "关闭序号" : "开启序号").frame(minHeight: 44)
+                        operationLabel(operations.mode == .number ? "关闭序号" : "开启序号",
+                            symbol: operations.mode == .number ? "checkmark.circle.fill" : "number")
                     }
+                    .buttonStyle(ClipEditorOperationButtonStyle(isSelected: operations.mode == .number,
+                        selectedTint: playbackTint, accent: toolAccent))
                     .accessibilityIdentifier("ClipNumberToggle")
                 }
-                .buttonStyle(.bordered)
-                .font(.subheadline)
+                .padding(6)
+                .background(toolAccent.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18)
+                        .strokeBorder(toolAccent.opacity(0.10), lineWidth: 1)
+                }
             }
         }
         .tint(Color(uiColor: .label).opacity(0.8))
+    }
+
+    private func operationLabel(_ title: String, symbol: String) -> some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(HStackLayout(spacing: 8))
+            : AnyLayout(VStackLayout(spacing: 5))
+        return layout {
+            Image(systemName: symbol).font(.body.weight(.semibold))
+            Text(title).font(.caption.weight(.semibold))
+        }
+        .multilineTextAlignment(.center)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 6)
+        .frame(maxWidth: .infinity, minHeight: 52)
+        .contentShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var framingScaleControls: some View {
@@ -675,6 +742,21 @@ struct HighlightClipEditorView: View {
             return description
         }
         return error.localizedDescription
+    }
+}
+
+private struct ClipEditorOperationButtonStyle: ButtonStyle {
+    let isSelected: Bool
+    let selectedTint: Color
+    let accent: Color
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isSelected ? .white : accent)
+            .background(isSelected ? selectedTint : Color(uiColor: .tertiarySystemGroupedBackground),
+                in: RoundedRectangle(cornerRadius: 12))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.4)
     }
 }
 
