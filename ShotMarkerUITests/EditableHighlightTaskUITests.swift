@@ -19,6 +19,8 @@ final class EditableHighlightTaskUITests: XCTestCase {
         XCTAssertTrue(description.label.contains("共 9 秒"))
         let review = app.buttons["ClipSettingsReview"]
         scrollTo(review, in: app)
+        XCTAssertFalse(app.staticTexts["片段序数"].exists)
+        XCTAssertFalse(app.buttons["样式调整"].exists)
         XCTAssertTrue(review.isEnabled)
         review.tap()
         XCTAssertTrue(app.navigationBars["审核集锦片段"].waitForExistence(timeout: 10))
@@ -104,6 +106,20 @@ final class EditableHighlightTaskUITests: XCTestCase {
         let app = launch("completed")
         let edit = app.buttons["highlight-task-edit"]
         XCTAssertTrue(edit.waitForExistence(timeout: 10))
+        let summary = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "训练 ")).firstMatch
+        XCTAssertTrue(summary.exists)
+        summary.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.15)).tap()
+        XCTAssertFalse(app.navigationBars["编辑集锦任务"].exists)
+        summary.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertFalse(app.navigationBars["编辑集锦任务"].exists)
+        XCTAssertEqual(edit.label, "编辑任务")
+        XCTAssertTrue(app.buttons["播放"].isHittable)
+        XCTAssertTrue(app.buttons["保存相册"].isHittable)
+        let cardScreenshot = XCTAttachment(screenshot: app.screenshot())
+        cardScreenshot.name = "task-card-edit-action"
+        cardScreenshot.lifetime = .keepAlways
+        add(cardScreenshot)
         edit.tap()
         XCTAssertTrue(app.navigationBars["编辑集锦任务"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["创建任务后训练记录不可更换"].exists)
@@ -118,10 +134,17 @@ final class EditableHighlightTaskUITests: XCTestCase {
     func testModifiedTaskAtLargestTypeShowsStaleOutputAndRequiresReview() {
         let app = launch("modified", largeType: true)
         XCTAssertTrue(app.buttons["highlight-task-edit"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["highlight-task-edit"].label.contains("当前成片不包含最新修改"))
+        XCTAssertEqual(app.buttons["highlight-task-edit"].label, "编辑任务")
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "当前成片不包含最新修改")).firstMatch.exists)
         XCTAssertFalse(app.buttons["重新生成"].exists)
+        XCTAssertTrue(app.buttons["highlight-task-edit"].isHittable)
         XCTAssertTrue(app.buttons["播放"].isHittable)
+        XCTAssertTrue(app.buttons["保存相册"].isHittable)
         XCTAssertTrue(app.buttons["删除"].isHittable)
+        let largeTypeScreenshot = XCTAttachment(screenshot: app.screenshot())
+        largeTypeScreenshot.name = "task-card-largest-type"
+        largeTypeScreenshot.lifetime = .keepAlways
+        add(largeTypeScreenshot)
     }
 
     private func launch(_ state: String, largeType: Bool = false) -> XCUIApplication {

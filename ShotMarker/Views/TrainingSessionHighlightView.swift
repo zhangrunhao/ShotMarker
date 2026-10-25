@@ -115,7 +115,9 @@
                 clipSettingsSection
                 videoPickerSection
                 selectedVideoItemsSection
-                markerLabelSettingsSection
+                if taskBaseline == nil {
+                    markerLabelSettingsSection
+                }
                 coverageAndGenerationSections
             }
             .navigationTitle(taskBaseline == nil ? "新建集锦任务" : "编辑集锦任务")

@@ -18,10 +18,7 @@ struct HighlightTaskRow: View {
                 Button("停止") { perform { try await manager.stop(taskID: task.id) } }
                     .frame(minHeight: 44).accessibilityIdentifier("highlight-task-stop")
             } else {
-                Button(action: onEdit) { summary }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("进入任务配置")
-                    .accessibilityIdentifier("highlight-task-edit")
+                summary
                 if let code = task.lastGenerationResult?.errorCode, task.state == .failed {
                     Text(code.message).font(.footnote).foregroundStyle(.secondary)
                 }
@@ -35,7 +32,6 @@ struct HighlightTaskRow: View {
                     VStack(alignment: .leading) { actions }
                 }
                 .buttonStyle(.bordered)
-                .disabled(manager.photoSavingTaskIDs.contains(task.id))
             }
         }
         .padding(.vertical, 6)
@@ -65,16 +61,23 @@ struct HighlightTaskRow: View {
 
     @ViewBuilder
     private var actions: some View {
-        if task.allowedActions.contains(.play) {
-            Button("播放", action: onPlay).frame(minHeight: 44)
-            Button(manager.photoSavingTaskIDs.contains(task.id) ? "保存中…" : "保存相册") {
-                perform { try await manager.saveToPhotoLibrary(taskID: task.id) }
-            }.frame(minHeight: 44)
+        Button("编辑任务", action: onEdit)
+            .frame(minHeight: 44)
+            .accessibilityHint("进入任务配置")
+            .accessibilityIdentifier("highlight-task-edit")
+        Group {
+            if task.allowedActions.contains(.play) {
+                Button("播放", action: onPlay).frame(minHeight: 44)
+                Button(manager.photoSavingTaskIDs.contains(task.id) ? "保存中…" : "保存相册") {
+                    perform { try await manager.saveToPhotoLibrary(taskID: task.id) }
+                }.frame(minHeight: 44)
+            }
+            if task.canRegenerateDirectly {
+                Button("重新生成") { perform { try await manager.restart(taskID: task.id) } }.frame(minHeight: 44)
+            }
+            Button("删除", role: .destructive) { confirmingDelete = true }.frame(minHeight: 44)
         }
-        if task.canRegenerateDirectly {
-            Button("重新生成") { perform { try await manager.restart(taskID: task.id) } }.frame(minHeight: 44)
-        }
-        Button("删除", role: .destructive) { confirmingDelete = true }.frame(minHeight: 44)
+        .disabled(manager.photoSavingTaskIDs.contains(task.id))
     }
 
     private func perform(_ operation: @escaping () async throws -> Void) {
