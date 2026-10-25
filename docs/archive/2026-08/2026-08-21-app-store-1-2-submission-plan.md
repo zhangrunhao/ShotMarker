@@ -1,6 +1,6 @@
 # ShotMarker 1.2 App Store Submission Implementation Plan
 
-> 历史计划：2026-09-29 已由 [1.3 提交计划](../../changes/2026-09-29-app-store-1-3-submission-plan.md) 接替。以下保留原始执行设想和未完成清单，不再作为当前指令，也不表示当年各项验收或发布已经完成。当前事实见 [发布状态](../../current/release.md)。
+> 历史计划：2026-09-29 已由 [1.3 提交计划](../2026-09/2026-09-29-app-store-1-3-submission-plan.md) 接替。以下保留原始执行设想和未完成清单，不再作为当前指令，也不表示当年各项验收或发布已经完成。当前事实见 [发布状态](../../current/release.md)。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task.
 

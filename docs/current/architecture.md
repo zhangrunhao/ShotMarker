@@ -1,6 +1,6 @@
 # ShotMarker 技术架构
 
-- 最后复核：2026-10-25（逐段序号布局、schema 4、操作模式与共享标签渲染）
+- 最后复核：2026-10-25（本地源码：启动/场景生命周期、Watch runtime、日志目录与保留清理、配置及播放组件；验证结果另按日期和代码范围记录）
 - 测试和构建结果见 [质量状态](quality.md)；外部集成与隐私声明沿用各段注明的核验日期。
 
 ## 运行单元
@@ -12,14 +12,16 @@
 - ShotMarkerWatchAppTests：同步、outbox、运行时和数据世代重置测试。
 - Shared：同步载荷及 `AppDataResetCoordinator`。
 
-2026-10-23 本机使用 Xcode 27.1（27A9275）、Swift 6.4，iOS 测试构建已通过。工程语言模式为 Swift 5；iOS 下限 26.4，watchOS 下限 26.2。主 App 不配置 macOS、Mac Catalyst 或 visionOS destination。
+2026-10-25 本机工具链复核为 Xcode 27.1（27A9275）、Swift 6.4。工程语言模式为 Swift 5；iOS 下限 26.4，watchOS 下限 26.2。主 App 不配置 macOS、Mac Catalyst 或 visionOS destination。
 
 ## 启动和数据世代
 
-`ShotMarkerBootstrap` 在构造任何业务、日志、Analytics、GlitchTip 或 WatchConnectivity 服务前执行数据世代事务。失败只显示阻塞重试页。Watch 也在重置成功后才构造同步服务。
+`ShotMarkerApp` 提供场景入口；独立的 `ShotMarkerBootstrap.swift` 执行数据世代事务、加载及生命周期协调，`ShotMarkerServices.swift` 组装业务、日志、Analytics、GlitchTip 和 WatchConnectivity 服务。只有重置成功后才构造服务，失败只显示阻塞重试页。Watch 也在重置成功后才构造同步服务。
+
+Bootstrap 在异步加载期间保存最近的 active/background 状态，inactive 不覆盖该状态。加载完成后先将状态应用到服务，再启动服务并发布到界面；加载期间进入后台不能被漏掉，后台状态下不启动生成调度。
 
 - 当前 epoch 为 1；缺失或低版本触发清理，不迁移旧数据。
-- iPhone 先将仅含目标 epoch 与固定 `dataCutoverAt` 的 journal 原子写入 Application Support/ShotMarkerReset/reset-state.json，再清理 ShotMarker 业务目录、Caches、tmp 和完整 UserDefaults domain。
+- iPhone 先将仅含目标 epoch 与固定 `dataCutoverAt` 的 journal 原子写入 Application Support/ShotMarkerReset/reset-state.json，再清理 ShotMarker 业务目录、旧 Application Support/Logs、Caches、tmp 和完整 UserDefaults domain。
 - 成功写入 epoch 和切割时间后移除 journal。journal 优先于已写入 epoch，重试复用首次时间，不扩大旧载荷丢弃范围。
 - Watch 清理自身 Application Support（含 outbox）、完整 UserDefaults、Caches、tmp，最后写入 epoch。
 - 重置不访问 Photos/HealthKit 删除 API 或沙盒外目录。安装标识随偏好清理重新生成。
@@ -28,6 +30,7 @@
 ## 模型与持久化
 
 - `TrainingSession` 保存 ID、训练起止和 `ShotMarkerEvent(id, markedAt)`；路径为 Application Support/ShotMarker/training-sessions.json。
+- `TrainingSessionJSONTransferService` 导入单条或数组 JSON，以训练 UUID 新增或替换，导出为 JSON 数组；训练列表提供全部导出、多选合并及确认删除。正式服务不注入旧组合审核 Store，不修改已有任务快照。
 - `HighlightTask` 拥有不可变训练快照、任务视频、`ClipSettings`、全部 `reviewItems`、活动执行、最近结果及当前成片。
 - 新建快照使用新的任务本地打点 UUID、毫秒时间及稳定 `sourceOrder`，不保存原训练 ID 或原打点 ID；临时训练适配对象仅供纯规划和只读 UI。
 - `HighlightTaskStore` actor 是 highlight-tasks.json 唯一写入者，正常事务写 schema 4，兼容读取 schema 1/2/3/4。旧任务取景缺失按原画面，缺少序号布局按任务当前默认；单纯读取或无变化事务不改写文件、不改 revision/epoch。schema 4 使不支持逐段布局的旧客户端走未来版本保护。读取后校验、原子写盘，成功后才发布 UI。
@@ -40,6 +43,12 @@
 - 文件只存受控相对路径，拒绝越界及符号链接。创建用 staging；更新先移动新增文件、提交 JSON 后才清理旧副本，失败回滚本次新增文件。
 - 当前成片为 HighlightTasks/<task>/Outputs/<output>/highlight.mov；每次输出使用新的 UUID 目录。
 - 旧 `HighlightJob` 和组合确认类型仍保留供旧契约回归，正式 App 不再实例化旧 Manager/Store，也不读取或迁移旧文档。训练服务默认不注入组合确认 Store。
+
+## 界面与播放组件
+
+- `TrainingSessionHighlightView` 管理视频选择、准备与配置草稿；`SelectedTrainingVideoCard` 独立展示所选视频的缩略图、可用性和准备进度。
+- `HighlightClipPlaybackController` 管理片段播放状态与范围；独立的 `HighlightClipPlaybackEngine.swift` 定义可注入播放接口及 AVPlayer 适配，负责 item、seek 和时间观察者的系统调用。
+- 播放器每次加载（含无效范围）先失效旧来源并释放 item 和观察者。预览、片尾回首与越界重播共享定位请求代次，发起前和完成后都校验；旧观察回调不能修改新来源。未完成定位显式保存目标，播放等待最新定位完成后才启动实际播放器。
 
 ## 任务与生成数据流
 
@@ -76,7 +85,7 @@
 - 回调通过 task/execution/revision 门槛验证；迟到结果和进度不能覆盖停止或新执行。
 - background 禁止调度并停止所有执行，inactive 不触发。启动将遗留执行改为 stopped，不自动恢复。
 - 输出移动或 JSON 提交失败保留旧成片；新引用提交后再清理旧输出。删除先移除任务文档，再清理任务自有文件。
-- `MarkerLabelRendering` 与 `MarkerLabelLayout` 为编辑预览和导出共用字体、栅格标签、内边距、边界及坐标转换；长文本必要时整体等比缩小，显示边界限制不改写期望中心。合成器图像缓存键包含文本、画布尺寸、字号及透明度，位置按每段计算；导出显式接收样式，不访问全局设置 Store。完整契约见[序号布局规格](../archive/2026-10/2026-10-25-clip-number-layout-spec.md)。
+- `MarkerLabelRendering` 与 `MarkerLabelLayout` 为编辑预览和导出共用字体、栅格标签、内边距、边界及坐标转换；长文本必要时整体等比缩小，显示边界限制不改写期望中心。合成器图像缓存键包含文本、画布尺寸、字号及透明度，位置按每段计算；导出显式接收样式，不访问全局设置 Store。历史设计依据见[序号布局规格](../archive/2026-10/2026-10-25-clip-number-layout-spec.md)。
 
 ## Watch 同步
 
@@ -89,10 +98,14 @@ Watch outbox → transferUserInfo → PhoneWatchSyncService
 - 新载荷按训练 ID 幂等导入，成功写盘后、ACK 前记录同步成功事件。
 - Watch 未激活、发送失败或等待 ACK 时保留 outbox 并重试。
 - iPhone 提供同步诊断快照；Watch 没有独立日志导出。
+- Watch 的 `HealthKitWorkoutRuntimeSessionManager` 为每次训练请求分配 UUID，以 idle / authorizing / running / finishing 状态隔离授权和结束回调。结束先使待授权或待启动请求失效；上一训练持有的 workout 完成结束采集及保存尝试后，仅启动仍在等待的新请求，过期授权/结束回调不改变新训练。
+- HealthKit 后端只申请写 workout，不读取心率或其他健康数据。每个 `HealthKitWorkoutRuntimeHandle` 独立持有对应的 session 与 builder，直到结束采集及保存完成；保存失败同样释放 finishing 槽。
 
 ## 日志与远端观测
 
-- AppLogger 在本地写结构化 JSONL，保留 14 天、总量上限 30 MB；导出包含 manifest、设备/App 信息、日志和 iPhone 同步诊断。
+- AppLogger 通过 `AppLogStore` actor 写结构化 JSONL，默认目录为 Application Support/ShotMarker/Logs。正常 append 后在同一次无悬挂点的 actor 调用中执行 14 天窗口和 30 MB 总量清理；按日志文件日期删除过期或最旧文件，显式 cleanup 使用同一规则。
+- 默认 Store 首次 append/cleanup 清理旧 Application Support/Logs，失败则后续重试；数据世代重置也清理该旧目录，epoch 仍为 1。注入自定义日志目录时默认不清理其它目录。
+- 日志导出包含 manifest、设备/App 信息、日志和 iPhone 同步诊断。
 - iPhone 通过官方 sentry-cocoa 9.26.0 源码产品 SentrySPM 对接 GlitchTip，业务适配层导入 SentrySwift；Watch 不链接 Sentry。
 - AppLogger.error 同时发送精简错误事件；其他级别仅写本地。不开启性能追踪、Profiling、Session Replay 或自动 Session Tracking。
 - 任务相关日志仅包含状态、计数、总时长及封闭错误类别；导出和相册错误不传递原 NSError 的来源信息，日志不记录片段起止范围。
@@ -101,7 +114,7 @@ Watch outbox → transferUserInfo → PhoneWatchSyncService
 ## 有效隐私边界
 
 - PrivacyInfo.xcprivacy 声明 Device ID、Product Interaction（linked、Analytics）和 Crash Data、Performance Data、Other Diagnostic Data（unlinked、App Functionality）；全部 Tracking 为 false。
-- Required Reason API 覆盖 UserDefaults `CA92.1`、File Timestamp `C617.1` 和 System Boot Time `35F9.1`。2026-09-29 已静态核对；最终 Archive 内的声明仍需核验，不声明后台持续生成。
+- Required Reason API 覆盖 UserDefaults `CA92.1`、File Timestamp `C617.1` 和 System Boot Time `35F9.1`。2026-10-25 已核对源码和 Release Simulator 产物；最终 Archive 内的声明仍需核验，不声明后台持续生成。
 - 任务、训练、视频、帧、来源标识、摘要、UUID、文件名和绝对路径不进入 Analytics 或 GlitchTip metadata。
 - GlitchTip 不配置用户身份，不上传训练、视频、截图或本地日志文件。客户端 DSN 可随 App 分发；管理令牌不得进入 Git。
-- 训练与任务创建后无回查、同步或级联删除关系；完整契约见 [任务规格](../archive/2026-09/2026-09-03-editable-highlight-task-spec.md)。
+- 训练与任务创建后无回查、同步或级联删除关系；当前数据与生命周期契约见本页及[产品事实](product.md)；历史设计依据见 [任务规格](../archive/2026-09/2026-09-03-editable-highlight-task-spec.md)。

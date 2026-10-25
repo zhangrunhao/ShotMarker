@@ -148,9 +148,10 @@ TrainingSessionHighlightView
        -> PlayerStatSummaryBuilder
   -> VoiceCommandReviewView
   -> TrainingSessionStore
-  -> HighlightJobManager
-       -> VideoClipSegmentPlanner
-       -> VideoClipEditingService
+  -> HighlightTaskPlanner / HighlightTaskManager
+       -> HighlightTask（固定训练快照）
+       -> HighlightRenderExecution（不可变执行快照）
+       -> HighlightRenderRunner / VideoClipEditingService
 ```
 
 ### VoiceTranscriptionService
@@ -343,7 +344,7 @@ videoID + audioTimeRange + normalizedCommand
 3. 保存更新后的 `TrainingSession`。
 4. 现有 `VideoClipSegmentPlanner` 不需要理解事件类型，只继续读取 `id` 和 `markedAt`。
 5. Watch 打点和语音事件产生的片段重叠时，继续使用现有“重叠或间隔不超过 1 秒则合并”的规则。
-6. 创建 `HighlightJob` 时保存已确认事件的训练记录快照。
+6. 由 `HighlightTaskPlanner` 创建独立 `HighlightTask` 时复制已确认事件的训练快照，后续通过 `HighlightTaskManager` 创建不可变 `HighlightRenderExecution` 并串行生成。已有任务不回查原训练，语音确认后的训练变化不会自动更新已创建任务；包含新事件的任务须在确认语音结果之后创建。
 
 语音事件类型和球员统计不会改变剪辑算法。第一版所有语音事件都使用当前统一的 `ClipSettings`。
 

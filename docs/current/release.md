@@ -1,64 +1,39 @@
 # ShotMarker 发布状态
 
-- 最后复核：2026-09-29（新截图替换及重新送审）
-- 工程版本：1.3（Build 3）
-- Bundle ID：com.heji.ShotMarker
-- Watch Bundle ID：com.heji.ShotMarker.watchkitapp
+- 本地工程复核：2026-10-25；外部分发最后核验：2026-09-29，当前审核及上线状态未重新确认。
+- 工程版本：1.3（Build 3）。
+- Bundle ID：`com.heji.ShotMarker`；Watch Bundle ID：`com.heji.ShotMarker.watchkitapp`。
 
-## 当前结论
+## 外部分发摘要
 
-1.3（Build 3）已替换当前界面截图并重新提交 Apple 审核，2026-09-29 当次后台状态为 `Waiting for Review`。继续使用原有构建，没有重新打包上传。发布方式为审核通过后手动发布，尚未上架 1.3。[Notion 1.3](https://app.notion.com/p/3cc387d074aa808bbffae296051b2918) 保存提交文案；详细分发证据由独立私有台账 `docs/private.local/shotmarker/current/release.md` 维护。
+2026-09-29 最后核验时，1.3（3）沿用已上传构建、替换截图后重新送审，后台显示 `Waiting for Review`。用户当日确认 TestFlight 的 iPhone/Watch 能打开，并明确跳过后续验收后送审；启动反馈不等于完整功能或升级验收。审核是否已经结束、1.3 是否已经发布及当前商店素材均未在本次任务复核。
 
-用户确认 TestFlight 的 iPhone 和 Watch 均能正常打开，并明确决定跳过后续验收、直接送审。启动反馈不等于完整功能、升级或线上观测验收通过。本次截图所需的 Debug Simulator 全新构建和演示流程通过；未重跑自动测试，Release Simulator 最近成功证据仍为 2026-09-10。
+2026-09-29 最后核验时，美区公开版本为 1.2；中国区 Lookup 无结果及产品页 404 的原因未核验，不能推断下架。同日核验的商店本地化为 English (U.S.)，素材为 iPhone 5 张、iPad 3 张及 Watch 1 张。这些都是历史基线；详情见[提交记录](../archive/2026-09/2026-09-29-app-store-1-3-submission-plan.md)和[截图记录](../archive/2026-09/2026-09-29-app-store-screenshots.md)。
 
-准备阶段静态复核基线为 `10a9f35`；截图构建包含后续 Xcode 配置调整，最终 Archive 与该基线的精确映射未独立核验。已完成的提交计划见 [归档](../archive/2026-09/2026-09-29-app-store-1-3-submission-plan.md)。
+详细 App Store Connect、TestFlight、正式 Archive、真机和生产观测证据的权威来源为独立私有台账 `docs/private.local/shotmarker/`。公开文档仅保留必要摘要，不依赖其可用性解释产品行为与披露要求。
 
-## 构建与平台
+## 本地工程事实
 
-- iOS 部署下限：26.4。
-- watchOS 部署下限：26.2。
-- 产品发布与验证范围为 iPhone + Apple Watch；主 App 工程仍保留未验收的 iPad destination，不配置 macOS、Mac Catalyst 或 visionOS destination。
-- 自动签名已配置。
-- Release 使用 DWARF with dSYM。
-- 当前 App/Watch Debug、Release 四个版本配置一致；两个 Info.plist 声明简体中文，主 App `ITSAppUsesNonExemptEncryption=false`，2026-09-29 静态检查通过。
-- iPhone target 从官方 `sentry-cocoa` 以源码产品 `SentrySPM` 链接 Sentry 9.26.0；Watch target 不链接。
-- 1.3（Build 3）Release Simulator 的当前验证代码为 `da129c1`：2026-09-10 增量构建通过，App/Watch dSYM 对应，DEBUG 入口及真实媒体测试场景不进入产物。全新 DerivedData 构建的最近验证代码为同日 `1975784`。
-- 用户已完成 1.3（Build 3）Archive 和上传；Apple 已接收并允许送审。该次 Organizer Validate 日志、签名与 dSYM UUID 未独立复核，不沿用旧版本的详细验证结论。
+- iOS 部署下限 26.4，watchOS 下限 26.2；发布与验证范围为 iPhone + Apple Watch。工程保留未完整验收的 iPad destination，不配置 macOS、Mac Catalyst 或 visionOS destination。
+- App/Watch Debug、Release 四份产品配置均为 1.3（3），配置自动签名，Release 使用 DWARF with dSYM；两个 Info.plist 声明简体中文，主 App `ITSAppUsesNonExemptEncryption=false`。
+- iPhone target 通过官方 `sentry-cocoa` 的源码产品 `SentrySPM` 链接锁定版本 9.26.0；Watch 不链接。
+- 构建与本地产物最近验证的日期、代码范围和边界见[质量状态](quality.md)。Debug 安装不等于分发 Archive，Simulator dSYM 不证明正式签名及符号文件。
+- 核心使用无需登录或演示账户；视频流程按来源使用 Photos 权限，保存成片申请相册添加权限；Watch 使用 HealthKit workout session。
 
-## 当前审核事实
+## 有效发布决定与用户披露
 
-- 核心使用不需要登录、账号或演示账户。
-- App 需要照片读取/添加权限；Watch 使用 HealthKit workout session。
+- 最终发布保留用户手动操作；不从历史审核状态推断可发布或已发布。
+- 用户于 2026-09-29 明确跳过的后续验收不再作为那次提交的未完成前置条件；其他版本及变更的验证范围仍按实际证据记录。
+- 当前隐私清单声明五类数据、三类 Required Reason API，属性见[技术架构](architecture.md)。商店披露最后核验于 2026-09-29；正式 Archive 内的清单仍未独立提取核验。
+- ShotMarker 不向自建服务器上传训练记录、打点、源视频或成片。系统相册/iCloud 保存与同步由用户设置决定。
+- Release iPhone 会发送产品 Analytics 和精简 GlitchTip 错误/崩溃信息。审核说明和隐私披露不得声称“完全不联网”或“所有数据都不离开设备”。
+- Analytics 请求仅包含 `project`、`event`、`device_id`，不包含训练、媒体、文件名、语音、用户身份或自由文本；有效契约见[产品埋点](analytics.md)。GlitchTip 不配置默认 PII 或用户身份，不上传训练、视频、截图或本地日志文件。
+- 发布说明和升级披露必须说明数据世代 1 首次启动清空两个 App 自有沙盒中的旧业务数据及完整偏好，不迁移。系统照片库、已保存成片、HealthKit、沙盒外文件与远端历史不删除。
+- 固定 cutover 在失败重试中复用；旧 Watch 载荷 ACK 后丢弃，成功后启动保留新数据。完整当前行为见[产品事实](product.md#数据与网络)。
 
-## 有效用户披露要求
+## 外部验证边界
 
-- 当前隐私清单包含五类数据与三类 Required Reason API，具体属性见 [技术架构](architecture.md)；2026-09-29 已静态核对，并在送审时核对商店已发布的五类数据及用途、关联属性；最终 Archive 内的清单未独立提取。
-- ShotMarker 不向自建服务器上传训练记录、打点、源视频或生成视频；系统照片库及 iCloud 是否保存或同步视频由用户设置决定。
-- Release iPhone 会联网发送产品 Analytics 和 GlitchTip 错误/崩溃信息，因此审核说明和隐私披露不得声称“完全不联网”或“所有数据都不离开设备”。
-- Analytics 只发送 project、event、device_id；不发送训练记录、视频、文件名、照片、语音、用户身份或自由文本。完整契约见 [产品埋点](analytics.md)。
-- GlitchTip 不配置默认 PII 或用户身份，也不上传训练记录、视频、截图和本地日志文件。
-
-## 本地数据升级影响
-
-- 当前数据世代为 1。缺失或旧 epoch 的 iPhone 与 Watch 首次启动会清空旧训练、旧审核、旧任务、App 内输入/成片、日志、缓存、outbox 和完整偏好设置，不提供迁移。
-- iPhone 固定切割时间并在失败重试时复用；切割前结束的旧 Watch 载荷正常 ACK 后丢弃，防止旧训练重新进入本地。
-- 系统照片库、已保存到相册的成片、HealthKit、沙盒外导出和远端历史不删除；成功后的后续启动保留新数据。
-- 发布说明和升级披露必须明确此本地清理行为。本次已在实际提交的英文更新说明前部和审核备注中披露。
-
-## 外部状态
-
-- 2026-09-29 [Apple Lookup 美区查询](https://itunes.apple.com/lookup?id=6765859836&country=us) 返回公开版本 1.2，更新时间为 2026-08-29；[美区产品页](https://apps.apple.com/us/app/shotmarker/id6765859836) HTTP 200。Notion 的 1.2.1 发布记录不作为商店版本号证据。
-- 同日中国区 Lookup 返回 0 条结果，既有中国区产品链接返回 404；地区可用性及原因尚未在后台核验，不能据此断言下架。
-- 2026-09-29 已发布 [官网](https://zhangrh.shop/shotmarker/)的 1.3 产品、操作、升级和隐私说明；四条公开路径及 8 个静态资源均为 HTTP 200，并在 Chrome 核对正文。官网配图仍为已标注的旧版示意。网站实现和发布详情由 `zhangrh.shop` 仓库维护。
-- 本次按用户要求先准备新截图，再撤回审核、替换素材，完成 `Add for Review` 和 `Submit for Review`，并查看新的实际审核详情。
-- 实际商店本地化仅有 English (U.S.)。本次保存英文更新说明、产品描述和审核 Notes；简体中文文案仍为备用材料。
-- 当前商店素材为新拍摄的 iPhone 6.9 英寸 5 张、iPad 13 英寸 3 张和 Watch Ultra 3 1 张；iPhone 与 iPad 的其余尺寸沿用对应新图。素材来源、尺寸及验证边界见 [截图记录](../archive/2026-09/2026-09-29-app-store-screenshots.md)。
-- ShotMarker Analytics 四字段服务端链路最后一次生产验收日期为 2026-08-16；字段与保留边界见 [产品埋点](analytics.md)。
-- Analytics 和 GlitchTip 的线上链路本次未复验，不能由公开页面 HTTP 200 推断其工作正常。
-
-## 后续与验证边界
-
-- 等待 Apple 审核结果；批准、拒绝及最终手动发布各自以届时后台为准。
-- 用户已明确跳过本轮后续验收，不再将其作为本次提交的未完成前置条件。
-- 当前候选的完整真机回归、iPad、VoiceOver、升级流程、Analytics 生产事件、崩溃符号化及告警仍无新增通过证据，详见 [质量状态](quality.md)。
-- 最终 Archive 签名及 dSYM 未在本次独立复核。
+- 最后核验于 2026-09-29 的 1.3 Archive 已获 Apple 接收，但该次签名、dSYM UUID、Organizer Validate 日志及源码精确映射未独立复核。
+- 完整真机剪辑、iPad、VoiceOver、Watch 联机升级、Analytics 生产事件、崩溃符号化和告警仍无新增验收证据，见[质量状态](quality.md)。
+- Analytics 生产四字段存储最后验收于 2026-08-16；GlitchTip 生产链路本次未复验。公开页面可访问不证明遥测正常。
+- 官网实现、支持页和 how-to 由 `zhangrh.shop` 仓库维护；其公开内容最后核验于 2026-09-29，本次未确认线上状态。旧外部核验详情见[文档整理记录](../archive/2026-10/2026-10-25-documentation-audit.md)。

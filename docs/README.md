@@ -27,7 +27,7 @@ ShotMarker 对外网站、支持页和 how-to 由 `zhangrh.shop` 仓库维护，
 
 - [首页与任务入口改版方向](changes/2026-10-25-navigation-ideas.md)：首页改为任务列表，底部提供创建任务和训练记录列表入口；仅记录，尚未设计或实施
 - [iOS 语音口令打点与技术统计](changes/2026-07-29-ios-voice-command-marking-spec.md)：设计已确认，尚未实现
-- [视频编辑后续优化想法](changes/2026-10-23-video-editing-ideas.md)：第一项逐段序号布局已实现并归档；第二项整个视频的训练记录点管理仍待讨论，尚未设计或开发
+- [视频编辑后续优化想法](changes/2026-10-23-video-editing-ideas.md)：整个视频的训练记录点管理仍待讨论，尚未设计或开发；逐段序号布局的历史材料已归档
 
 changes 使用扁平文件：
 
@@ -42,18 +42,11 @@ YYYY-MM-DD-topic-plan.md
 
 archive 保存已经结束的设计、计划、讨论、排查、发布验证和旧文档。它不是当前事实来源。
 
-- [任务编辑入口验证](archive/2026-10/2026-10-25-task-entry-validation.md)：卡片改用“编辑任务”按钮，编辑配置页移除“片段序数”；8 项专项 UI 通过，普通及最大辅助字号截图已核对。
-- [播放与操作控件样式验证](archive/2026-10/2026-10-25-editor-controls-style-validation.md)：系统蓝播放按钮、轻量操作入口及靛蓝展开面板；最终微调的浅色 2 项、深色 1 项 UI 通过，并完成开发签名安装启动。
-- 片段独立序号布局与操作列表：[规格](archive/2026-10/2026-10-25-clip-number-layout-spec.md)、[实施计划](archive/2026-10/2026-10-25-clip-number-layout-plan.md)、[验证记录](archive/2026-10/2026-10-25-clip-number-layout-validation.md)。完整 499 项 iPhone 自动测试通过；最终隔离注解与 UI 断言补充后，475 单元 + 2 新增深色 UI 共 477 项通过。实现提交 `38c88c0` 已在主工作区 fast-forward 合入本地 main，未推送。
-- [已保存取景优先验证](archive/2026-10/2026-10-23-framing-priority-validation.md)：保存值优先；无保存值且同源连续确认才继承，手动任一项（含当前项）恢复自己的取景。464 项专项回归通过。
-- 片段编辑精简与有符号范围：[规格](archive/2026-10/2026-10-23-clip-editor-simplify-spec.md)、[实施计划](archive/2026-10/2026-10-23-clip-editor-simplify-plan.md)、[验证记录](archive/2026-10/2026-10-23-clip-editor-simplify-validation.md)。475 项 iPhone 自动测试通过，覆盖负偏移、已确认取景保留及精简后的实际操作。
-- 片段取景与连续审核：[规格](archive/2026-10/2026-10-23-clip-framing-spec.md)、[实施计划](archive/2026-10/2026-10-23-clip-framing-plan.md)、[验证记录](archive/2026-10/2026-10-23-clip-framing-validation.md)。460 项 iPhone 自动测试通过，包含真实取景预览、导出与最大字号回归。
-- [片段审核交互验证](archive/2026-10/2026-10-23-clip-review-validation.md)：直接保留/排除、撤销、稳定导航、相邻关系及精调面板移除。
-- [1.3 App Store 提交](archive/2026-09/2026-09-29-app-store-1-3-submission-plan.md)：已送审；用户明确跳过的后续验收保留为未验证，审核及最终发布进展见 current。
-- [1.3 商店新截图](archive/2026-09/2026-09-29-app-store-screenshots.md)：当前界面的 5 张 iPhone、3 张 iPad 和 1 张 Watch 素材，已替换并重新送审。
-- [旧 1.2 提交计划](archive/2026-08/2026-08-21-app-store-1-2-submission-plan.md)：已由 1.3 计划接替；历史未勾选项目不表示完成，也不直接作为当前待办。
-- 可编辑集锦任务与生成执行：[规格](archive/2026-09/2026-09-03-editable-highlight-task-spec.md)、[实施计划](archive/2026-09/2026-09-10-editable-highlight-task-plan.md)、[验证记录](archive/2026-09/2026-09-10-editable-highlight-task-validation.md)、[连续导航修复验证](archive/2026-09/2026-09-10-clip-review-navigation-validation.md)
-- 片段确认持久化与连续审核：[规格](archive/2026-09/2026-09-03-highlight-clip-confirmation-spec.md)、[实施计划](archive/2026-09/2026-09-03-highlight-clip-confirmation-plan.md)、[验证记录](archive/2026-09/2026-09-03-highlight-clip-confirmation-validation.md)
+- [2026-10 归档](archive/2026-10/)：片段审核、取景、序号布局、任务编辑入口、文档与代码维护及对应验证。
+- [2026-09 归档](archive/2026-09/)：独立集锦任务、连续审核、样式和 1.3 提交材料。
+- [2026-08 归档](archive/2026-08/)：Analytics、日志、文档治理及旧版提交材料。
+- [2026-10-25 维护验证](archive/2026-10/2026-10-25-maintenance-validation.md)：生命周期修复、组件整理及完整回归结果。
+- [2026-10-25 文档整理记录](archive/2026-10/2026-10-25-documentation-audit.md)：审计依据及从 current 移出的既有验证/外部摘要。
 
 archive 的规则只适用于 archive；其中的 spec、plan 和其他材料不受 current 的 300 行规则约束。
 
