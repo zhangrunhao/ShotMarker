@@ -3,89 +3,6 @@ import Combine
 import Foundation
 
 @MainActor
-protocol HighlightClipPlaybackEngine: AnyObject {
-    var player: AVPlayer { get }
-    func replaceCurrentItem(with asset: AVAsset)
-    func clearCurrentItem()
-    func play()
-    func pause()
-    func seek(to seconds: TimeInterval) async
-    func addPeriodicTimeObserver(_ handler: @escaping (TimeInterval) -> Void) -> Any
-    func addBoundaryTimeObserver(
-        at seconds: TimeInterval,
-        _ handler: @escaping () -> Void,
-    ) -> Any
-    func removeTimeObserver(_ token: Any)
-}
-
-@MainActor
-final class AVPlayerHighlightClipPlaybackEngine: HighlightClipPlaybackEngine {
-    let player = AVPlayer()
-
-    func replaceCurrentItem(with asset: AVAsset) {
-        player.replaceCurrentItem(with: AVPlayerItem(asset: asset))
-    }
-
-    func clearCurrentItem() {
-        player.replaceCurrentItem(with: nil)
-    }
-
-    func play() {
-        player.play()
-    }
-
-    func pause() {
-        player.pause()
-    }
-
-    func seek(to seconds: TimeInterval) async {
-        let time = CMTime(
-            seconds: max(seconds, 0),
-            preferredTimescale: HighlightClipPlaybackController.timescale,
-        )
-        await withCheckedContinuation { continuation in
-            player.seek(
-                to: time,
-                toleranceBefore: .zero,
-                toleranceAfter: .zero,
-            ) { _ in
-                continuation.resume()
-            }
-        }
-    }
-
-    func addPeriodicTimeObserver(
-        _ handler: @escaping (TimeInterval) -> Void,
-    ) -> Any {
-        player.addPeriodicTimeObserver(
-            forInterval: CMTime(value: 1, timescale: 30),
-            queue: .main,
-        ) { time in
-            handler(time.seconds)
-        }
-    }
-
-    func addBoundaryTimeObserver(
-        at seconds: TimeInterval,
-        _ handler: @escaping () -> Void,
-    ) -> Any {
-        let time = CMTime(
-            seconds: max(seconds, 0),
-            preferredTimescale: HighlightClipPlaybackController.timescale,
-        )
-        return player.addBoundaryTimeObserver(
-            forTimes: [NSValue(time: time)],
-            queue: .main,
-            using: handler,
-        )
-    }
-
-    func removeTimeObserver(_ token: Any) {
-        player.removeTimeObserver(token)
-    }
-}
-
-@MainActor
 final class HighlightClipPlaybackController: ObservableObject {
     typealias LoadUprightSize = (AVAsset) async throws -> CGSize
 
@@ -111,6 +28,15 @@ final class HighlightClipPlaybackController: ObservableObject {
     private var boundaryObserverToken: Any?
     private var hasLoadedItem = false
     private var loadGeneration = 0
+    private var seekGeneration = 0
+    private var boundaryObserverGeneration = 0
+    private var pendingSeek: SeekRequest?
+
+    private struct SeekRequest {
+        let loadGeneration: Int
+        let seekGeneration: Int
+        let target: TimeInterval
+    }
 
     var isSourceSizeUnavailable: Bool {
         hasLoadedItem && !isLoading && loadError == nil && uprightVideoSize == nil
@@ -143,21 +69,14 @@ final class HighlightClipPlaybackController: ObservableObject {
     }
 
     func load(video: SelectedTrainingVideo, range: HighlightClipRange) async {
+        // Every request supersedes prior media work, including an invalid request.
+        reset()
+        let generation = loadGeneration
         guard Self.isValid(range: range, videoDuration: video.duration) else {
             publishLoadFailure(.invalidRequest)
             return
         }
-
-        loadGeneration &+= 1
-        let generation = loadGeneration
-        releaseLoadedItem()
-        activeRange = nil
-        uprightVideoSize = nil
-        currentTime = 0
         isLoading = true
-        isPlaying = false
-        loadError = nil
-        errorMessage = nil
 
         let asset: AVAsset
         do {
@@ -192,12 +111,11 @@ final class HighlightClipPlaybackController: ObservableObject {
         activeRange = range
         installObservers(for: range)
         engine.pause()
-        await engine.seek(to: range.start)
+        await seek(request: makeSeekRequest(to: range.start))
 
         guard generation == loadGeneration, hasLoadedItem else {
             return
         }
-        currentTime = range.start
         isLoading = false
     }
 
@@ -211,27 +129,22 @@ final class HighlightClipPlaybackController: ObservableObject {
         }
 
         isPlaying = true
-        guard currentTime >= activeRange.start,
-              currentTime < activeRange.end
-        else {
-            currentTime = activeRange.start
-            let generation = loadGeneration
+        let target = pendingSeek?.target ?? currentTime
+        let isWithinRange = target >= activeRange.start && target < activeRange.end
+        if pendingSeek != nil || !isWithinRange {
+            let replayTime = isWithinRange ? target : activeRange.start
+            currentTime = replayTime
+            let request = makeSeekRequest(to: replayTime)
             Task { @MainActor [weak self] in
-                guard let self else {
-                    return
-                }
-                await engine.seek(to: activeRange.start)
-                guard generation == loadGeneration,
-                      hasLoadedItem,
-                      isPlaying
-                else {
-                    return
-                }
+                guard let self, await seek(request: request), isCurrent(request), isPlaying else { return }
                 engine.play()
             }
             return
         }
 
+        // Supersede any previous post-seek play continuation without creating
+        // an unfinished seek when the player is already at the desired position.
+        seekGeneration &+= 1
         engine.play()
     }
 
@@ -251,12 +164,7 @@ final class HighlightClipPlaybackController: ObservableObject {
         }
 
         pause()
-        let generation = loadGeneration
-        await engine.seek(to: time)
-        guard generation == loadGeneration, hasLoadedItem else {
-            return
-        }
-        currentTime = time
+        await seek(request: makeSeekRequest(to: time))
     }
 
     func previewStart(of range: HighlightClipRange) async {
@@ -289,6 +197,8 @@ final class HighlightClipPlaybackController: ObservableObject {
 
     func reset() {
         loadGeneration &+= 1
+        seekGeneration &+= 1
+        pendingSeek = nil
         releaseLoadedItem()
         activeRange = nil
         uprightVideoSize = nil
@@ -300,8 +210,9 @@ final class HighlightClipPlaybackController: ObservableObject {
     }
 
     private func installObservers(for range: HighlightClipRange) {
+        let generation = loadGeneration
         periodicObserverToken = engine.addPeriodicTimeObserver { [weak self] time in
-            guard let self, time.isFinite else {
+            guard let self, generation == loadGeneration, hasLoadedItem, time.isFinite else {
                 return
             }
             currentTime = time
@@ -310,13 +221,18 @@ final class HighlightClipPlaybackController: ObservableObject {
     }
 
     private func replaceBoundaryObserver(at end: TimeInterval) {
+        boundaryObserverGeneration &+= 1
+        let observerGeneration = boundaryObserverGeneration
+        let generation = loadGeneration
         if let boundaryObserverToken {
             engine.removeTimeObserver(boundaryObserverToken)
             self.boundaryObserverToken = nil
         }
 
         boundaryObserverToken = engine.addBoundaryTimeObserver(at: end) { [weak self] in
-            self?.finishAtBoundary()
+            guard let self, generation == loadGeneration,
+                  observerGeneration == boundaryObserverGeneration else { return }
+            finishAtBoundary()
         }
     }
 
@@ -328,16 +244,34 @@ final class HighlightClipPlaybackController: ObservableObject {
         engine.pause()
         isPlaying = false
         currentTime = activeRange.start
-        let generation = loadGeneration
+        let request = makeSeekRequest(to: activeRange.start)
         Task { @MainActor [weak self] in
-            guard let self else {
-                return
-            }
-            await engine.seek(to: activeRange.start)
-            guard generation == loadGeneration else {
-                return
-            }
+            guard let self else { return }
+            await seek(request: request)
         }
+    }
+
+    private func makeSeekRequest(to target: TimeInterval) -> SeekRequest {
+        seekGeneration &+= 1
+        let request = SeekRequest(loadGeneration: loadGeneration, seekGeneration: seekGeneration, target: target)
+        pendingSeek = request
+        return request
+    }
+
+    private func isCurrent(_ request: SeekRequest) -> Bool {
+        hasLoadedItem && request.loadGeneration == loadGeneration
+            && request.seekGeneration == seekGeneration
+    }
+
+    @discardableResult
+    private func seek(request: SeekRequest) async -> Bool {
+        // Check before seeking too: a queued Task may outlive its source item.
+        guard isCurrent(request) else { return false }
+        await engine.seek(to: request.target)
+        guard isCurrent(request) else { return false }
+        pendingSeek = nil
+        currentTime = request.target
+        return true
     }
 
     private func releaseLoadedItem() {
@@ -352,6 +286,7 @@ final class HighlightClipPlaybackController: ObservableObject {
     }
 
     private func removeObservers() {
+        boundaryObserverGeneration &+= 1
         if let periodicObserverToken {
             engine.removeTimeObserver(periodicObserverToken)
             self.periodicObserverToken = nil

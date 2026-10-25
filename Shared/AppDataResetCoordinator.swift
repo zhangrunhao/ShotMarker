@@ -52,6 +52,7 @@ struct AppDataResetCoordinator {
             }
             cutover = journal.dataCutoverAt
             try removeIfPresent(applicationSupport.appendingPathComponent("ShotMarker", isDirectory: true))
+            try removeIfPresent(applicationSupport.appendingPathComponent("Logs", isDirectory: true))
             try clearContents(caches)
             try clearContents(temporary)
             defaults.removePersistentDomain(forName: domain)

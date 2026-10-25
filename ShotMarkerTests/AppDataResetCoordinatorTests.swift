@@ -35,6 +35,18 @@ final class AppDataResetCoordinatorTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: fixture.businessFile), Data([2]))
     }
 
+    func testPhoneResetDeletesLegacyLogsOutsideBusinessDirectory() throws {
+        let fixture = try ResetFixture()
+        defer { fixture.cleanup() }
+        let legacyLogs = fixture.support.appendingPathComponent("Logs", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacyLogs, withIntermediateDirectories: true)
+        try Data("old log".utf8).write(to: legacyLogs.appendingPathComponent("phone-2026-05-10.jsonl"))
+
+        _ = try fixture.coordinator(platform: .phone).resetIfNeeded()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyLogs.path))
+    }
+
     func testRetryKeepsFirstCutoverAndJournalTakesPrecedenceOverEpoch() throws {
         let fixture = try ResetFixture()
         defer { fixture.cleanup() }

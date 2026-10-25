@@ -9,6 +9,7 @@ actor AppLogStore {
     }
 
     private let directoryURL: URL
+    private var legacyDirectoryURL: URL?
     nonisolated let configuration: Configuration
     private let calendar: Calendar
     private let now: @Sendable () -> Date
@@ -17,12 +18,14 @@ actor AppLogStore {
     private let decoder: JSONDecoder
 
     init(
-        directoryURL: URL = AppLogStore.defaultDirectoryURL(),
+        directoryURL: URL? = nil,
+        legacyDirectoryURL: URL? = nil,
         configuration: Configuration = Configuration(),
         calendar: Calendar = .current,
         now: @Sendable @escaping () -> Date = Date.init,
     ) {
-        self.directoryURL = directoryURL
+        self.directoryURL = directoryURL ?? Self.defaultDirectoryURL()
+        self.legacyDirectoryURL = legacyDirectoryURL ?? (directoryURL == nil ? Self.defaultLegacyDirectoryURL() : nil)
         self.configuration = configuration
         self.calendar = calendar
         self.now = now
@@ -36,11 +39,14 @@ actor AppLogStore {
     }
 
     func append(_ event: AppLogEvent) async {
+        try? removeLegacyLogsIfNeeded()
         do {
             try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
             var data = try encoder.encode(event)
             data.append(Data("\n".utf8))
             try append(data, to: logFileURL(for: event.timestamp))
+            try deleteFilesOlderThanRetentionWindow()
+            try enforceMaximumTotalSize()
         } catch {
             return
         }
@@ -57,6 +63,7 @@ actor AppLogStore {
     }
 
     func cleanup() async {
+        try? removeLegacyLogsIfNeeded()
         do {
             try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
             try deleteFilesOlderThanRetentionWindow()
@@ -68,7 +75,21 @@ actor AppLogStore {
 
     static func defaultDirectoryURL() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ShotMarker", isDirectory: true)
             .appendingPathComponent("Logs", isDirectory: true)
+    }
+
+    private static func defaultLegacyDirectoryURL() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Logs", isDirectory: true)
+    }
+
+    private func removeLegacyLogsIfNeeded() throws {
+        guard let legacyDirectoryURL else { return }
+        if fileManager.fileExists(atPath: legacyDirectoryURL.path) {
+            try fileManager.removeItem(at: legacyDirectoryURL)
+        }
+        self.legacyDirectoryURL = nil
     }
 
     private func append(_ data: Data, to fileURL: URL) throws {

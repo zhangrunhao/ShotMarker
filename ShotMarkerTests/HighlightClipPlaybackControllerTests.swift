@@ -157,7 +157,7 @@ final class HighlightClipPlaybackControllerTests: XCTestCase {
         let engine = SpyHighlightClipPlaybackEngine()
         var controller: HighlightClipPlaybackController? = makeController(engine: engine)
         await controller?.load(video: makeVideo(), range: .init(start: 4, duration: 3))
-        weak var weakController = controller
+        weak let weakController = controller
 
         controller = nil
 
@@ -216,6 +216,147 @@ final class HighlightClipPlaybackControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testInvalidLoadStopsAndReleasesPreviousPlayback() async {
+        let engine = SpyHighlightClipPlaybackEngine()
+        let controller = makeController(engine: engine)
+        await controller.load(video: makeVideo(), range: .init(start: 4, duration: 3))
+        controller.play()
+
+        await controller.load(video: makeVideo(), range: .init(start: -1, duration: 3))
+
+        XCTAssertEqual(controller.loadError, .invalidRequest)
+        XCTAssertFalse(controller.isPlaying)
+        XCTAssertFalse(controller.isLoading)
+        XCTAssertEqual(controller.currentTime, 0)
+        XCTAssertEqual(engine.clearCallCount, 1)
+        XCTAssertNil(engine.periodicHandler)
+        XCTAssertNil(engine.boundaryHandler)
+    }
+
+    @MainActor
+    func testInvalidLoadInvalidatesPendingMetadataRequest() async {
+        let gate = PlaybackRequestGate()
+        let engine = SpyHighlightClipPlaybackEngine()
+        let controller = HighlightClipPlaybackController(engine: engine,
+            loadAsset: { _ in AVMutableComposition() },
+            loadUprightSize: { _ in
+                await gate.wait(1)
+                return CGSize(width: 640, height: 360)
+            })
+        let pending = Task {
+            await controller.load(video: makeVideo(), range: .init(start: 4, duration: 3))
+        }
+        await gate.waitUntilEntered(1)
+
+        await controller.load(video: makeVideo(), range: .init(start: -1, duration: 3))
+        await gate.release(1)
+        await pending.value
+
+        XCTAssertEqual(controller.loadError, .invalidRequest)
+        XCTAssertNil(controller.uprightVideoSize)
+        XCTAssertEqual(controller.currentTime, 0)
+        XCTAssertEqual(engine.replacedAssetCount, 0)
+    }
+
+    @MainActor
+    func testLatestCursorPreviewWinsWhenSeeksCompleteOutOfOrder() async {
+        let gate = PlaybackRequestGate()
+        let engine = SpyHighlightClipPlaybackEngine()
+        let controller = makeController(engine: engine)
+        await controller.load(video: makeVideo(), range: .init(start: 4, duration: 3))
+        engine.suspendSeek = { time in await gate.wait(Int(time)) }
+
+        let previous = Task { await controller.preview(at: 5) }
+        await gate.waitUntilEntered(5)
+        let latest = Task { await controller.preview(at: 6) }
+        await gate.waitUntilEntered(6)
+        await gate.release(6)
+        await latest.value
+        await gate.release(5)
+        await previous.value
+
+        XCTAssertEqual(controller.currentTime, 6)
+        XCTAssertFalse(controller.isPlaying)
+    }
+
+    @MainActor
+    func testQueuedReplayCannotSeekIntoReplacementSource() async {
+        let engine = SpyHighlightClipPlaybackEngine()
+        let controller = makeController(engine: engine)
+        await controller.load(video: makeVideo(), range: .init(start: 4, duration: 3))
+        engine.firePeriodicObserver(at: 8)
+
+        controller.play()
+        controller.reset()
+        await controller.load(video: makeVideo(id: "replacement"), range: .init(start: 10, duration: 3))
+        await Task.yield()
+
+        XCTAssertEqual(engine.seekedTimes, [4, 10])
+        XCTAssertEqual(engine.playCallCount, 0)
+        XCTAssertEqual(controller.currentTime, 10)
+    }
+
+    @MainActor
+    func testQueuedBoundaryResetCannotSeekIntoReplacementSource() async {
+        let engine = SpyHighlightClipPlaybackEngine()
+        let controller = makeController(engine: engine)
+        await controller.load(video: makeVideo(), range: .init(start: 4, duration: 3))
+
+        engine.fireBoundaryObserver()
+        controller.reset()
+        await controller.load(video: makeVideo(id: "replacement"), range: .init(start: 10, duration: 3))
+        await Task.yield()
+
+        XCTAssertEqual(engine.seekedTimes, [4, 10])
+        XCTAssertEqual(controller.currentTime, 10)
+    }
+
+    @MainActor
+    func testRemovedObserversCannotChangeReplacementPlayback() async throws {
+        let engine = SpyHighlightClipPlaybackEngine()
+        let controller = makeController(engine: engine)
+        await controller.load(video: makeVideo(), range: .init(start: 4, duration: 3))
+        let previousPeriodic = try XCTUnwrap(engine.periodicHandler)
+        let previousBoundary = try XCTUnwrap(engine.boundaryHandler)
+        await controller.load(video: makeVideo(id: "replacement"), range: .init(start: 10, duration: 3))
+        controller.play()
+
+        previousPeriodic(6)
+        previousBoundary()
+        await Task.yield()
+
+        XCTAssertEqual(controller.currentTime, 10)
+        XCTAssertTrue(controller.isPlaying)
+        XCTAssertEqual(engine.seekedTimes, [4, 10])
+    }
+
+    @MainActor
+    func testReplayWaitsForBoundaryRewindBeforeStartingEngine() async {
+        let gate = PlaybackRequestGate()
+        let engine = SpyHighlightClipPlaybackEngine()
+        let controller = makeController(engine: engine)
+        await controller.load(video: makeVideo(), range: .init(start: 4, duration: 3))
+        engine.firePeriodicObserver(at: 7)
+        engine.suspendSeek = { time in await gate.wait(Int(time)) }
+        let replayStarted = expectation(description: "Replay starts after the rewind completes")
+        engine.onPlay = { replayStarted.fulfill() }
+
+        // Both actions happen before the boundary's queued rewind Task can run.
+        engine.fireBoundaryObserver()
+        controller.play()
+
+        XCTAssertEqual(engine.playCallCount, 0)
+        await Task.yield()
+        XCTAssertEqual(engine.playCallCount, 0)
+        await gate.release(4)
+        await fulfillment(of: [replayStarted], timeout: 1)
+
+        XCTAssertEqual(engine.seekedTimes, [4, 4])
+        XCTAssertEqual(engine.playedTimes, [4])
+        XCTAssertTrue(controller.isPlaying)
+    }
+
+    @MainActor
     private func makeController(
         engine: SpyHighlightClipPlaybackEngine,
         loadAsset: @escaping (SelectedTrainingVideo) async throws -> AVAsset = { _ in
@@ -246,12 +387,16 @@ private final class SpyHighlightClipPlaybackEngine: HighlightClipPlaybackEngine 
     private(set) var replacedAssetCount = 0
     private(set) var clearCallCount = 0
     private(set) var playCallCount = 0
+    private(set) var playedTimes: [TimeInterval] = []
+    private var actualTime: TimeInterval = 0
+    var onPlay: (() -> Void)?
     private(set) var pauseCallCount = 0
     private(set) var seekedTimes: [TimeInterval] = []
+    var suspendSeek: ((TimeInterval) async -> Void)?
     private(set) var removedObserverCount = 0
     private(set) var boundaryTimes: [TimeInterval] = []
-    private(set) var periodicHandler: ((TimeInterval) -> Void)?
-    private(set) var boundaryHandler: (() -> Void)?
+    private(set) var periodicHandler: (@MainActor @Sendable (TimeInterval) -> Void)?
+    private(set) var boundaryHandler: (@MainActor @Sendable () -> Void)?
 
     func replaceCurrentItem(with _: AVAsset) {
         replacedAssetCount += 1
@@ -263,6 +408,8 @@ private final class SpyHighlightClipPlaybackEngine: HighlightClipPlaybackEngine 
 
     func play() {
         playCallCount += 1
+        playedTimes.append(actualTime)
+        onPlay?()
     }
 
     func pause() {
@@ -271,10 +418,12 @@ private final class SpyHighlightClipPlaybackEngine: HighlightClipPlaybackEngine 
 
     func seek(to seconds: TimeInterval) async {
         seekedTimes.append(seconds)
+        await suspendSeek?(seconds)
+        actualTime = seconds
     }
 
     func addPeriodicTimeObserver(
-        _ handler: @escaping (TimeInterval) -> Void,
+        _ handler: @escaping @MainActor @Sendable (TimeInterval) -> Void,
     ) -> Any {
         periodicHandler = handler
         return periodicToken
@@ -282,7 +431,7 @@ private final class SpyHighlightClipPlaybackEngine: HighlightClipPlaybackEngine 
 
     func addBoundaryTimeObserver(
         at seconds: TimeInterval,
-        _ handler: @escaping () -> Void,
+        _ handler: @escaping @MainActor @Sendable () -> Void,
     ) -> Any {
         boundaryTimes.append(seconds)
         boundaryHandler = handler
@@ -301,6 +450,7 @@ private final class SpyHighlightClipPlaybackEngine: HighlightClipPlaybackEngine 
     }
 
     func firePeriodicObserver(at time: TimeInterval) {
+        actualTime = time
         periodicHandler?(time)
     }
 
@@ -326,5 +476,32 @@ private actor FramingMetadataGate {
     func release(_ size: CGSize) {
         continuation?.resume(returning: size)
         continuation = nil
+    }
+}
+
+private actor PlaybackRequestGate {
+    private var entered: Set<Int> = []
+    private var released: Set<Int> = []
+    private var entryWaiters: [Int: CheckedContinuation<Void, Never>] = [:]
+    private var requests: [Int: CheckedContinuation<Void, Never>] = [:]
+
+    func wait(_ id: Int) async {
+        entered.insert(id)
+        entryWaiters.removeValue(forKey: id)?.resume()
+        guard released.remove(id) == nil else { return }
+        await withCheckedContinuation { requests[id] = $0 }
+    }
+
+    func waitUntilEntered(_ id: Int) async {
+        guard !entered.contains(id) else { return }
+        await withCheckedContinuation { entryWaiters[id] = $0 }
+    }
+
+    func release(_ id: Int) {
+        if let request = requests.removeValue(forKey: id) {
+            request.resume()
+        } else {
+            released.insert(id)
+        }
     }
 }

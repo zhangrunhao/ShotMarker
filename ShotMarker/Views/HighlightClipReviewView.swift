@@ -630,11 +630,11 @@ private struct HighlightClipEditorDestination: Identifiable, Hashable {
         func play() {}
         func pause() {}
         func seek(to _: TimeInterval) async {}
-        func addPeriodicTimeObserver(_: @escaping (TimeInterval) -> Void) -> Any {
+        func addPeriodicTimeObserver(_: @escaping @MainActor @Sendable (TimeInterval) -> Void) -> Any {
             UUID()
         }
 
-        func addBoundaryTimeObserver(at _: TimeInterval, _: @escaping () -> Void) -> Any {
+        func addBoundaryTimeObserver(at _: TimeInterval, _: @escaping @MainActor @Sendable () -> Void) -> Any {
             UUID()
         }
 

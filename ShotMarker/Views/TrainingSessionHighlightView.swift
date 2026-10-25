@@ -21,7 +21,6 @@
         @State private var selectedItems: [PhotosPickerItem] = []
         @State private var selectedVideos: [SelectedTrainingVideo] = []
         @State private var isLoadingVideos = false
-        @State private var isCreatingHighlightJob = false
         @State private var clipSettings = ClipSettingsStore.shared.load()
         @State private var isMarkerLabelSettingsExpanded = false
         @State private var selectedVideoItems: [SelectedTrainingVideoSelectionItem] = []
@@ -38,10 +37,8 @@
         @State private var availabilityTask: Task<Void, Never>?
         @State private var isImportingVideos = false
         @State private var outputPlaybackURL: URL?
-        private var reviewViewModel: HighlightClipReviewViewModel? { reviewSession?.viewModel }
         @State private var isReviewPresented = false
         @State private var isPreparingReview = false
-        @State private var reviewPreparationRevision = UUID()
         @State private var isExportingTrainingSession = false
         @State private var trainingSessionExportDocument: TrainingSessionJSONDocument?
 
@@ -287,7 +284,6 @@
 
         @MainActor
         private func invalidateCurrentReview() {
-            reviewPreparationRevision = UUID()
             reviewSession?.release()
             reviewSession = nil
             isReviewPresented = false
@@ -325,7 +321,6 @@
                         .accessibilityIdentifier("ClipSettingsInvalidRange")
                 }
             }
-            .disabled(isCreatingHighlightJob)
         }
 
         private var videoPickerSection: some View {
@@ -338,7 +333,7 @@
                 ) {
                     Label(selectedVideoItems.isEmpty ? "选择视频" : "继续选择视频", systemImage: "video.badge.plus")
                 }
-                .disabled(isLoadingVideos || isCreatingHighlightJob || selectedVideoItems.count >= 20)
+                .disabled(isLoadingVideos || selectedVideoItems.count >= 20)
                 Button("从文件导入视频") { isImportingVideos = true }
                     .disabled(isLoadingVideos || selectedVideoItems.count >= 20)
 
@@ -396,7 +391,6 @@
                 .disabled(
                     !canReviewConfiguration
                         || isLoadingVideos
-                        || isCreatingHighlightJob
                         || isPreparingReview
                         || selectedVideoItems.contains(where: { $0.video == nil || $0.unavailableReason == .notReady }),
                 )
@@ -436,7 +430,7 @@
                         MarkerLabelSettingsView(
                             thumbnailData: firstSelectedItem.thumbnailData,
                             previewLabel: plan.segments.first?.markerLabel ?? "1/1",
-                            isDisabled: isCreatingHighlightJob,
+                            isDisabled: false,
                             style: $clipSettings.markerLabelStyle,
                         )
                     }
@@ -520,105 +514,12 @@
                 Button {
                     handlePreparationControlTapped(for: item)
                 } label: {
-                    selectedVideoItemCardContent(item)
+                    SelectedTrainingVideoCard(item: item)
                 }
                 .buttonStyle(.plain)
-                .disabled(isLoadingVideos || isCreatingHighlightJob)
+                .disabled(isLoadingVideos)
             } else {
-                selectedVideoItemCardContent(item)
-            }
-        }
-
-        private func selectedVideoItemCardContent(_ item: SelectedTrainingVideoSelectionItem) -> some View {
-            VStack(alignment: .leading, spacing: 6) {
-                ZStack {
-                    selectedVideoThumbnail(for: item)
-
-                    if item.isAvailable {
-                        VStack {
-                            HStack {
-                                Label("可用", systemImage: "checkmark.circle.fill")
-                                    .font(.caption2)
-                                    .fontWeight(.semibold)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 4)
-                                    .background(.green.opacity(0.9), in: Capsule())
-                                    .foregroundStyle(.white)
-
-                                Spacer()
-                            }
-
-                            Spacer()
-                        }
-                        .padding(6)
-                    } else if item.isPreparing {
-                        Color.black.opacity(0.62)
-
-                        VStack(spacing: 6) {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .tint(.white)
-
-                            Text(item.preparationProgressText ?? "0%")
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.white)
-                        }
-                    } else if item.isPreparationPaused {
-                        Color.black.opacity(0.62)
-
-                        VStack(spacing: 6) {
-                            Image(systemName: "pause.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(.white)
-
-                            Text(item.statusText)
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.white)
-                        }
-                    } else {
-                        Color.black.opacity(0.58)
-
-                        Text(item.statusText)
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                    }
-                }
-                .frame(width: 156, height: 88)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                Text(item.title)
-                    .font(.caption)
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(width: 156, alignment: .leading)
-        }
-
-        @ViewBuilder
-        private func selectedVideoThumbnail(for item: SelectedTrainingVideoSelectionItem) -> some View {
-            if let thumbnailData = item.thumbnailData,
-               let image = UIImage(data: thumbnailData)
-            {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 156, height: 88)
-                    .clipped()
-            } else {
-                ZStack {
-                    Rectangle()
-                        .fill(.secondary.opacity(0.16))
-
-                    Image(systemName: "video")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(width: 156, height: 88)
+                SelectedTrainingVideoCard(item: item)
             }
         }
 
@@ -1126,10 +1027,6 @@
 
         private nonisolated static func videoPreparationErrorCategory(_ error: Error) -> String {
             error is CancellationError ? "cancelled" : "assetPreparationFailed"
-        }
-
-        private nonisolated static func secondsString(_ value: TimeInterval) -> String {
-            String(format: "%.3f", value)
         }
     }
 
