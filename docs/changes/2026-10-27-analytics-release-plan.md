@@ -26,4 +26,5 @@
 - 原 main 的使用分析文档已经单独提交；源实现与前轮通过验证的代码保持一致。
 - App Store Connect 登录失效后用户已完成登录，现场页面显示 1.3 Ready for Distribution / Build 3。
 - 签名预检发现现有 Xcode 账户、有效产品 profile，未见本地 Distribution identity；实际自动/云签名能力仍待导出验证。
-- 网站发布结果和 App 构建/送审结果将在执行后记录，不预先宣称通过。
+- TestFlight 现场核对最新版本为 1.3 / Build 3；本次补丁版本选择 1.3.1（4），四份 iPhone/Watch 产品配置保持一致，测试 target 的独立版本不变。
+- 网站已部署并通过 HTTP 和静态资产核对；完整证据由网站仓库维护。App 构建/送审结果将在执行后记录，不预先宣称通过。

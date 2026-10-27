@@ -1,7 +1,7 @@
 # ShotMarker 发布状态
 
-- 本地工程复核：2026-10-25；外部分发最后核验：2026-09-29，当前审核及上线状态未重新确认。
-- 工程版本：1.3（Build 3）。
+- 本地工程与 App Store Connect 复核：2026-10-27；新版发布正在执行，现售 1.3 已在后台核实。
+- 工程版本：1.3.1（Build 4）。
 - Bundle ID：`com.heji.ShotMarker`；Watch Bundle ID：`com.heji.ShotMarker.watchkitapp`。
 
 ## 外部分发摘要
@@ -26,7 +26,7 @@
 ## 本地工程事实
 
 - iOS 部署下限 26.4，watchOS 下限 26.2；发布与验证范围为 iPhone + Apple Watch。工程保留未完整验收的 iPad destination，不配置 macOS、Mac Catalyst 或 visionOS destination。
-- App/Watch Debug、Release 四份产品配置均为 1.3（3），配置自动签名，Release 使用 DWARF with dSYM；两个 Info.plist 声明简体中文，主 App `ITSAppUsesNonExemptEncryption=false`。
+- App/Watch Debug、Release 四份产品配置均为 1.3.1（4），配置自动签名，Release 使用 DWARF with dSYM；两个 Info.plist 声明简体中文，主 App `ITSAppUsesNonExemptEncryption=false`。
 - iPhone target 通过官方 `sentry-cocoa` 的源码产品 `SentrySPM` 链接锁定版本 9.26.0；Watch 不链接。
 - 构建与本地产物最近验证的日期、代码范围和边界见[质量状态](quality.md)。Debug 安装不等于分发 Archive，Simulator dSYM 不证明正式签名及符号文件。
 - 核心使用无需登录或演示账户；视频流程按来源使用 Photos 权限，保存成片申请相册添加权限；Watch 使用 HealthKit workout session。
