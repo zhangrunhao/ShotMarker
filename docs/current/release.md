@@ -6,14 +6,15 @@
 
 ## 当前分发事实
 
-- 2026-10-27 App Store Connect 现场显示 1.3 为 `Ready for Distribution`，关联 Build 3。TestFlight 最新既有版本为 1.3，Build 3 为 `Ready to Submit`；此结果不证明所有地区均可售，也不替代真机验收。
-- 本次 1.3.1 草稿已建立，为 `Prepare for Submission`；发布说明与审核说明已保存，选择审核通过自动发布、立即向所有用户发布更新。Release Archive 已成功；Xcode 账户登录已恢复，但 CLI 与 Organizer 均确认该账户缺少归档所属团队的签名权限，尚未完成分发签名、上传或送审，不能视为新版已上架。
+- 2026-10-27 App Store Connect 现场显示 1.3 为 `Ready for Distribution`，关联 Build 3。本次上传前 TestFlight 最新既有版本为 1.3，Build 3 为 `Ready to Submit`；此结果不证明所有地区均可售，也不替代真机验收。
+- 2026-10-27 11:48 上传 1.3.1（4）成功，TestFlight 处理后显示 `Ready to Submit`；随后关联到商店 1.3.1，11:54 送审成功。现场确认提示 `1 Item Submitted`，审核详情为 `Waiting for Review`，关联构建为 1.3.1（4）。
+- 发布设置为审核通过自动发布、立即向所有用户发布更新。当前尚未确认审核通过或公开上架；原现售版本仍为 1.3（3）。签名账户限制已解决，正式分发签名、导出及上传已完成。
 - 新版沿用 English (U.S.) 本地化和既有截图；现场看到 iPhone 的 5 张继承素材、iPad 3 张、Watch 1 张。未改变商店定价或账户资料。
 - `Sign-in required` 未选中；审核说明保留实体 iPhone/配对 Watch 的操作流程，补充分发来源、自用标记、版本、操作步骤及结果的有限 Analytics 披露。
 - 2026-10-27 复核 App Privacy：五类数据仍为 Device ID、Product Interaction、Crash Data、Performance Data、Other Diagnostic Data；前两项关联身份、用于 Analytics，后三项为不关联身份的 App Functionality。此次没有更改问卷分类。
 - 公开隐私政策为 [ShotMarker Privacy](https://zhangrh.shop/shotmarker/privacy)，本次网站字段说明已部署，并在浏览器核对。网站的发布与接收端验证由[网站发布记录](https://github.com/zhangrunhao/zhangrh.shop/blob/main/docs/archive/2026-10/2026-10-27-analytics-release-plan.md)维护。
 
-本次具体执行见[发布计划](../changes/2026-10-27-analytics-release-plan.md)。构建与真机证据见[质量状态](quality.md)，生产遥测边界见[观测验证](observability.md)。
+本次具体执行见[发布提交记录](../archive/2026-10/2026-10-27-analytics-release-plan.md)。构建与真机证据见[质量状态](quality.md)，生产遥测边界见[观测验证](observability.md)。
 
 ## 本地工程事实
 
@@ -27,7 +28,7 @@
 
 - 用户于 2026-10-27 明确授权本次埋点增强提交、合并并发布；授权覆盖打包、上传、送审及审核后发布，不再重复询问发布意向。其他版本不据此推断授权，不从历史状态推断已上架。
 - 用户于 2026-09-29 明确跳过的验收仅属于那次提交，不扩大本次验证覆盖。
-- 当前隐私清单声明五类数据、三类 Required Reason API，属性见[技术架构](architecture.md)；本次 Archive 已提取核验；最终分发产物仍需在导出后核对。
+- 当前隐私清单声明五类数据、三类 Required Reason API，属性见[技术架构](architecture.md)；本次 Archive 与导出的 Distribution IPA 均已提取核验。
 - ShotMarker 不向自建服务器上传训练记录、打点、源视频或成片。系统相册/iCloud 保存与同步由用户设置决定。
 - Release iPhone 会发送产品 Analytics 和精简 GlitchTip 错误/崩溃信息。审核说明和隐私披露不得声称“完全不联网”或“所有数据都不离开设备”。
 - Analytics 包含项目、事件、随机安装标识、分发来源、自用标记、版本、专用操作标识与受控步骤/原因，不包含训练、媒体、文件名、语音、用户身份或自由文本；有效契约见[产品埋点](analytics.md)。GlitchTip 不配置默认 PII 或用户身份，不上传训练、视频、截图或本地日志文件。
@@ -36,7 +37,7 @@
 
 ## 外部验证边界
 
-- 2026-10-27 main 的 511 单元 + 1 诊断 UI 全部通过；iPhone/Watch 1.3.1（4）Archive 已通过严格签名与 dSYM UUID 检查。Archive 使用 Development 签名，不能代替 App Store 分发重签名与上传验收。
+- 2026-10-27 main 的 511 单元 + 1 诊断 UI 全部通过；iPhone/Watch 1.3.1（4）Archive 已通过严格签名与 dSYM UUID 检查。原 Archive 使用 Development 签名；同源导出 IPA 已独立验证 Distribution 签名和有效 App Store profile，上传已成功。
 - 真实 Photos 授权/保存、完整真机业务流程、iPad、VoiceOver、Watch 联机升级、分发渠道识别与生产事件、崩溃符号化和告警仍需各自证据。
 - 新版服务端已部署；真实 App Store/TestFlight 手机到生产接收端的完整链路尚未完成受控验收。生产页面可访问不证明遥测正常。
 - GlitchTip 生产链路本次未复验，既有结果保留原验证日期。

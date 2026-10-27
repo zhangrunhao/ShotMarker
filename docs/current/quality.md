@@ -10,11 +10,12 @@
 | 最终 iPhone 单元与诊断 UI | iPhone 17 Pro / iOS 26.5 Simulator：511 单元 + 1 新增诊断 UI，共 512 项通过，0 失败/0 跳过；同一最终命令及独立 xcresult 均成功；合并并调整版本后的 main `f5c67ad` 再次通过相同 512 项 |
 | 生成终态竞态 | 聚焦 27 项通过，覆盖安装提交与后台停止、停止提交与迟到错误、成功已提交，以及停止/结束持久化失败；独立复审关闭两项发现 |
 | 既有 UI | 本轮较早源码执行既有 24 项全部通过；之后修改限于埋点终态仲裁。首轮新 UI 定位断言失败已修正并由上行最终命令复验；不将首轮含失败命令表述为全绿 |
-| Release 真机架构 Archive | main `f5c67ad`、1.3.1（4）归档成功；iPhone/Watch 严格签名及各自 dSYM UUID 匹配，隐私清单已核对。Archive 为 Development 签名；分发重新签名、导出与上传尚未成功 |
+| Release 真机架构 Archive | main `f5c67ad`、1.3.1（4）归档成功；iPhone/Watch 严格签名及各自 dSYM UUID 匹配，隐私清单已核对。原 Archive 为 Development 签名；同源导出的 IPA 已完成 App Store Distribution 重签名，详情见下行 |
+| App Store Distribution 导出与上传 | 同一 Archive 导出的 iPhone/Watch IPA 严格签名、有效 App Store profile、1.3.1（4）、隐私清单及 dSYM UUID 均通过；固定构建号上传成功，Apple 已处理并提交审核，最终状态见发布状态；不等于真机验收 |
 | 最终 Release Simulator | 冻结源码在 generic iOS Simulator 增量构建通过；不替代签名 Archive、真实分发或生产上报验收 |
 | 请求跨仓兼容 | 15 类实际 Swift 请求构造结果与 Nginx 示例字段集合及 Node 24 解析/来源/版本过滤一致；纯虚构样例、无网络发送，不代替实际 Nginx 落盘验收 |
 
-本次没有改变 Watch 发送代码、业务 schema 或调度；没有执行真机分发/生产端到端或 SwiftLint。Release Archive 已成功；分发导出被归档所属团队签名权限不足阻塞（Xcode 账户已登录），上传及审核结果以[发布状态](release.md)记录为准。新 sandbox receipt 辅助判断存在弃用 API 提示；既有 SDK build、媒体并发和 AppIntents 提示仍需按实际日志解释。完整证据范围与发布限制见[本次计划及验证](../archive/2026-10/2026-10-27-analytics-steps-plan.md)。
+本次没有改变 Watch 发送代码、业务 schema 或调度；未执行分发构建的真机运行验收、生产端到端或 SwiftLint。Release Archive 已成功；分发 IPA 验证及上传已成功，审核与上架结果以[发布状态](release.md)记录为准。新 sandbox receipt 辅助判断存在弃用 API 提示；既有 SDK build、媒体并发和 AppIntents 提示仍需按实际日志解释。完整证据范围与发布限制见[本次计划及验证](../archive/2026-10/2026-10-27-analytics-steps-plan.md)。
 
 ## 既有验证基线
 

@@ -114,7 +114,7 @@ Watch outbox → transferUserInfo → PhoneWatchSyncService
 ## 有效隐私边界
 
 - PrivacyInfo.xcprivacy 声明 Device ID、Product Interaction（linked、Analytics）和 Crash Data、Performance Data、Other Diagnostic Data（unlinked、App Functionality）；全部 Tracking 为 false。
-- Required Reason API 覆盖 UserDefaults `CA92.1`、File Timestamp `C617.1` 和 System Boot Time `35F9.1`。2026-10-25 已核对源码和 Release Simulator 产物；最终 Archive 内的声明仍需核验，不声明后台持续生成。
+- Required Reason API 覆盖 UserDefaults `CA92.1`、File Timestamp `C617.1` 和 System Boot Time `35F9.1`。2026-10-27 已核对源码、Release Archive 和导出的 Distribution IPA；此前 Simulator 产物核对不再是唯一证据。不声明后台持续生成。
 - 任务、训练、视频、帧、业务来源标识、摘要、业务 UUID、文件名和绝对路径不进入 Analytics 或 GlitchTip metadata。Analytics 专用随机操作 UUID 只用于一次尝试配对，不增加业务存储字段。
 - GlitchTip 不配置用户身份，不上传训练、视频、截图或本地日志文件。客户端 DSN 可随 App 分发；管理令牌不得进入 Git。
 - 训练与任务创建后无回查、同步或级联删除关系；当前数据与生命周期契约见本页及[产品事实](product.md)；历史设计依据见 [任务规格](../archive/2026-09/2026-09-03-editable-highlight-task-spec.md)。
