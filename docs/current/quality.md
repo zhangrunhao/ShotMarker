@@ -1,19 +1,20 @@
 # ShotMarker 质量状态
 
-- 最近本地验证：2026-10-27，`codex/analytics-steps` 未提交工作区，基线 `2f1a31b`；仅 iPhone 埋点相关代码。既有设备、Watch 和发布结果仍使用各行原日期与代码范围。
-- 工程版本：1.3（Build 3）；工具链 Xcode 27.1（27A9275）、Swift 6.4，工程使用 Swift 5 语言模式。
+- 最近本地验证：2026-10-27，合并后的 main `f5c67ad`；仅 iPhone 埋点相关代码及 App/Watch 产品版本调整。既有设备、Watch 和发布结果仍使用各行原日期与代码范围。
+- 工程版本：1.3.1（Build 4）；工具链 Xcode 27.1（27A9275）、Swift 6.4，工程使用 Swift 5 语言模式。
 
 ## 本次埋点验证
 
 | 范围 | 结果与限制 |
 | --- | --- |
-| 最终 iPhone 单元与诊断 UI | iPhone 17 Pro / iOS 26.5 Simulator：511 单元 + 1 新增诊断 UI，共 512 项通过，0 失败/0 跳过；同一最终命令及独立 xcresult 均成功 |
+| 最终 iPhone 单元与诊断 UI | iPhone 17 Pro / iOS 26.5 Simulator：511 单元 + 1 新增诊断 UI，共 512 项通过，0 失败/0 跳过；同一最终命令及独立 xcresult 均成功；合并并调整版本后的 main `f5c67ad` 再次通过相同 512 项 |
 | 生成终态竞态 | 聚焦 27 项通过，覆盖安装提交与后台停止、停止提交与迟到错误、成功已提交，以及停止/结束持久化失败；独立复审关闭两项发现 |
 | 既有 UI | 本轮较早源码执行既有 24 项全部通过；之后修改限于埋点终态仲裁。首轮新 UI 定位断言失败已修正并由上行最终命令复验；不将首轮含失败命令表述为全绿 |
+| Release 真机架构 Archive | main `f5c67ad`、1.3.1（4）归档成功；iPhone/Watch 严格签名及各自 dSYM UUID 匹配，隐私清单已核对。Archive 为 Development 签名；分发重新签名、导出与上传尚未成功 |
 | 最终 Release Simulator | 冻结源码在 generic iOS Simulator 增量构建通过；不替代签名 Archive、真实分发或生产上报验收 |
 | 请求跨仓兼容 | 15 类实际 Swift 请求构造结果与 Nginx 示例字段集合及 Node 24 解析/来源/版本过滤一致；纯虚构样例、无网络发送，不代替实际 Nginx 落盘验收 |
 
-本次没有改变 Watch 发送代码、业务 schema 或调度；没有执行真机分发/生产端到端、SwiftLint 或正式签名 Archive。新 sandbox receipt 辅助判断存在弃用 API 提示；既有 SDK build、媒体并发和 AppIntents 提示仍需按实际日志解释。完整证据范围与发布限制见[本次计划及验证](../archive/2026-10/2026-10-27-analytics-steps-plan.md)。
+本次没有改变 Watch 发送代码、业务 schema 或调度；没有执行真机分发/生产端到端或 SwiftLint。Release Archive 已成功；分发导出被 Xcode 未登录账户阻塞，上传及审核结果以[发布状态](release.md)记录为准。新 sandbox receipt 辅助判断存在弃用 API 提示；既有 SDK build、媒体并发和 AppIntents 提示仍需按实际日志解释。完整证据范围与发布限制见[本次计划及验证](../archive/2026-10/2026-10-27-analytics-steps-plan.md)。
 
 ## 既有验证基线
 
@@ -57,7 +58,7 @@
 
 - 自动测试覆盖上述 Simulator 和代码范围；本轮另外检查普通及最大辅助字号任务卡片截图，不扩大为深色或 iPad 完整验收。
 - 本轮真机验证仅覆盖上表限定范围，结论为：iPhone 限定回归通过，Watch 真机仍因调试连接失败而未完成。真实 Photos 授权/保存、HealthKit、完整真机全功能流程未验收；硬件及详细设备过程见[追加验收记录](../archive/2026-10/2026-10-25-maintenance-device-acceptance.md)。
-- App Store / TestFlight 分发与启动反馈最后核验于 2026-09-29；签名、dSYM UUID 和 Organizer Validate 未独立复核。用户当日跳过后续验收的决定不扩大覆盖。
+- TestFlight 真机启动反馈最后核验于 2026-09-29；用户当日跳过后续验收的决定不扩大覆盖。本次后台分发状态、签名产物与上传结果见[发布状态](release.md)，不能据此推断真实设备运行已经验收。
 - Watch 真机联机升级、完整 iPad 功能、VoiceOver 真机朗读、Release Analytics 生产、真机崩溃符号化与 GlitchTip 告警仍无新增通过证据。
 - 导出为 BGRA SDR；HDR/广色域保真、非方形像素、非零 clean aperture 及任意斜切来源变换未验收。
 - 没有快照测试、XCTest Plan 或仓库内 CI；SwiftLint 的既有长度、复杂度、命名及格式等违规仍未全部处理，不能宣称静态检查全绿。

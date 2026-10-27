@@ -28,3 +28,11 @@
 - 签名预检发现现有 Xcode 账户、有效产品 profile，未见本地 Distribution identity；实际自动/云签名能力仍待导出验证。
 - TestFlight 现场核对最新版本为 1.3 / Build 3；本次补丁版本选择 1.3.1（4），四份 iPhone/Watch 产品配置保持一致，测试 target 的独立版本不变。
 - 网站已部署并通过 HTTP 和静态资产核对；完整证据由网站仓库维护。App 构建/送审结果将在执行后记录，不预先宣称通过。
+
+## 已执行验证
+
+- App 功能提交 `a7da280`，原分析文档 `871d59b`；main 合并 `9953888`，版本准备提交 `f5c67ad`，均已推送。
+- main `f5c67ad`、1.3.1（4）的 511 单元 + 1 诊断 UI 全部通过，0 失败/跳过。
+- 同一源码的 Release Archive 成功；iPhone/Watch 均为 1.3.1（4），严格签名检查、隐私清单、最低系统及二进制/dSYM UUID 配对通过。归档当前为 Development 签名。
+- 首次 App Store 自动分发导出返回 `No Accounts` 和缺少 Distribution 私钥的错误；Xcode Accounts 现场为空，已请用户登录既有发布账户。未撤销或替换既有证书，未宣称 IPA 导出/上传成功。
+- App Store Connect 中已建立 1.3.1 草稿，保存发布说明和审核说明，核对继承截图和隐私分类；选择审核通过自动发布，等待构建上传。

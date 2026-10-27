@@ -11,7 +11,8 @@
 - 真实 iPhone Release/TestFlight 的四事件受控端到端验收仍未完成。现有日志中有四事件、用户确认曾操作，不替代指定构建与设备的逐事件验收。
 - 服务端存储字段与保留状态的最后核验摘要见[产品埋点](analytics.md#外部状态摘要)；共享服务的公开部署契约由[网站仓库](https://github.com/zhangrunhao/zhangrh.shop/blob/main/docs/current/deployment.md)维护。
 
-- 2026-10-27 新增来源与步骤埋点的本地实现尚未发布，不能改变上述历史结论。旧数据归未知，新增代码不能证明已经存在正式用户持续使用；验收范围见[质量状态](quality.md)。
+- 2026-10-27 新版接收、查询、分析与隐私页面已发布；正式来源三流程为零，未知来源仍显示旧趋势，浏览器现场核对通过。服务端详细发布与验证由[网站记录](https://github.com/zhangrunhao/zhangrh.shop/blob/main/docs/archive/2026-10/2026-10-27-analytics-release-plan.md)维护。
+- App 1.3.1（4）发布正在执行；尚无新分发构建到生产端的受控验证。旧数据归未知，网站发布与新增代码均不能证明存在正式用户持续使用；验收范围见[质量状态](quality.md)。
 
 ## App Store 使用数据
 
