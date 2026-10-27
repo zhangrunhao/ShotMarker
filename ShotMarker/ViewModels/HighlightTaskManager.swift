@@ -17,6 +17,9 @@ final class HighlightTaskManager: ObservableObject {
     private let analytics: AnalyticsTracking
     private let logger: AppLogging
     private var running: (taskID: UUID, executionID: UUID, work: Task<Void, Never>)?
+    private var analyticsOperations: [UUID: (id: UUID, stage: AnalyticsStage)] = [:]
+    private var analyticsPendingStops: [UUID: Int] = [:]
+    private var analyticsDeferredTerminals: [UUID: (event: AnalyticsEvent, stage: AnalyticsStage, reason: AnalyticsReason?)] = [:]
     private var preparingTaskIDs: Set<UUID> = []
     private var foreground = true
     private var lifecycleGeneration = 0
@@ -161,35 +164,69 @@ final class HighlightTaskManager: ObservableObject {
     }
 
     func start(taskID: UUID, expectedRevision: Int) async throws {
-        guard foreground && !stoppingAll else { throw HighlightTaskError.background }
+        let operationID = UUID()
+        analytics.track(.highlightGenerateStarted, operationID: operationID, stage: .validation)
+        var stage = AnalyticsStage.validation
+        var installedID: UUID?
         let generation = lifecycleGeneration
-        let task = try editableTask(taskID, revision: expectedRevision)
-        guard preparingTaskIDs.insert(taskID).inserted else { throw HighlightTaskError.busy }
-        defer { preparingTaskIDs.remove(taskID) }
-        let execution = try HighlightTaskPlanner.execution(for: task)
-        let includedSources = Set(execution.snapshot.segments.map(\.videoID))
-        for video in task.videos where includedSources.contains(video.id.uuidString) {
-            do { try await validateSource(video) } catch { throw HighlightTaskError.sourceUnavailable }
+        do {
+            guard foreground && !stoppingAll else { throw HighlightTaskError.background }
+            let task = try editableTask(taskID, revision: expectedRevision)
+            guard preparingTaskIDs.insert(taskID).inserted else { throw HighlightTaskError.busy }
+            defer { preparingTaskIDs.remove(taskID) }
+            let execution = try HighlightTaskPlanner.execution(for: task)
+            let includedSources = Set(execution.snapshot.segments.map(\.videoID))
+            for video in task.videos where includedSources.contains(video.id.uuidString) {
+                do { try await validateSource(video) } catch { throw HighlightTaskError.sourceUnavailable }
+            }
+            try Task.checkCancellation()
+            guard foreground && !stoppingAll && generation == lifecycleGeneration else { throw HighlightTaskError.background }
+            stage = .queue
+            analyticsOperations[execution.id] = (operationID, .queue)
+            installedID = execution.id
+            _ = try await store.installExecution(taskID: taskID, expectedRevision: expectedRevision, execution: execution)
+            await refresh()
+            if foreground && !stoppingAll && generation == lifecycleGeneration { startNextIfPossible() }
+            else { try await stop(taskID: taskID) }
+        } catch {
+            let cancelled = error is CancellationError || Task.isCancelled || generation != lifecycleGeneration
+            let reason: AnalyticsReason = generation != lifecycleGeneration ? .backgrounded
+                : (cancelled ? .cancelled : generationFailureReason(error))
+            if let installedID {
+                finishAnalytics(installedID, event: cancelled ? .highlightGenerateCancelled : .highlightGenerateFailed,
+                    stage: stage, reason: reason)
+            } else {
+                analytics.track(cancelled ? .highlightGenerateCancelled : .highlightGenerateFailed,
+                    operationID: operationID, stage: stage, reason: reason)
+            }
+            throw error
         }
-        try Task.checkCancellation()
-        guard foreground && !stoppingAll && generation == lifecycleGeneration else { throw HighlightTaskError.background }
-        _ = try await store.installExecution(taskID: taskID, expectedRevision: expectedRevision, execution: execution)
-        await refresh()
-        if foreground && !stoppingAll && generation == lifecycleGeneration { startNextIfPossible() }
-        else { try await stop(taskID: taskID) }
     }
 
     func restart(taskID: UUID) async throws {
-        guard let task = task(taskID) else { throw HighlightTaskError.notFound }
-        guard task.canRegenerateDirectly else { throw HighlightTaskError.mustReview }
+        guard let task = task(taskID), task.canRegenerateDirectly else {
+            let operationID = UUID()
+            analytics.track(.highlightGenerateStarted, operationID: operationID, stage: .validation)
+            analytics.track(.highlightGenerateFailed, operationID: operationID, stage: .validation, reason: .invalidTask)
+            if task(taskID) == nil { throw HighlightTaskError.notFound }
+            throw HighlightTaskError.mustReview
+        }
         try await start(taskID: taskID, expectedRevision: task.configurationRevision)
     }
 
     func stop(taskID: UUID) async throws {
         guard let execution = task(taskID)?.activeExecution else { return }
+        let stoppingIDs = [execution.id]
+        beginAnalyticsStop(stoppingIDs)
+        defer { endAnalyticsStop(stoppingIDs) }
+        let cancellationReason: AnalyticsReason = foreground && !stoppingAll ? .userCancelled : .backgrounded
         let result = try await store.finishExecution(taskID: taskID, executionID: execution.id,
             revision: execution.configurationRevision, status: .stopped, errorCode: nil, output: nil)
-        if result != nil, running?.executionID == execution.id { running?.work.cancel() }
+        if result != nil {
+            finishAnalytics(execution.id, event: .highlightGenerateCancelled, stage: execution.status == .queued ? .queue : .export,
+                reason: cancellationReason)
+            if running?.executionID == execution.id { running?.work.cancel() }
+        }
         await refresh()
         // running is deliberately retained until its underlying export and cleanup finish.
         startNextIfPossible()
@@ -206,8 +243,18 @@ final class HighlightTaskManager: ObservableObject {
     func stopAllExecutions() async {
         stoppingAll = true
         var persisted = false
+        let stoppingIDs = Array(analyticsOperations.keys)
+        beginAnalyticsStop(stoppingIDs)
+        defer { endAnalyticsStop(stoppingIDs) }
+        let cancellationReason: AnalyticsReason = foreground ? .cancelled : .backgrounded
         do {
-            _ = try await store.stopAll()
+            let stoppedTasks = try await store.stopAll()
+            for task in stoppedTasks {
+                guard let result = task.lastGenerationResult, result.status == .stopped,
+                      let operation = analyticsOperations[result.executionID] else { continue }
+                finishAnalytics(result.executionID, event: .highlightGenerateCancelled,
+                    stage: operation.stage, reason: cancellationReason)
+            }
             persisted = true
             running?.work.cancel()
             await refresh()
@@ -241,15 +288,30 @@ final class HighlightTaskManager: ObservableObject {
         guard let task = task(taskID), task.allowedActions.contains(.save), let output = task.currentOutput,
               photoSavingTaskIDs.insert(taskID).inserted else { throw HighlightTaskError.busy }
         defer { photoSavingTaskIDs.remove(taskID) }
+        let operationID = UUID()
+        analytics.track(.highlightSaveStarted, operationID: operationID, stage: .validation)
+        var stage = AnalyticsStage.validation
         do {
-            try await saveVideo(playbackURL(taskID: taskID))
+            let url = try playbackURL(taskID: taskID)
+            stage = .photosWrite
+            try await saveVideo(url)
         } catch {
+            let cancelled = error is CancellationError || Task.isCancelled
+            let denied = error as? VideoClipPhotoLibraryError == .accessDenied
+            analytics.track(cancelled ? .highlightSaveCancelled : .highlightSaveFailed, operationID: operationID,
+                stage: denied ? .permission : stage,
+                reason: cancelled ? .cancelled : (denied ? .permissionDenied : (stage == .validation ? .missingOutput : .photosWriteFailed)))
             _ = try await store.savePhotoResult(taskID: taskID, outputID: output.id, savedAt: nil, errorCode: .saveFailed)
             await refresh()
             throw HighlightTaskError.photoSaveFailed
         }
-        analytics.track(.highlightSaveSucceeded)
-        _ = try await store.savePhotoResult(taskID: taskID, outputID: output.id, savedAt: Date(), errorCode: nil)
+        analytics.track(.highlightSaveSucceeded, operationID: operationID, stage: .photosWrite)
+        do {
+            _ = try await store.savePhotoResult(taskID: taskID, outputID: output.id, savedAt: Date(), errorCode: nil)
+        } catch {
+            analytics.track(.highlightSaveStateFailed, operationID: operationID, stage: .localState, reason: .stateUpdateFailed)
+            throw error
+        }
         await refresh()
     }
 
@@ -265,6 +327,7 @@ final class HighlightTaskManager: ObservableObject {
     }
 
     private func perform(taskID: UUID, execution: HighlightRenderExecution) async {
+        if let operation = analyticsOperations[execution.id] { analyticsOperations[execution.id] = (operation.id, .export) }
         var newOutputID: UUID?
         var committed = false
         do {
@@ -286,7 +349,7 @@ final class HighlightTaskManager: ObservableObject {
             if try await store.finishExecution(taskID: taskID, executionID: execution.id,
                 revision: execution.configurationRevision, status: .succeeded, errorCode: nil, output: output) != nil {
                 committed = true
-                analytics.track(.highlightGenerateSucceeded)
+                finishAnalytics(execution.id, event: .highlightGenerateSucceeded, stage: .commit)
                 await refresh()
                 if let oldOutput {
                     do { try await fileStore.removeOutput(taskID: taskID, outputID: oldOutput.id) }
@@ -295,14 +358,24 @@ final class HighlightTaskManager: ObservableObject {
             }
         } catch {
             let cancelled = error is CancellationError || Task.isCancelled
+            let event: AnalyticsEvent = cancelled ? .highlightGenerateCancelled : .highlightGenerateFailed
+            let stage: AnalyticsStage = newOutputID != nil ? .commit : .export
+            let reason: AnalyticsReason = cancelled ? (foreground ? .cancelled : .backgrounded)
+                : (newOutputID != nil ? .outputCommitFailed
+                    : (error as? HighlightTaskError == .sourceUnavailable ? .sourceUnavailable : .exportFailed))
             let code: HighlightTaskGenerationErrorCode = newOutputID != nil ? .outputCommitFailed
                 : (error as? HighlightTaskError == .sourceUnavailable ? .sourceUnavailable : .exportFailed)
             do {
-                _ = try await store.finishExecution(taskID: taskID, executionID: execution.id,
+                let result = try await store.finishExecution(taskID: taskID, executionID: execution.id,
                     revision: execution.configurationRevision, status: cancelled ? .stopped : .failed,
                     errorCode: cancelled ? nil : code, output: nil)
+                // A nil result belongs to a terminal transaction already committed by stop.
+                if result != nil { finishAnalytics(execution.id, event: event, stage: stage, reason: reason) }
                 await refresh()
-            } catch { errorMessage = message(error) }
+            } catch {
+                errorMessage = message(error)
+                recordAnalyticsAfterFailedFinish(execution.id, event: event, stage: stage, reason: reason)
+            }
         }
         if !committed, let newOutputID {
             do { try await fileStore.removeOutput(taskID: taskID, outputID: newOutputID) }
@@ -318,6 +391,50 @@ final class HighlightTaskManager: ObservableObject {
             if try await store.updateProgress(taskID: taskID, executionID: execution.id,
                 revision: execution.configurationRevision, progress: progress) != nil { await refresh() }
         } catch { errorMessage = message(error) }
+    }
+
+    private func finishAnalytics(_ executionID: UUID, event: AnalyticsEvent, stage: AnalyticsStage,
+        reason: AnalyticsReason? = nil) {
+        guard let operation = analyticsOperations.removeValue(forKey: executionID) else { return }
+        analyticsDeferredTerminals.removeValue(forKey: executionID)
+        analytics.track(event, operationID: operation.id, stage: stage, reason: reason)
+    }
+
+    private func beginAnalyticsStop(_ executionIDs: [UUID]) {
+        for id in executionIDs { analyticsPendingStops[id, default: 0] += 1 }
+    }
+
+    private func endAnalyticsStop(_ executionIDs: [UUID]) {
+        for id in executionIDs {
+            let remaining = (analyticsPendingStops[id] ?? 1) - 1
+            if remaining > 0 { analyticsPendingStops[id] = remaining; continue }
+            analyticsPendingStops.removeValue(forKey: id)
+            if let terminal = analyticsDeferredTerminals.removeValue(forKey: id) {
+                finishAnalytics(id, event: terminal.event, stage: terminal.stage, reason: terminal.reason)
+            }
+        }
+    }
+
+    private func recordAnalyticsAfterFailedFinish(_ executionID: UUID, event: AnalyticsEvent,
+        stage: AnalyticsStage, reason: AnalyticsReason) {
+        guard analyticsOperations[executionID] != nil else { return }
+        if analyticsPendingStops[executionID, default: 0] > 0 {
+            // The stop return confirms whether its transaction won; retain the observed failure meanwhile.
+            analyticsDeferredTerminals[executionID] = (event, stage, reason)
+        } else {
+            finishAnalytics(executionID, event: event, stage: stage, reason: reason)
+        }
+    }
+
+    private func generationFailureReason(_ error: Error) -> AnalyticsReason {
+        switch error as? HighlightTaskError {
+        case .background: .background
+        case .busy: .busy
+        case .revisionConflict: .revisionConflict
+        case .sourceUnavailable, .missingFile: .sourceUnavailable
+        case .notFound, .invalidTask, .mustReview: .invalidTask
+        default: .unknown
+        }
     }
 
     private func editableTask(_ id: UUID, revision: Int) throws -> HighlightTask {

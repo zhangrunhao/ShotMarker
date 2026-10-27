@@ -109,12 +109,12 @@ Watch outbox → transferUserInfo → PhoneWatchSyncService
 - iPhone 通过官方 sentry-cocoa 9.26.0 源码产品 SentrySPM 对接 GlitchTip，业务适配层导入 SentrySwift；Watch 不链接 Sentry。
 - AppLogger.error 同时发送精简错误事件；其他级别仅写本地。不开启性能追踪、Profiling、Session Replay 或自动 Session Tracking。
 - 任务相关日志仅包含状态、计数、总时长及封闭错误类别；导出和相册错误不传递原 NSError 的来源信息，日志不记录片段起止范围。
-- Analytics 仅在 Release iPhone 启用；生成成功事件在当前输出引用提交后，保存事件在实际 Photos 成功后发送，见 [产品埋点](analytics.md)。
+- Analytics 仅在 Release 真机 iPhone 启用；发送来源、自用标记及同步/生成/保存的尝试、结果和受控原因。生成成功仍在当前输出引用提交后，保存成功仍在 Photos 实际成功后发送；分发解析不阻塞业务启动，见[产品埋点](analytics.md)。
 
 ## 有效隐私边界
 
 - PrivacyInfo.xcprivacy 声明 Device ID、Product Interaction（linked、Analytics）和 Crash Data、Performance Data、Other Diagnostic Data（unlinked、App Functionality）；全部 Tracking 为 false。
 - Required Reason API 覆盖 UserDefaults `CA92.1`、File Timestamp `C617.1` 和 System Boot Time `35F9.1`。2026-10-25 已核对源码和 Release Simulator 产物；最终 Archive 内的声明仍需核验，不声明后台持续生成。
-- 任务、训练、视频、帧、来源标识、摘要、UUID、文件名和绝对路径不进入 Analytics 或 GlitchTip metadata。
+- 任务、训练、视频、帧、业务来源标识、摘要、业务 UUID、文件名和绝对路径不进入 Analytics 或 GlitchTip metadata。Analytics 专用随机操作 UUID 只用于一次尝试配对，不增加业务存储字段。
 - GlitchTip 不配置用户身份，不上传训练、视频、截图或本地日志文件。客户端 DSN 可随 App 分发；管理令牌不得进入 Git。
 - 训练与任务创建后无回查、同步或级联删除关系；当前数据与生命周期契约见本页及[产品事实](product.md)；历史设计依据见 [任务规格](../archive/2026-09/2026-09-03-editable-highlight-task-spec.md)。

@@ -3,7 +3,7 @@ import WatchConnectivity
 import XCTest
 
 final class PhoneWatchSyncServiceTests: XCTestCase {
-    func testCutoverAcknowledgesOldPayloadWithoutImportOrAnalytics() async throws {
+    func testCutoverAcknowledgesOldPayloadAndTracksIgnored() async throws {
         let payload = try makePayload()
         let importer = SpyTrainingSessionImporter()
         let analytics = SpyAnalyticsTracker()
@@ -12,7 +12,7 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
             analytics: analytics, dataCutoverAt: payload.endedAt)
         await service.handleReceivedUserInfo(try makeCompletedTrainingSessionUserInfo(payload: payload))
         XCTAssertTrue(importer.importedPayloads.isEmpty)
-        XCTAssertTrue(analytics.events.isEmpty)
+        XCTAssertEqual(analytics.events.map(\.rawValue), ["training_sync_started", "training_sync_ignored"])
         XCTAssertEqual(connectivity.transferredUserInfos.count, 1)
     }
 
@@ -25,8 +25,25 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
             analytics: analytics, dataCutoverAt: payload.endedAt.addingTimeInterval(-0.001))
         await service.handleReceivedUserInfo(try makeCompletedTrainingSessionUserInfo(payload: payload))
         XCTAssertEqual(importer.importedPayloads, [payload])
-        XCTAssertEqual(analytics.events, [.trainingSyncSucceeded])
+        XCTAssertEqual(analytics.events.map(\.rawValue), ["training_sync_started", "training_sync_succeeded"])
+        XCTAssertEqual(Set(analytics.records.compactMap(\.operationID)).count, 1)
+        XCTAssertNotEqual(analytics.records.first?.operationID, payload.id)
+        XCTAssertEqual(analytics.records.first?.stage, .received)
         XCTAssertEqual(connectivity.transferredUserInfos.count, 1)
+    }
+
+    func testCutoverAckFailureRemainsIgnoredAndAddsDiagnostic() async throws {
+        let payload = try makePayload()
+        let analytics = SpyAnalyticsTracker()
+        let session = FakePhoneWatchConnectivitySession(isSupported: true)
+        session.transferUserInfoError = SyncAckError.failed
+        let importer = SpyTrainingSessionImporter()
+        let service = PhoneWatchSyncService(importer: importer, session: session, analytics: analytics, dataCutoverAt: payload.endedAt)
+        await service.handleReceivedUserInfo(try makeCompletedTrainingSessionUserInfo(payload: payload))
+        XCTAssertEqual(analytics.events, [.trainingSyncStarted, .trainingSyncIgnored, .trainingSyncAckFailed])
+        XCTAssertEqual(analytics.records.map(\.reason), [nil, .beforeCutover, .ackFailed])
+        XCTAssertEqual(Set(analytics.records.compactMap(\.operationID)).count, 1)
+        XCTAssertTrue(importer.importedPayloads.isEmpty)
     }
 
     func testStartActivatesSupportedSession() {
@@ -149,7 +166,7 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
         await fulfillment(of: [notificationExpectation], timeout: 1)
         XCTAssertEqual(importer.importedPayloads, [payload])
-        XCTAssertEqual(analytics.events, [.trainingSyncSucceeded])
+        XCTAssertEqual(analytics.events.map(\.rawValue), ["training_sync_started", "training_sync_succeeded"])
         XCTAssertEqual(session.transferredUserInfos.count, 1)
         let ackUserInfo = try XCTUnwrap(session.transferredUserInfos.first)
         XCTAssertEqual(
@@ -185,8 +202,9 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
         XCTAssertEqual(session.transferredUserInfos.count, 2)
         XCTAssertEqual(
             analytics.events,
-            [.trainingSyncSucceeded, .trainingSyncSucceeded],
+            [.trainingSyncStarted, .trainingSyncSucceeded, .trainingSyncStarted, .trainingSyncSucceeded],
         )
+        XCTAssertEqual(Set(analytics.records.compactMap(\.operationID)).count, 2)
     }
 
     func testSuccessfulSyncImportsThenTracksThenTransfersAck() async throws {
@@ -211,7 +229,7 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
         XCTAssertEqual(
             recorder.operations,
-            [.imported, .tracked(.trainingSyncSucceeded), .ackTransferred],
+            [.tracked(.trainingSyncStarted), .imported, .tracked(.trainingSyncSucceeded), .ackTransferred],
         )
     }
 
@@ -299,7 +317,20 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
         XCTAssertEqual(importer.importedPayloads, [])
         XCTAssertEqual(session.transferredUserInfos.count, 0)
+        XCTAssertEqual(analytics.events.map(\.rawValue), ["training_sync_started", "training_sync_failed"])
+    }
+
+    func testMissingPayloadTracksFailedDecodeAndUnknownMessageDoesNotStart() async {
+        let analytics = SpyAnalyticsTracker()
+        let service = PhoneWatchSyncService(importer: SpyTrainingSessionImporter(),
+            session: FakePhoneWatchConnectivitySession(isSupported: true), analytics: analytics)
+        await service.handleReceivedUserInfo(["type": "unknown"])
         XCTAssertTrue(analytics.events.isEmpty)
+        await service.handleReceivedUserInfo(["type": "completedTrainingSession"])
+        XCTAssertEqual(analytics.events, [.trainingSyncStarted, .trainingSyncFailed])
+        XCTAssertEqual(analytics.records.last?.stage, .decode)
+        XCTAssertEqual(analytics.records.last?.reason, .invalidInput)
+        XCTAssertEqual(Set(analytics.records.compactMap(\.operationID)).count, 1)
     }
 
     func testInvalidPayloadLogsDecodeFailure() async {
@@ -339,7 +370,7 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
 
         XCTAssertEqual(importer.importedPayloads, [payload])
         XCTAssertEqual(session.transferredUserInfos.count, 0)
-        XCTAssertTrue(analytics.events.isEmpty)
+        XCTAssertEqual(analytics.events.map(\.rawValue), ["training_sync_started", "training_sync_failed"])
     }
 
     func testSuccessfulImportTracksEvenWhenAckTransferFails() async throws {
@@ -357,7 +388,10 @@ final class PhoneWatchSyncServiceTests: XCTestCase {
             try makeCompletedTrainingSessionUserInfo(payload: payload),
         )
 
-        XCTAssertEqual(analytics.events, [.trainingSyncSucceeded])
+        XCTAssertEqual(analytics.events.map(\.rawValue), ["training_sync_started", "training_sync_succeeded", "training_sync_ack_failed"])
+        XCTAssertEqual(Set(analytics.records.compactMap(\.operationID)).count, 1)
+        XCTAssertEqual(analytics.records.last?.stage, .ack)
+        XCTAssertEqual(analytics.records.last?.reason, .ackFailed)
         XCTAssertTrue(session.transferredUserInfos.isEmpty)
     }
 

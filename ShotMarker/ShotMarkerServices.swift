@@ -15,13 +15,8 @@ final class ShotMarkerServices: ShotMarkerServiceLifecycle {
         GlitchTipCrashReporter.start()
         store = TrainingSessionStore()
         logger = AppLogger.shared
-        #if DEBUG
-            let isDebugBuild = true
-        #else
-            let isDebugBuild = false
-        #endif
-        analytics = AnalyticsRuntimePolicy.shouldSend(isDebugBuild: isDebugBuild,
-            isPhone: UIDevice.current.userInterfaceIdiom == .phone) ? AnalyticsClient.live() : NoopAnalyticsTracker()
+        analytics = AnalyticsRuntimePolicy.isEnabled && UIDevice.current.userInterfaceIdiom == .phone
+            ? AnalyticsClient.live() : NoopAnalyticsTracker()
         syncService = PhoneWatchSyncService(importer: TrainingSessionImporter(store: store, logger: logger),
             logger: logger, analytics: analytics, dataCutoverAt: dataCutoverAt)
         logExportService = AppLogExportService(store: AppLogStore.shared,
