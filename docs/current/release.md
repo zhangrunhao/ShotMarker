@@ -7,7 +7,7 @@
 ## 当前分发事实
 
 - 2026-10-27 App Store Connect 现场显示 1.3 为 `Ready for Distribution`，关联 Build 3。TestFlight 最新既有版本为 1.3，Build 3 为 `Ready to Submit`；此结果不证明所有地区均可售，也不替代真机验收。
-- 本次 1.3.1 草稿已建立，为 `Prepare for Submission`；发布说明与审核说明已保存，选择审核通过自动发布、立即向所有用户发布更新。Release Archive 已成功；App Store 分发导出提示 Xcode 无可用账户，尚未上传或送审，不能视为新版已上架。
+- 本次 1.3.1 草稿已建立，为 `Prepare for Submission`；发布说明与审核说明已保存，选择审核通过自动发布、立即向所有用户发布更新。Release Archive 已成功；Xcode 账户登录已恢复，但 CLI 与 Organizer 均确认该账户缺少归档所属团队的签名权限，尚未完成分发签名、上传或送审，不能视为新版已上架。
 - 新版沿用 English (U.S.) 本地化和既有截图；现场看到 iPhone 的 5 张继承素材、iPad 3 张、Watch 1 张。未改变商店定价或账户资料。
 - `Sign-in required` 未选中；审核说明保留实体 iPhone/配对 Watch 的操作流程，补充分发来源、自用标记、版本、操作步骤及结果的有限 Analytics 披露。
 - 2026-10-27 复核 App Privacy：五类数据仍为 Device ID、Product Interaction、Crash Data、Performance Data、Other Diagnostic Data；前两项关联身份、用于 Analytics，后三项为不关联身份的 App Functionality。此次没有更改问卷分类。

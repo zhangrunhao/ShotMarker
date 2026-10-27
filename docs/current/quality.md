@@ -14,7 +14,7 @@
 | 最终 Release Simulator | 冻结源码在 generic iOS Simulator 增量构建通过；不替代签名 Archive、真实分发或生产上报验收 |
 | 请求跨仓兼容 | 15 类实际 Swift 请求构造结果与 Nginx 示例字段集合及 Node 24 解析/来源/版本过滤一致；纯虚构样例、无网络发送，不代替实际 Nginx 落盘验收 |
 
-本次没有改变 Watch 发送代码、业务 schema 或调度；没有执行真机分发/生产端到端或 SwiftLint。Release Archive 已成功；分发导出被 Xcode 未登录账户阻塞，上传及审核结果以[发布状态](release.md)记录为准。新 sandbox receipt 辅助判断存在弃用 API 提示；既有 SDK build、媒体并发和 AppIntents 提示仍需按实际日志解释。完整证据范围与发布限制见[本次计划及验证](../archive/2026-10/2026-10-27-analytics-steps-plan.md)。
+本次没有改变 Watch 发送代码、业务 schema 或调度；没有执行真机分发/生产端到端或 SwiftLint。Release Archive 已成功；分发导出被归档所属团队签名权限不足阻塞（Xcode 账户已登录），上传及审核结果以[发布状态](release.md)记录为准。新 sandbox receipt 辅助判断存在弃用 API 提示；既有 SDK build、媒体并发和 AppIntents 提示仍需按实际日志解释。完整证据范围与发布限制见[本次计划及验证](../archive/2026-10/2026-10-27-analytics-steps-plan.md)。
 
 ## 既有验证基线
 
