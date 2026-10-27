@@ -3,7 +3,7 @@ import Foundation
 import XCTest
 
 final class AnalyticsClientTests: XCTestCase {
-    func testMakeRequestUsesTheThreeParameterShotMarkerProtocol() throws {
+    func testMakeRequestUsesExtendedShotMarkerProtocol() throws {
         let client = AnalyticsClient(
             installationIDProvider: StubInstallationIDProvider(value: "AbCd1234Ef56"),
             sendRequest: { _ in },
@@ -32,8 +32,84 @@ final class AnalyticsClientTests: XCTestCase {
                 "project": "shotmarker",
                 "device_id": "AbCd1234Ef56",
                 "event": "highlight_save_succeeded",
+                "distribution": "unknown",
+                "is_self_use": "false",
+                "app_version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+                "app_build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
             ],
         )
+    }
+
+    func testOperationCapturesAudienceAndUsesDedicatedLowercaseID() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        defer { defaults.removeObject(forKey: AnalyticsPreferences.selfUseKey) }
+        let environment = AnalyticsDistributionBox()
+        let client = AnalyticsClient(distribution: { environment.snapshot() }, userDefaults: defaults,
+            appVersion: "1.3", appBuild: "42", sendRequest: { _ in })
+        let operation = UUID(uuidString: "11111111-2222-4333-A444-555555555555")!
+        let first = try query(client.makeRequest(for: .highlightGenerateStarted, operationID: operation, stage: .validation))
+        defaults.set(true, forKey: AnalyticsPreferences.selfUseKey)
+        environment.setDistribution(.appStore)
+        let terminal = try query(client.makeRequest(for: .highlightGenerateFailed, operationID: operation, stage: .export, reason: .exportFailed))
+        let later = try query(client.makeRequest(for: .highlightGenerateStarted, operationID: UUID(), stage: .validation))
+        XCTAssertEqual(first["distribution"], "unknown")
+        XCTAssertEqual(first["is_self_use"], "false")
+        XCTAssertEqual(terminal["distribution"], "unknown")
+        XCTAssertEqual(terminal["is_self_use"], "false")
+        XCTAssertEqual(terminal["operation_id"], "11111111-2222-4333-a444-555555555555")
+        XCTAssertEqual(terminal["stage"], "export")
+        XCTAssertEqual(terminal["reason"], "export_failed")
+        XCTAssertEqual(later["distribution"], "app_store")
+        XCTAssertEqual(later["is_self_use"], "true")
+        XCTAssertEqual(Set(terminal.keys), ["project", "event", "device_id", "distribution", "is_self_use", "app_version", "app_build", "operation_id", "stage", "reason"])
+    }
+
+    func testVersionValidationAndLaunchOmitOperationDetails() throws {
+        let client = AnalyticsClient(appVersion: "1.2/private", appBuild: "1.2", sendRequest: { _ in })
+        let values = try query(client.makeRequest(for: .appLaunch, operationID: UUID(), stage: .validation, reason: .unknown))
+        XCTAssertEqual(values["app_version"], "unknown")
+        XCTAssertEqual(values["app_build"], "unknown")
+        XCTAssertNil(values["operation_id"])
+        XCTAssertNil(values["stage"])
+        XCTAssertNil(values["reason"])
+        let long = AnalyticsClient(appVersion: String(repeating: "1", count: 33), appBuild: "", sendRequest: { _ in })
+        XCTAssertEqual(try query(long.makeRequest(for: .appLaunch))["app_version"], "unknown")
+        XCTAssertEqual(try query(long.makeRequest(for: .appLaunch))["app_build"], "unknown")
+    }
+
+    private func query(_ request: URLRequest?) throws -> [String: String] {
+        let request = try XCTUnwrap(request)
+        let items = try XCTUnwrap(URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems)
+        return Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.value ?? "") })
+    }
+
+    func testDistributionResolutionDoesNotBlockCallerOrChangeAudienceMidOperation() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        defer { defaults.removeObject(forKey: AnalyticsPreferences.selfUseKey) }
+        let gate = AnalyticsDistributionGate()
+        let recorder = AnalyticsRequestRecorder()
+        let client = AnalyticsClient(resolveDistribution: { await gate.value() }, userDefaults: defaults,
+            sendRequest: { await recorder.record($0) })
+        let operation = UUID()
+        client.track(.highlightSaveStarted, operationID: operation, stage: .validation)
+        defaults.set(true, forKey: AnalyticsPreferences.selfUseKey)
+        client.track(.highlightSaveSucceeded, operationID: operation, stage: .photosWrite)
+        let beforeResolution = await recorder.snapshot()
+        XCTAssertTrue(beforeResolution.isEmpty)
+        await gate.release()
+        var requests: [URLRequest] = []
+        for _ in 0..<100 {
+            requests = await recorder.snapshot()
+            if requests.count == 2 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(requests.count, 2)
+        for request in requests {
+            let values = try query(request)
+            XCTAssertEqual(values["distribution"], "app_store")
+            XCTAssertEqual(values["is_self_use"], "false")
+            XCTAssertEqual(values["operation_id"], operation.uuidString.lowercased())
+        }
     }
 
     func testTrackSchedulesExactlyOneRequestWithoutRetry() async throws {
@@ -90,5 +166,26 @@ private actor AnalyticsRequestRecorder {
 
     func snapshot() -> [URLRequest] {
         requests
+    }
+}
+
+nonisolated private final class AnalyticsDistributionBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var distribution: AnalyticsDistribution = .unknown
+    func setDistribution(_ value: AnalyticsDistribution) { lock.withLock { distribution = value } }
+    func snapshot() -> AnalyticsDistribution { lock.withLock { distribution } }
+}
+
+private actor AnalyticsDistributionGate {
+    private var ready = false
+    private var waiters: [CheckedContinuation<AnalyticsDistribution, Never>] = []
+    func value() async -> AnalyticsDistribution {
+        if ready { return .appStore }
+        return await withCheckedContinuation { waiters.append($0) }
+    }
+    func release() {
+        ready = true
+        for waiter in waiters { waiter.resume(returning: .appStore) }
+        waiters.removeAll()
     }
 }

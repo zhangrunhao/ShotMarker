@@ -53,6 +53,7 @@ struct TrainingSessionNavigationState: Equatable {
 }
 
 struct TrainingSessionListView: View {
+    @AppStorage(AnalyticsPreferences.selfUseKey) private var analyticsSelfUse = false
     @StateObject private var viewModel: TrainingSessionListViewModel
     @ObservedObject private var highlightTaskManager: HighlightTaskManager
     @State private var isImportingTrainingSessions = false
@@ -230,13 +231,31 @@ struct TrainingSessionListView: View {
             } message: {
                 Text(highlightPlaybackErrorMessage ?? "未知错误")
             }
-            .alert("是否导出诊断日志？", isPresented: $isConfirmingLogExport) {
-                Button("取消", role: .cancel) {}
-                Button("导出") {
-                    Task { await exportLogs() }
+            .sheet(isPresented: $isConfirmingLogExport) {
+                NavigationStack {
+                    Form {
+                        Section {
+                            Toggle("本机自用", isOn: $analyticsSelfUse)
+                                .accessibilityIdentifier("analytics.selfUse")
+                        } footer: {
+                            Text("开启后，后续使用统计标记为自用；已有记录保持原样。")
+                        }
+                        Section {
+                            Button("导出诊断日志") {
+                                isConfirmingLogExport = false
+                                Task { await exportLogs() }
+                            }
+                        } footer: {
+                            Text("导出文件将包含应用诊断日志。")
+                        }
+                    }
+                    .navigationTitle("诊断")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("完成") { isConfirmingLogExport = false }
+                        }
+                    }
                 }
-            } message: {
-                Text("导出文件将包含应用诊断日志。")
             }
         }
     }

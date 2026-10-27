@@ -77,7 +77,7 @@
 - 首次进入数据世代 1 时清空 iPhone 与 Watch 的 ShotMarker 本地数据和完整偏好设置，不迁移旧训练、旧审核或旧任务；后续启动保留新数据。
 - 重置不删除系统相册、HealthKit、沙盒外文件或远端历史。iPhone 固定切割时间之前结束的 Watch 旧载荷被正常 ACK 并丢弃。
 - 当前没有登录、账号或业务云同步；训练和视频不上传到业务服务器。相册及 iCloud 同步由系统设置决定。
-- Release iPhone 发送四个固定产品事件及精简错误/崩溃信息；Watch 不发送 Analytics 或 GlitchTip。详见 [产品埋点](analytics.md) 和 [发布状态](release.md)。
+- Release 真机 iPhone 发送来源、自用标记及核心流程的受控产品事件，并发送精简错误/崩溃信息；Watch 不发送 Analytics 或 GlitchTip。详见 [产品埋点](analytics.md) 和 [发布状态](release.md)。
 
 ## 有效产品决定
 

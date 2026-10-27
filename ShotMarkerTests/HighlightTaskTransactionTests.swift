@@ -73,12 +73,14 @@ final class HighlightTaskTransactionTests: XCTestCase {
         await waitFor { runner.executions.count == 1 }
         runner.finishNextSuccessfully()
         await manager.waitUntilIdle()
+        XCTAssertEqual(analytics.records.last?.stage, .commit)
+        XCTAssertEqual(analytics.records.last?.reason, .outputCommitFailed)
         XCTAssertEqual(manager.task(task.id)?.state, .failed)
         XCTAssertEqual(manager.task(task.id)?.lastGenerationResult?.errorCode, .outputCommitFailed)
         XCTAssertEqual(manager.task(task.id)?.currentOutput, old)
         XCTAssertEqual(try Data(contentsOf: oldURL), Data("rendered".utf8))
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: oldURL.deletingLastPathComponent().deletingLastPathComponent().path), [old.id.uuidString])
-        XCTAssertTrue(analytics.events.isEmpty)
+        XCTAssertEqual(analytics.events.map(\.rawValue), ["highlight_generate_started", "highlight_generate_failed"])
     }
 
     func testOutputMoveFailureRetainsPreviousMovieAndCleansExecution() async throws {
@@ -93,7 +95,7 @@ final class HighlightTaskTransactionTests: XCTestCase {
         XCTAssertEqual(fixture.manager.task(task.id)?.currentOutput, task.currentOutput)
         XCTAssertEqual(fixture.manager.task(task.id)?.lastGenerationResult?.errorCode, .outputCommitFailed)
         XCTAssertTrue(FileManager.default.fileExists(atPath: oldURL.path))
-        XCTAssertEqual(fixture.analytics.events, [.highlightGenerateSucceeded])
+        XCTAssertEqual(fixture.analytics.events.map(\.rawValue), ["highlight_generate_started", "highlight_generate_succeeded", "highlight_generate_started", "highlight_generate_failed"])
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: fixture.files.temporaryDirectory.path), [])
     }
 
@@ -106,18 +108,20 @@ final class HighlightTaskTransactionTests: XCTestCase {
         var saved = false
         let manager = HighlightTaskManager(store: fixture.storeFixture.store, fileStore: fixture.files,
             runner: fixture.runner, validateSource: { _ in }, saveVideo: { _ in
-                if shouldFail { throw CocoaError(.fileReadNoPermission) }
+                if shouldFail { throw VideoClipPhotoLibraryError.accessDenied }
                 saved = true
             }, analytics: analytics)
         await manager.load()
         do { try await manager.saveToPhotoLibrary(taskID: task.id); XCTFail("Expected denied save") } catch {}
-        XCTAssertTrue(analytics.events.isEmpty)
+        XCTAssertEqual(analytics.events.map(\.rawValue), ["highlight_save_started", "highlight_save_failed"])
+        XCTAssertEqual(analytics.records.last?.stage, .permission)
+        XCTAssertEqual(analytics.records.last?.reason, .permissionDenied)
         XCTAssertEqual(manager.task(task.id)?.currentOutput?.photoLibrarySaveErrorCode, .saveFailed)
         XCTAssertEqual(manager.task(task.id)?.configurationRevision, 1)
         shouldFail = false
         try await manager.saveToPhotoLibrary(taskID: task.id)
         XCTAssertTrue(saved)
-        XCTAssertEqual(analytics.events, [.highlightSaveSucceeded])
+        XCTAssertEqual(analytics.events.map(\.rawValue), ["highlight_save_started", "highlight_save_failed", "highlight_save_started", "highlight_save_succeeded"])
         XCTAssertNotNil(manager.task(task.id)?.currentOutput?.photoLibrarySavedAt)
         XCTAssertNil(manager.task(task.id)?.currentOutput?.photoLibrarySaveErrorCode)
         XCTAssertEqual(manager.task(task.id)?.configurationRevision, 1)
@@ -141,7 +145,7 @@ final class HighlightTaskTransactionTests: XCTestCase {
         XCTAssertEqual(fixture.manager.task(task.id)?.state, .completed)
         XCTAssertTrue(FileManager.default.fileExists(atPath: newURL.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: protectedDirectory.appendingPathComponent("highlight.mov").path))
-        XCTAssertEqual(fixture.analytics.events, [.highlightGenerateSucceeded, .highlightGenerateSucceeded])
+        XCTAssertEqual(fixture.analytics.events.map(\.rawValue), ["highlight_generate_started", "highlight_generate_succeeded", "highlight_generate_started", "highlight_generate_succeeded"])
     }
 
     func testActualPhotoSaveStillEmitsSuccessIfSubsequentStatusWriteFails() async throws {
@@ -161,7 +165,10 @@ final class HighlightTaskTransactionTests: XCTestCase {
         do { try await manager.saveToPhotoLibrary(taskID: task.id); XCTFail("Expected local status failure") }
         catch { XCTAssertEqual(error as? HighlightTaskError, .persistence) }
         XCTAssertTrue(actualSaveCompleted)
-        XCTAssertEqual(analytics.events, [.highlightSaveSucceeded])
+        XCTAssertEqual(analytics.events.map(\.rawValue), ["highlight_save_started", "highlight_save_succeeded", "highlight_save_state_failed"])
+        XCTAssertEqual(Set(analytics.records.compactMap(\.operationID)).count, 1)
+        XCTAssertEqual(analytics.records.last?.stage, .localState)
+        XCTAssertEqual(analytics.records.last?.reason, .stateUpdateFailed)
         XCTAssertNil(manager.task(task.id)?.currentOutput?.photoLibrarySavedAt)
         XCTAssertEqual(manager.task(task.id)?.configurationRevision, 1)
     }
@@ -175,6 +182,48 @@ final class HighlightTaskTransactionTests: XCTestCase {
         await fixture.manager.load()
         XCTAssertNotNil(fixture.manager.errorMessage)
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testPhotoWriteCancellationAndMissingFileAreSeparateResults() async throws {
+        let fixture = try TaskManagerFixture()
+        defer { fixture.cleanup() }
+        let task = try await completedTask(fixture)
+        let analytics = SpyAnalyticsTracker()
+        let manager = HighlightTaskManager(store: fixture.storeFixture.store, fileStore: fixture.files,
+            runner: fixture.runner, validateSource: { _ in }, saveVideo: { _ in throw CancellationError() }, analytics: analytics)
+        await manager.load()
+        do { try await manager.saveToPhotoLibrary(taskID: task.id); XCTFail("Cancel") }
+        catch { XCTAssertEqual(error as? HighlightTaskError, .photoSaveFailed) }
+        let outputURL = try manager.playbackURL(taskID: task.id)
+        try FileManager.default.removeItem(at: outputURL)
+        do { try await manager.saveToPhotoLibrary(taskID: task.id); XCTFail("Missing output") }
+        catch { XCTAssertEqual(error as? HighlightTaskError, .photoSaveFailed) }
+        XCTAssertEqual(analytics.events, [.highlightSaveStarted, .highlightSaveCancelled, .highlightSaveStarted, .highlightSaveFailed])
+        XCTAssertEqual(analytics.records.map(\.stage), [.validation, .photosWrite, .validation, .validation])
+        XCTAssertEqual(analytics.records.map(\.reason), [nil, .cancelled, nil, .missingOutput])
+        XCTAssertEqual(Set(analytics.records.compactMap(\.operationID)).count, 2)
+    }
+
+    func testSaveReentryDoesNotCreateAnotherAttempt() async throws {
+        let fixture = try TaskManagerFixture()
+        defer { fixture.cleanup() }
+        let task = try await completedTask(fixture)
+        let analytics = SpyAnalyticsTracker()
+        var continuation: CheckedContinuation<Void, Never>?
+        let manager = HighlightTaskManager(store: fixture.storeFixture.store, fileStore: fixture.files,
+            runner: fixture.runner, validateSource: { _ in }, saveVideo: { _ in
+                await withCheckedContinuation { continuation = $0 }
+            }, analytics: analytics)
+        await manager.load()
+        let saving = Task { try await manager.saveToPhotoLibrary(taskID: task.id) }
+        await waitFor { continuation != nil }
+        do { try await manager.saveToPhotoLibrary(taskID: task.id); XCTFail("Busy") }
+        catch { XCTAssertEqual(error as? HighlightTaskError, .busy) }
+        XCTAssertEqual(analytics.events, [.highlightSaveStarted])
+        continuation?.resume()
+        try await saving.value
+        XCTAssertEqual(analytics.events, [.highlightSaveStarted, .highlightSaveSucceeded])
+        XCTAssertEqual(Set(analytics.records.compactMap(\.operationID)).count, 1)
     }
 
     private func completedTask(_ fixture: TaskManagerFixture) async throws -> HighlightTask {

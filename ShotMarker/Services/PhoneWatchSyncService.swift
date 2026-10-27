@@ -127,7 +127,11 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
             return
         }
 
+        let operationID = UUID()
+        analytics.track(.trainingSyncStarted, operationID: operationID, stage: .received)
+
         guard let payloadData = userInfo[Self.userInfoPayloadKey] as? Data else {
+            analytics.track(.trainingSyncFailed, operationID: operationID, stage: .decode, reason: .invalidInput)
             lastImportErrorDescription = "Unable to decode completed training session payload"
             logger.error(
                 "sync.training.payload.decode.failed",
@@ -143,6 +147,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
         do {
             payload = try decoder.decode(TrainingSessionSyncPayload.self, from: payloadData)
         } catch {
+            analytics.track(.trainingSyncFailed, operationID: operationID, stage: .decode, reason: .decodeFailed)
             lastImportErrorDescription = String(describing: error)
             logger.error(
                 "sync.training.payload.decode.failed",
@@ -155,8 +160,10 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
         }
 
         if let dataCutoverAt, payload.endedAt <= dataCutoverAt {
+            analytics.track(.trainingSyncIgnored, operationID: operationID, stage: .validation, reason: .beforeCutover)
             do { try transferAck(for: payload) }
             catch {
+                analytics.track(.trainingSyncAckFailed, operationID: operationID, stage: .ack, reason: .ackFailed)
                 logger.warning("sync.training.cutover.ack.failed", category: .sync,
                     message: "旧训练确认发送失败，将等待重试", context: ["errorCategory": "ackTransfer"])
                 return
@@ -178,6 +185,7 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
         do {
             try await importer.import(payload)
         } catch {
+            analytics.track(.trainingSyncFailed, operationID: operationID, stage: .import, reason: .importFailed)
             lastImportErrorDescription = String(describing: error)
             logger.error(
                 "sync.training.import.failed",
@@ -196,12 +204,13 @@ final class PhoneWatchSyncService: NSObject, WCSessionDelegate {
             message: "导入手表训练记录成功",
             context: trainingContext(for: payload),
         )
-        analytics.track(.trainingSyncSucceeded)
+        analytics.track(.trainingSyncSucceeded, operationID: operationID, stage: .import)
         notificationCenter.post(name: .trainingSessionsDidChange, object: nil)
 
         do {
             try transferAck(for: payload)
         } catch {
+            analytics.track(.trainingSyncAckFailed, operationID: operationID, stage: .ack, reason: .ackFailed)
             lastAckErrorDescription = String(describing: error)
             logger.error(
                 "sync.training.ack.failed",
