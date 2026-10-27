@@ -52,6 +52,7 @@ archive 保存已经结束的设计、计划、讨论、排查、发布验证和
 - [2026-10-25 真机追加验收](archive/2026-10/2026-10-25-maintenance-device-acceptance.md)：路径规范化修复、追加回归及限定真机验收边界。
 - [2026-10-25 文档整理记录](archive/2026-10/2026-10-25-documentation-audit.md)：审计依据及从 current 移出的既有验证/外部摘要。
 - [2026-10-25 文档边界调整](archive/2026-10/2026-10-25-documentation-boundaries.md)：按实际敏感性迁移发布与验收记录，并合并重复资料。
+- [2026-10-27 使用分析](archive/2026-10/2026-10-27-usage-analysis.md)：App Store 活跃与留存、自建埋点回访及测试流量边界的脱敏核验。
 
 archive 的规则只适用于 archive；其中的 spec、plan 和其他材料不受 current 的 300 行规则约束。
 
